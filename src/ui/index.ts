@@ -5,7 +5,7 @@ import './styles/hud.css';
 import './styles/menus.css';
 import './styles/screens.css';
 import type { AppShell } from '../core/client';
-import type { GameContext, NotificationLevel } from '../core/types';
+import type { GameContext, NotificationLevel, Settings } from '../core/types';
 import type { AudioEngine } from '../audio';
 import type { GameEvents, UiPanelId } from '../core/EventBus';
 import type { Command, CommandResult, CommandType } from '../core/commands';
@@ -22,6 +22,7 @@ import { LoadingScreen } from './menus/loading';
 import { Hud } from './hud/hud';
 import { registerPanels } from './panels/registry';
 import { pumpTerrain } from './render/terrain';
+import { pumpEdits } from './render/edits';
 import { localPlayer } from './game';
 
 export interface UI {
@@ -99,7 +100,7 @@ class Controller implements UIController {
 
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
     document.addEventListener('pointerlockchange', () => this.onPointerLockChange());
-    window.addEventListener('resize', () => this.applyScale(true));
+    window.addEventListener('resize', () => this.applyScale(false));
     this.applyScale(true);
   }
 
@@ -221,6 +222,17 @@ class Controller implements UIController {
     return r;
   }
 
+  applySettings(p: Partial<Settings>) {
+    this.app.applySettings(p);
+    // In game the app announces 'settings:changed' on the bus (handled in attachGame); menus have no bus.
+    if (!this.session) this.onSettingsChanged(Object.keys(p));
+  }
+
+  private onSettingsChanged(keys: string[]) {
+    if (keys.includes('uiScale')) this.applyScale(true);
+    this.hud?.onSettingsChanged(keys);
+  }
+
   listen<K extends keyof GameEvents>(type: K, fn: (p: GameEvents[K]) => void): () => void {
     const ctx = this.session;
     if (!ctx) return () => {};
@@ -281,6 +293,8 @@ class Controller implements UIController {
     this.listen('game:saved', (e) => {
       if (e.slot !== 'autosave') this.toast('success', 'Game saved', e.slot === 'quicksave' ? 'Quicksave' : this.session?.state.meta.saveName, { icon: 'save', ttl: 3 });
     });
+    this.listen('settings:changed', (e) => this.onSettingsChanged(e.keys));
+    this.listen('player:itemPickedUp', (e) => this.hud?.onPickup(e.item, e.count));
     this.listen('research:completed', () => this.sound('success'));
     this.listen('achievement:unlocked', (a) => this.toast('success', `Achievement unlocked: ${a.title}`, undefined, { icon: 'trophy', ttl: 7, onClick: () => this.open('objectives', { tab: 'achievements' }) }));
     this.listen('objective:completed', () => this.sound('success'));
@@ -310,13 +324,15 @@ class Controller implements UIController {
   }
 
   update(dt: number) {
-    this.applyScale(false);
     this.loadingScreen.update(dt);
     if (!this.menuVisible && !this.loadingScreen.active) this.bg.stop();
     if (this.hud && !this.loadingScreen.active) this.hud.frame(dt, this.panels.ids());
     this.panels.update(dt);
     this.toasts.update(dt);
-    if (this.session) pumpTerrain(this.panels.depth ? 6 : 3);
+    if (this.session) {
+      pumpTerrain(this.panels.depth ? 6 : 3);
+      pumpEdits(dt, this.panels.depth ? 4 : 2);
+    }
   }
 
   // ---- internals --------------------------------------------------------------------------------
@@ -358,6 +374,7 @@ class Controller implements UIController {
     this.wasLocked = locked;
   }
 
+  /** Root font-size from settings.uiScale and the viewport. Called on resize and when uiScale changes. */
   private applyScale(force: boolean) {
     const s = this.app.settings.uiScale || 1;
     const w = window.innerWidth;

@@ -18,6 +18,7 @@ import { clearRuinTemplates } from './status/ruin';
 import { clearVehicleTemplates } from './vehicles/templates';
 import { WorkerCrowd } from './npc/Workers';
 import { TrafficManager } from './vehicles/TrafficManager';
+import { Terrain } from './vehicles/terrain';
 import { WeatherFx } from './weather/WeatherFx';
 
 export interface EntityLayer {
@@ -45,6 +46,7 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
   readonly weather: WeatherFx;
   readonly traffic: TrafficManager;
   readonly workers: WorkerCrowd;
+  readonly terrain: Terrain;
   private readonly buildingsGroup = new THREE.Group();
   private readonly env: ViewEnv;
   private readonly offs: (() => void)[] = [];
@@ -73,8 +75,9 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
     };
     this.fx = new FxManager(host, ctx);
     this.weather = new WeatherFx(host, ctx, this.fx);
-    this.traffic = new TrafficManager(host, ctx, this.lib, this.fx, this.views);
-    this.workers = new WorkerCrowd(host, ctx, this.lib, this.views);
+    this.terrain = new Terrain(ctx);
+    this.traffic = new TrafficManager(host, ctx, this.lib, this.fx, this.terrain, this.views);
+    this.workers = new WorkerCrowd(host, ctx, this.lib, this.terrain, this.views);
     this.root.add(this.buildingsGroup, this.fx.group, this.weather.group, this.traffic.group, this.workers.group);
     host.scene.add(this.root);
     host.buildingPreview = { create: (type: string) => createGhost(type, this.lib) };
@@ -185,6 +188,7 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
       v.mem.hazardFire = burning.has(v.id) ? 1 : 0;
       this.fx.buildingFx(v, b, dt, night);
     }
+    this.terrain.tick(dt);
     this.traffic.update(sdt, this.simTime);
     this.workers.update(sdt, this.simTime);
     this.weather.update(dt, this.time);

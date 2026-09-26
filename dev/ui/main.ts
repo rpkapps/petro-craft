@@ -95,13 +95,25 @@ const audio: AudioEngine = {
 };
 
 let ctx: GameContext | null = null;
-const host = { fps: 60, loadProgress: 1 } as unknown as RenderHost;
+// Fake render host: FPS, auto-quality render scale and renderer stats for the performance overlay.
+const hostStats = { drawCalls: 412, triangles: 1_284_000, chunks: 196, frameMs: 9.4, gpuMs: 11.2 };
+const host = {
+  fps: 60, loadProgress: 1, stats: hostStats,
+  get effectiveRenderScale() { return Math.min(app.settings.renderScale, app.settings.autoQuality ? 0.85 : 1); },
+} as unknown as RenderHost;
+setInterval(() => {
+  const h = host as unknown as { fps: number };
+  h.fps = 52 + Math.random() * 12;
+  hostStats.drawCalls = Math.round(380 + Math.random() * 80);
+  hostStats.frameMs = 7 + Math.random() * 5;
+  hostStats.gpuMs = 9 + Math.random() * 5;
+}, 250);
 
 const app: AppShell = {
   get ctx() { return ctx; },
   get host() { return ctx ? host : null; },
   settings: structuredClone(DEFAULT_SETTINGS) as Settings,
-  applySettings(s) { Object.assign(this.settings, s); },
+  applySettings(s) { Object.assign(this.settings, s); ctx?.bus.emit('settings:changed', { keys: Object.keys(s) }); },
   async newGame(_o: NewGameOptions) { await fakeLoad(); },
   async loadGame(_slot: string) { await fakeLoad(); },
   async saveGame(slot = 'game-a') { ctx?.bus.emit('game:saved', { slot }); },
@@ -147,6 +159,11 @@ function startGame() {
   if (params.get('build')) c.bus.emit('ui:buildMode', { type: params.get('build') });
   if (params.get('pipe')) c.bus.emit('ui:pipeMode', { block: B.PIPE_GAS });
   if (params.get('xray')) c.bus.emit('ui:overlay', { overlay: 'xray' });
+  if (params.get('fps')) app.settings.showFps = true;
+  if (params.get('pickup')) {
+    const items = ['block:dirt', 'block:stone', 'drill_bit', 'block:dirt'];
+    items.forEach((item, i) => setTimeout(() => c.bus.emit('player:itemPickedUp', { item, count: 1 + i * 3 }), 200 + i * 350));
+  }
   if (params.get('toast')) {
     c.notify('success', 'Discovery! Mesa Gas Sand', 'Mesa 1 encountered 18 m of gas pay.', { x: 150, y: 60, z: 330 });
     c.notify('warning', 'Storage Tank #2 nearly full', 'Connect a terminal or build more storage.');

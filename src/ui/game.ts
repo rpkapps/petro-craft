@@ -148,21 +148,3 @@ export function tail<T>(arr: readonly T[] | undefined, n: number): T[] {
   if (!arr) return [];
   return arr.slice(Math.max(0, arr.length - n));
 }
-
-// ---- notification read tracking (client-side; state.notifications[].read is sim-owned) ----------
-const seenNotif = new WeakMap<GameState, string>();
-export function markNotificationsSeen(state: GameState) {
-  const n = state.notifications;
-  seenNotif.set(state, n[n.length - 1]?.id ?? '');
-}
-export function ensureNotificationsTracked(state: GameState) {
-  if (!seenNotif.has(state)) markNotificationsSeen(state);
-}
-export function unseenNotifications(state: GameState): number {
-  const last = seenNotif.get(state);
-  const n = state.notifications;
-  if (last === undefined) return 0;
-  if (!last) return n.length;
-  const idx = n.findIndex((x) => x.id === last);
-  return idx < 0 ? n.length : n.length - idx - 1;
-}

@@ -29,6 +29,9 @@ export interface LineChartOptions {
   /** Smooth curves. */
   smooth?: boolean;
   emptyText?: string;
+  /** Fixed y-axis bounds (no padding is added on a fixed side). */
+  yMin?: number;
+  yMax?: number;
 }
 
 export function niceTicks(min: number, max: number, count = 5): number[] {
@@ -141,6 +144,8 @@ export class LineChart {
     const pad = (max - min) * 0.08 || Math.abs(max) * 0.1 || 1;
     if (this.opts.zero === false) min -= pad;
     max += pad;
+    if (this.opts.yMin !== undefined) min = this.opts.yMin;
+    if (this.opts.yMax !== undefined) max = this.opts.yMax;
     const ticks = niceTicks(min, max, 4);
     const tmin = Math.min(min, ticks[0] ?? min);
     const tmax = Math.max(max, ticks[ticks.length - 1] ?? max);

@@ -1,8 +1,11 @@
 // Progressive top-down terrain renderer shared by the minimap and the full map.
 // Samples the geology (surface height, water depth, biome) into an offscreen canvas over several frames
 // (a coarse pass first so something shows immediately), with hill-shading and subtle contours.
+// Resolution is 1 px per block up to MAX_RES (all standard world sizes); only the rows written in a step are uploaded.
 import type { BiomeId, IGeology } from '../../core/types';
 import { SEA_LEVEL } from '../../core/constants';
+
+const MAX_RES = 1024;
 
 const BIOME_RGB: Record<BiomeId, [number, number, number]> = {
   plains: [104, 150, 70], forest: [66, 116, 52], birch_forest: [98, 146, 76], taiga: [70, 104, 78], desert: [214, 192, 136],
@@ -26,7 +29,7 @@ export class TerrainMap {
 
   constructor(private geo: IGeology) {
     const size = Math.max(geo.sizeX, geo.sizeZ);
-    this.res = Math.min(512, size);
+    this.res = Math.min(MAX_RES, size);
     this.scale = size / this.res;
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.res;
@@ -53,7 +56,8 @@ export class TerrainMap {
     const t0 = performance.now();
     const res = this.res;
     const coarse = this.pass === 0 ? 4 : 1;
-    let wrote = false;
+    let minRow = res;
+    let maxRow = -1;
     while (performance.now() - t0 < budgetMs) {
       if (this.row >= res) {
         if (this.pass === 0) {
@@ -71,10 +75,11 @@ export class TerrainMap {
       }
       for (let x = 0; x < res; x += coarse) this.sample(x, z, coarse);
       this.row++;
-      wrote = true;
+      if (z < minRow) minRow = z;
+      if (z + coarse > maxRow) maxRow = Math.min(res, z + coarse);
     }
-    if (wrote) {
-      this.ctx.putImageData(this.img, 0, 0);
+    if (maxRow > minRow) {
+      this.ctx.putImageData(this.img, 0, 0, 0, minRow, res, maxRow - minRow);
       this.version++;
     }
     this.progress = this.pass === 0 ? (this.row / res) * 0.25 : 0.25 + (this.row / res) * 0.75;

@@ -142,6 +142,13 @@ function sections(ui: UIHost): Section[] {
       'Emissions, flaring, venting and spills lower your score; regulators issue fines and violations.',
       'Three violations suspend operations for several days. Flare-gas recovery, leak detection and carbon capture improve your standing.',
     ] },
+    { id: 'graphics', title: 'Graphics & Performance', icon: 'monitor', lead: 'Settings → Graphics tunes image quality against frame rate. Changes apply immediately.', body: [
+      'Quality presets (Low, Medium, High, Ultra) set render distance, shadows, bloom, ambient occlusion, clouds, particles and render scale in one click. Changing any of them afterwards shows the preset as Custom.',
+      'Render scale draws the 3D world at a lower internal resolution (50–100%) — the quickest way to gain frames on high-resolution screens. The interface always stays sharp.',
+      'Auto quality lowers render scale and effects when the frame rate drops below 60 fps and restores them when there is headroom.',
+      'Anti-aliasing smooths jagged edges; brightness (60–160%) adjusts scene exposure for dark screens or bright rooms.',
+      'Turn on the performance overlay to see FPS, frame time, the effective render scale and renderer statistics under the minimap.',
+    ], tips: ['Render distance and shadows cost the most on slower GPUs; SSAO is the most expensive single effect.'] },
     { id: 'offshore', title: 'Offshore', icon: 'platform', lead: 'The biggest fields lie beneath the sea.', body: [
       'Jack-up rigs drill in shallow water; semi-submersibles go deeper. Offshore wells flow to a production platform (within 24 blocks) or FPSO (within 40 blocks).',
       'Crews reach offshore installations by helicopter — build a helipad.',
@@ -213,7 +220,8 @@ export class HelpPanel extends Panel {
       h('div.card', h('div.section-title', icon('mouse'), 'Interaction'),
         row(['LMB'], 'Break block · use tool · place building'), row(['RMB'], 'Place block · inspect building or well'),
         row(['1–9', 'Wheel'], 'Select hotbar slot'), row([k('rotate')], 'Rotate building'), row([k('pipeMode')], 'Pipe line mode'),
-        row([k('xray')], 'X-ray subsurface view'), row([k('drop')], 'Drop item')),
+        row([k('xray')], 'X-ray subsurface view'), row([k('drop')], 'Drop one item'), row(['Ctrl', k('drop')], 'Drop whole stack'),
+        row(['Walk over'], 'Pick up dropped items')),
       h('div.card', h('div.section-title', icon('layers'), 'Panels'),
         row([k('build')], 'Build'), row([k('inventory')], 'Inventory & shop'), row([k('map')], 'Map'), row([k('wells')], 'Wells'),
         row([k('research')], 'Research'), row([k('market')], 'Market'), row([k('contracts')], 'Contracts'), row([k('workforce')], 'Workforce'),

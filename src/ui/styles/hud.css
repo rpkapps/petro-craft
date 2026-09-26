@@ -116,7 +116,6 @@
 .pc-root .tb-research { max-width: 12.5rem; }
 .pc-root .tb-research .tb-ring > .ic { color: var(--teal); }
 .pc-root .tb-resname { font-size: 0.78rem; font-weight: 600; max-width: 9rem; }
-.pc-root .tb-fps { align-self: center; font-size: 0.7rem; color: var(--ok); padding: 0 0.5rem; }
 
 @media (max-width: 1500px) {
   .pc-root .tb-brand-txt { max-width: 7.5rem; }
@@ -337,3 +336,28 @@
 .pc-root .ob-tut-title .ic { color: var(--teal); width: 0.95rem; height: 0.95rem; }
 .pc-root .ob-tut-title .kbd { margin-left: auto; }
 .pc-root .ob-tut-text { font-size: 0.72rem; line-height: 1.42; color: #cdeff4; }
+
+/* ---- performance overlay ------------------------------------------------------------------------ */
+.pc-root .pc-perf { width: 12.5rem; padding: 0.45rem 0.6rem 0.5rem; border-radius: var(--r-lg); font-size: 0.66rem; color: var(--text-2); animation: pc-slide-in-r 0.3s var(--ease-out); pointer-events: none; }
+.pc-root .pf-head { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+.pc-root .pf-main { display: flex; align-items: baseline; gap: 0.3rem; min-width: 0; }
+.pc-root .pf-fps { font-size: 1.25rem; font-weight: 600; line-height: 1; text-shadow: 0 0 0.6rem currentColor; }
+.pc-root .pf-unit { font-size: 0.6rem; color: var(--text-dim); letter-spacing: 0.08em; }
+.pc-root .pf-ms { font-size: 0.64rem; color: var(--text-dim); white-space: nowrap; }
+.pc-root .pc-perf .spark { flex: none; opacity: 0.9; }
+.pc-root .pf-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.12rem 0.6rem; margin-top: 0.4rem; padding-top: 0.35rem; border-top: 1px solid var(--line); }
+.pc-root .pf-k { color: var(--text-dim); white-space: nowrap; }
+.pc-root .pf-v { text-align: right; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- item pickup feed (left of the hotbar) ----------------------------------------------------------- */
+.pc-root .hb-pickups { position: absolute; right: calc(100% + 0.7rem); bottom: 0.3rem; display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; pointer-events: none; }
+.pc-root .pk-item { display: flex; align-items: center; gap: 0.4rem; max-width: 12rem; padding: 0.22rem 0.6rem 0.22rem 0.3rem; border-radius: 2rem; background: rgba(10, 13, 18, 0.78); border: 1px solid rgba(61, 220, 132, 0.4); box-shadow: 0 0.3rem 1rem rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px); animation: pc-pk-in 0.25s var(--ease-out); transition: opacity 0.24s, transform 0.24s; }
+.pc-root .pk-item.leaving { opacity: 0; transform: translateX(-0.6rem); }
+.pc-root .pk-item.bump { animation: pc-pk-bump 0.28s ease; }
+.pc-root .pk-ic { width: 1.4rem; height: 1.4rem; flex: none; display: grid; place-items: center; }
+.pc-root .pk-n { font-size: 0.78rem; font-weight: 600; color: var(--ok); }
+.pc-root .pk-name { font-size: 0.74rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+@keyframes pc-pk-in { from { opacity: 0; transform: translateX(0.8rem); } to { opacity: 1; transform: none; } }
+@keyframes pc-pk-bump { 40% { transform: scale(1.08); } }
+.pc-root .pf-sub { display: flex; justify-content: space-between; margin-top: 0.2rem; color: var(--text-dim); }
+.pc-root .pf-sub .pf-ms { color: var(--text); }

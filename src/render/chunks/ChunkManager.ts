@@ -1,19 +1,38 @@
 // Chunk streaming: generates terrain around the camera under a per-frame time budget, dispatches
-// meshing jobs to the worker pool (prioritised by distance & view direction), applies results,
-// re-meshes on block edits (batched, border-aware) and unloads far chunks.
+// meshing jobs to the worker pool (prioritised by distance & view direction), applies results under an
+// upload budget (unchanged sections are skipped by content hash), re-meshes on block edits (batched,
+// light-radius aware), unloads far chunks, hides cave sections that cannot be seen from the camera
+// (section visibility graph) and drops plant geometry in the distance.
 import * as THREE from 'three';
 import { CHUNK_SIZE } from '../../core/constants';
 import type { IWorld } from '../../core/types';
 import type { EventBus } from '../../core/EventBus';
 import { MesherPool } from '../meshing/MesherPool';
-import { PW, PAD, HM, HW, EMIT_RANGE, type MeshJob, type MeshResult } from '../meshing/protocol';
+import { LPAD, LW, EMIT_RANGE, SECTION, type MeshJob, type MeshResult } from '../meshing/protocol';
 import { EMIT, SKY_BLOCKER } from '../meshing/blockTables';
-import { ChunkMeshes, type TerrainMode } from './ChunkMeshes';
+import { ChunkMeshes, resultBytes, type TerrainMode } from './ChunkMeshes';
 import type { TerrainMaterialSet } from '../materials/TerrainMaterials';
 
-const PL = PW * PW;
 const CS = CHUNK_SIZE;
 const key = (cx: number, cz: number) => cx * 65536 + cz;
+const VIS_ALL = (1 << 15) - 1;
+/** Face-pair bit (same encoding as the mesher): faces 0 +X, 1 -X, 2 +Y, 3 -Y, 4 +Z, 5 -Z. */
+const PAIR: number[][] = (() => {
+  const t: number[][] = [];
+  for (let a = 0; a < 6; a++) t.push([0, 0, 0, 0, 0, 0]);
+  let bit = 0;
+  for (let a = 0; a < 6; a++)
+    for (let b = a + 1; b < 6; b++) {
+      t[a][b] = t[b][a] = 1 << bit;
+      bit++;
+    }
+  return t;
+})();
+const STEP_X = [1, -1, 0, 0, 0, 0];
+const STEP_Y = [0, 0, 1, -1, 0, 0];
+const STEP_Z = [0, 0, 0, 0, 1, -1];
+/** Sky light floods ≤ 7 blocks sideways, smoothing samples one more. */
+const SKY_REACH = LPAD;
 
 interface ColumnCache {
   heights: Uint8Array | null;
@@ -29,14 +48,37 @@ interface Entry {
   meshedVersion: number;
   inflight: number; // job id or 0
   urgent: boolean;
+  /** Priority (squared chunk distance, weighted by view direction). */
   distSq: number;
+  /** Horizontal distance from the camera to the chunk centre, blocks. */
+  dist: number;
+  /** The current meshes were built without plants (distance LOD). */
+  plantsSkipped: boolean;
+  /** Whether the chunk is in the wanted set (within render distance). */
+  wanted: boolean;
 }
 
 export interface ChunkStats {
+  /** Chunk columns tracked (loaded or waiting). */
   loaded: number;
+  /** Columns with meshes. */
+  meshed: number;
   meshing: number;
   pendingGen: number;
   lastMeshMs: number;
+  /** Sections hidden by cave-occlusion culling. */
+  culledSections: number;
+  /** Bytes of geometry applied this frame. */
+  uploadBytes: number;
+}
+
+export interface StreamBudget {
+  /** Terrain generation time per frame (ms). */
+  genMs: number;
+  /** Job assembly time per frame (ms). */
+  dispatchMs: number;
+  /** Geometry bytes applied per frame (at least one result is always applied). */
+  uploadBytes: number;
 }
 
 export class ChunkManager {
@@ -54,13 +96,31 @@ export class ChunkManager {
   private genFailures = 0;
   private offBus: () => void;
   private sortCursor = 0;
-  readonly stats: ChunkStats = { loaded: 0, meshing: 0, pendingGen: 0, lastMeshMs: 0 };
+  readonly stats: ChunkStats = { loaded: 0, meshed: 0, meshing: 0, pendingGen: 0, lastMeshMs: 0, culledSections: 0, uploadBytes: 0 };
   private readonly height: number;
+  private readonly sectionCount: number;
   private disposed = false;
+  private fwd = new THREE.Vector3();
+  private camPos = new THREE.Vector3();
+  private lastSortCam = new THREE.Vector3(1e9, 1e9, 1e9);
+  private plantFar = 80;
+  // cave culling
+  private cullDirty = true;
+  private cullCam = { cx: 1e9, sy: -1, cz: 1e9 };
+  private cullR = -1;
+  private cullVisited = new Uint8Array(0);
+  private cullQueue = new Int32Array(0);
+  private cullEntry = new Int8Array(0);
+  private cullDirs = new Uint8Array(0);
+  private cullVis = new Int32Array(0);
+  private cullEnabled = true;
+  private emitScratch: number[] = [];
 
   constructor(private world: IWorld, bus: EventBus, private mats: TerrainMaterialSet) {
     this.group.name = 'terrain';
+    this.group.matrixAutoUpdate = false;
     this.height = world.height;
+    this.sectionCount = Math.ceil(world.height / SECTION);
     const hc = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
     const size = Math.max(1, Math.min(4, hc - 1));
     this.pool = new MesherPool(size, (r) => this.results.push(r), (id, msg) => this.onJobError(id, msg));
@@ -72,7 +132,22 @@ export class ChunkManager {
   setMode(mode: TerrainMode) {
     if (mode === this.mode) return;
     this.mode = mode;
+    this.cullDirty = true;
     for (const e of this.entries.values()) e.meshes?.setMode(mode);
+  }
+
+  /** Enable/disable cave-occlusion culling (e.g. off while the camera is outside the world volume). */
+  setOcclusionCulling(on: boolean) {
+    if (on === this.cullEnabled) return;
+    this.cullEnabled = on;
+    this.cullDirty = true;
+  }
+
+  /** Plants fade out towards `far` (blocks) and are neither drawn nor meshed well beyond it. */
+  setPlantLod(far: number) {
+    if (Math.abs(far - this.plantFar) < 0.5) return;
+    this.plantFar = far;
+    this.reprioritizeTimer = 0;
   }
 
   /** Fraction of chunks within `radius` chunks of the camera that are meshed. */
@@ -109,31 +184,37 @@ export class ChunkManager {
     return !!e && e.meshedVersion >= 0;
   }
 
-  forEachMesh(fn: (m: THREE.Mesh) => void) {
-    for (const e of this.entries.values()) {
-      const m = e.meshes;
-      if (!m) continue;
-      if (m.opaque) fn(m.opaque);
-      if (m.cutout) fn(m.cutout);
-      if (m.translucent) fn(m.translucent);
-    }
+  /** True when nothing is waiting to be generated, meshed or applied. */
+  get idle(): boolean {
+    if (this.results.length || this.pool.busy || this.stats.pendingGen) return false;
+    for (const e of this.wanted) if (this.needsMesh(e)) return false;
+    return true;
   }
 
-  update(camera: THREE.PerspectiveCamera, renderDistance: number, genBudgetMs: number) {
+  forEachMesh(fn: (m: THREE.Mesh) => void) {
+    for (const e of this.entries.values()) e.meshes?.forEachMesh(fn);
+  }
+
+  update(camera: THREE.PerspectiveCamera, renderDistance: number, budget: StreamBudget) {
     if (this.disposed) return;
     const rd = Math.max(2, Math.min(16, Math.round(renderDistance)));
     const ccx = Math.floor(camera.position.x / CS);
     const ccz = Math.floor(camera.position.z / CS);
     this.reprioritizeTimer -= 1;
     if (ccx !== this.center.cx || ccz !== this.center.cz || rd !== this.center.rd || this.reprioritizeTimer <= 0) {
-      this.center = { cx: ccx, cz: ccz, rd };
+      const rdChanged = rd !== this.center.rd;
+      this.center.cx = ccx;
+      this.center.cz = ccz;
+      this.center.rd = rd;
       this.reprioritizeTimer = 20;
       this.rebuildWanted(camera, rd);
-      this.unloadFar(rd);
+      if (rdChanged || this.reprioritizeTimer === 20) this.unloadFar(rd);
     }
-    this.applyResults();
-    this.generate(genBudgetMs);
-    this.dispatch();
+    this.stats.uploadBytes = 0;
+    this.applyResults(budget.uploadBytes);
+    this.generate(budget.genMs);
+    this.dispatch(budget.dispatchMs);
+    this.updateCulling(camera.position);
     this.sortTranslucent(camera.position);
     this.stats.loaded = this.entries.size;
     this.stats.meshing = this.pool.busy;
@@ -156,15 +237,19 @@ export class ChunkManager {
   }
 
   private rebuildWanted(camera: THREE.PerspectiveCamera, rd: number) {
-    const fwd = new THREE.Vector3();
+    const fwd = this.fwd;
     camera.getWorldDirection(fwd);
     const fx = fwd.x;
     const fz = fwd.z;
     const fl = Math.hypot(fx, fz) || 1;
     const px = camera.position.x / CS;
     const pz = camera.position.z / CS;
-    const list: Entry[] = [];
+    const list = this.wanted;
+    for (const e of list) e.wanted = false;
+    list.length = 0;
     const r2 = (rd + 0.5) * (rd + 0.5);
+    const plantIn = this.plantFar + 16;
+    const plantShow = this.plantFar + 12;
     for (let dz = -rd; dz <= rd; dz++)
       for (let dx = -rd; dx <= rd; dx++) {
         if (dx * dx + dz * dz > r2) continue;
@@ -174,8 +259,9 @@ export class ChunkManager {
         const k = key(cx, cz);
         let e = this.entries.get(k);
         if (!e) {
-          e = { cx, cz, meshes: null, version: 0, meshedVersion: -1, inflight: 0, urgent: false, distSq: 0 };
+          e = { cx, cz, meshes: null, version: 0, meshedVersion: -1, inflight: 0, urgent: false, distSq: 0, dist: 0, plantsSkipped: false, wanted: false };
           this.entries.set(k, e);
+          this.cullDirty = true;
         }
         const ox = cx + 0.5 - px;
         const oz = cz + 0.5 - pz;
@@ -183,10 +269,14 @@ export class ChunkManager {
         const dot = (ox * fx + oz * fz) / fl / (Math.sqrt(d2) || 1);
         const behind = d2 > 4 && dot < -0.1 ? 2.5 : d2 > 4 && dot < 0.4 ? 1.4 : 1;
         e.distSq = d2 * behind;
+        e.dist = Math.sqrt(d2) * CS;
+        e.wanted = true;
+        // plant LOD: re-mesh with plants when a chunk that was meshed without them comes closer
+        if (e.plantsSkipped && e.meshedVersion >= 0 && e.dist < plantIn && e.meshedVersion >= e.version) e.version++;
+        e.meshes?.setPlantsVisible(e.dist < plantShow);
         list.push(e);
       }
     list.sort((a, b) => a.distSq - b.distSq);
-    this.wanted = list;
   }
 
   private unloadFar(rd: number) {
@@ -198,6 +288,7 @@ export class ChunkManager {
       e.meshes?.dispose();
       if (e.inflight) this.jobs.delete(e.inflight);
       this.entries.delete(k);
+      this.cullDirty = true;
     }
     // column caches (heights/emitters) are cheap to keep around, but not forever
     const far = (rd + 6) * (rd + 6);
@@ -249,10 +340,10 @@ export class ChunkManager {
     return true;
   }
 
-  private dispatch() {
+  private dispatch(budgetMs: number) {
     if (this.pool.capacity <= 0) return;
-    // Job assembly copies ~50 KB per chunk on the main thread: cap it per frame.
-    const deadline = performance.now() + 3;
+    // Job assembly copies ~160 KB per chunk on the main thread: cap it per frame.
+    const deadline = performance.now() + budgetMs;
     // urgent edits first, then by priority order
     for (const e of this.wanted) {
       if (this.pool.capacity <= 0) return;
@@ -273,27 +364,39 @@ export class ChunkManager {
     this.jobs.set(job.id, { entry: e, version: e.version });
   }
 
-  private applyResults() {
-    if (!this.results.length) return;
+  private applyResults(budgetBytes: number) {
+    const res = this.results;
+    if (!res.length) return;
     const t0 = performance.now();
     // nearest first
-    this.results.sort((a, b) => this.resultDist(a) - this.resultDist(b));
+    if (res.length > 1) res.sort((a, b) => this.resultDist(a) - this.resultDist(b));
     let applied = 0;
-    while (this.results.length) {
-      if (applied >= 2 && performance.now() - t0 > 4) break;
-      const r = this.results.shift()!;
+    let bytes = 0;
+    let i = 0;
+    for (; i < res.length; i++) {
+      const r = res[i];
+      const size = resultBytes(r);
+      if (applied > 0 && (bytes + size > budgetBytes || performance.now() - t0 > 4)) break;
       const job = this.jobs.get(r.id);
       this.jobs.delete(r.id);
       if (!job) continue; // unloaded meanwhile
       const e = job.entry;
       if (e.inflight !== r.id || this.entries.get(key(e.cx, e.cz)) !== e) continue;
       e.inflight = 0;
-      if (!e.meshes) e.meshes = new ChunkMeshes(e.cx, e.cz, this.group, this.mats);
-      e.meshes.apply(r, this.mode);
+      if (!e.meshes) e.meshes = new ChunkMeshes(e.cx, e.cz, this.group, this.mats, this.sectionCount, this.mode);
+      if (e.meshes.apply(r) > 0) bytes += size;
+      e.meshes.setPlantsVisible(e.dist < this.plantFar + 12);
       e.meshedVersion = job.version;
+      e.plantsSkipped = r.skipPlants;
       this.stats.lastMeshMs = r.ms;
+      this.cullDirty = true;
       applied++;
     }
+    res.splice(0, i);
+    this.stats.uploadBytes = bytes;
+    let meshed = 0;
+    for (const e of this.entries.values()) if (e.meshes) meshed++;
+    this.stats.meshed = meshed;
   }
 
   private resultDist(r: MeshResult) {
@@ -313,19 +416,121 @@ export class ChunkManager {
   }
 
   private sortTranslucent(cam: THREE.Vector3) {
-    // sort a few nearby chunks per frame (round-robin)
-    const near: Entry[] = [];
+    // Only when the camera moved meaningfully; then a few nearby chunks per frame (round-robin).
+    const moved = this.lastSortCam.distanceToSquared(cam) > 0.25 * 0.25;
+    if (!moved && this.sortCursor === 0) return;
+    if (moved) this.lastSortCam.copy(cam);
+    let near = 0;
     for (const e of this.wanted) {
       if (e.distSq > 9) break;
-      if (e.meshes?.translucent) near.push(e);
+      near++;
     }
-    if (!near.length) return;
+    if (!near) return;
     let sorted = 0;
-    for (let i = 0; i < near.length && sorted < 3; i++) {
-      const e = near[(this.sortCursor + i) % near.length];
-      if (e.meshes!.sortTranslucent(cam)) sorted++;
+    let visited = 0;
+    for (let i = 0; i < near && sorted < 3; i++) {
+      const e = this.wanted[(this.sortCursor + i) % near];
+      visited++;
+      const m = e.meshes;
+      if (!m) continue;
+      for (const s of m.sections) if (s.sortTranslucent(cam)) sorted++;
     }
-    this.sortCursor = (this.sortCursor + 1) % near.length;
+    this.sortCursor = (this.sortCursor + visited) % near;
+  }
+
+  // ---- cave-occlusion culling -------------------------------------------------------------------------
+
+  /**
+   * Breadth-first walk over sections from the camera's section through faces that are connected by open
+   * space (per-section visibility from the mesher), never stepping back against a direction already
+   * taken. Sections not reached cannot be seen and are hidden (mostly cave systems under the surface).
+   */
+  private updateCulling(cam: THREE.Vector3) {
+    const ccx = Math.floor(cam.x / CS);
+    const ccz = Math.floor(cam.z / CS);
+    const csy = Math.floor(cam.y / SECTION);
+    const inside = cam.y >= 0 && cam.y < this.height && this.inWorld(ccx, ccz);
+    const active = this.cullEnabled && this.mode === 'normal' && inside;
+    if (!this.cullDirty && ccx === this.cullCam.cx && ccz === this.cullCam.cz && csy === this.cullCam.sy) return;
+    this.cullDirty = false;
+    this.cullCam.cx = ccx;
+    this.cullCam.cz = ccz;
+    this.cullCam.sy = csy;
+    let culled = 0;
+    if (!active) {
+      for (const e of this.entries.values()) if (e.meshes) for (let s = 0; s < this.sectionCount; s++) e.meshes.setCulled(s, false);
+      this.stats.culledSections = 0;
+      return;
+    }
+    const R = this.center.rd + 2;
+    const G = R * 2 + 1;
+    const NS = this.sectionCount;
+    const total = G * G * NS;
+    if (this.cullR !== R) {
+      this.cullR = R;
+      this.cullVisited = new Uint8Array(total);
+      this.cullQueue = new Int32Array(total);
+      this.cullEntry = new Int8Array(total);
+      this.cullDirs = new Uint8Array(total);
+      this.cullVis = new Int32Array(total);
+    }
+    const visited = this.cullVisited;
+    const queue = this.cullQueue;
+    const entryFace = this.cullEntry;
+    const dirs = this.cullDirs;
+    const visArr = this.cullVis;
+    visited.fill(0);
+    visArr.fill(VIS_ALL);
+    for (const e of this.entries.values()) {
+      const lx = e.cx - ccx + R;
+      const lz = e.cz - ccz + R;
+      if (lx < 0 || lz < 0 || lx >= G || lz >= G || !e.meshes) continue;
+      for (let s = 0; s < NS; s++) visArr[lx + lz * G + s * G * G] = e.meshes.sections[s].vis;
+    }
+    let qh = 0;
+    let qt = 0;
+    const start = R + R * G + Math.min(NS - 1, Math.max(0, csy)) * G * G;
+    visited[start] = 1;
+    entryFace[start] = -1;
+    dirs[start] = 0;
+    queue[qt++] = start;
+    while (qh < qt) {
+      const idx = queue[qh++];
+      const sy = (idx / (G * G)) | 0;
+      const rem = idx - sy * G * G;
+      const lz = (rem / G) | 0;
+      const lx = rem - lz * G;
+      const ef = entryFace[idx];
+      const dm = dirs[idx];
+      const vis = visArr[idx];
+      for (let d = 0; d < 6; d++) {
+        if (dm & (1 << (d ^ 1))) continue; // never step back towards the camera
+        if (ef >= 0 && !(vis & PAIR[ef][d])) continue;
+        const nx = lx + STEP_X[d];
+        const ny = sy + STEP_Y[d];
+        const nz = lz + STEP_Z[d];
+        if (nx < 0 || nz < 0 || nx >= G || nz >= G || ny < 0 || ny >= NS) continue;
+        if (!this.inWorld(nx - R + ccx, nz - R + ccz)) continue;
+        const ni = nx + nz * G + ny * G * G;
+        if (visited[ni]) continue;
+        visited[ni] = 1;
+        entryFace[ni] = d ^ 1;
+        dirs[ni] = dm | (1 << d);
+        queue[qt++] = ni;
+      }
+    }
+    for (const e of this.entries.values()) {
+      if (!e.meshes) continue;
+      const lx = e.cx - ccx + R;
+      const lz = e.cz - ccz + R;
+      const inGrid = lx >= 0 && lz >= 0 && lx < G && lz < G;
+      for (let s = 0; s < NS; s++) {
+        const hide = inGrid && !visited[lx + lz * G + s * G * G];
+        e.meshes.setCulled(s, hide);
+        if (hide && !e.meshes.sections[s].empty) culled++;
+      }
+    }
+    this.stats.culledSections = culled;
   }
 
   // ---- job construction ---------------------------------------------------------------------------
@@ -360,7 +565,8 @@ export class ChunkManager {
     const c = this.column(cx, cz);
     if (c.emitters) return c.emitters;
     const data = this.world.getChunkData(cx, cz);
-    const out: number[] = [];
+    const out = this.emitScratch;
+    out.length = 0;
     if (data) {
       for (let i = 0; i < data.length; i++) {
         const l = EMIT[data[i]];
@@ -384,54 +590,51 @@ export class ChunkManager {
         chunks.push(this.inWorld(cx, cz) ? this.world.getChunkData(cx, cz) : undefined);
       }
     if (!chunks[4]) return null;
-    const blocks = new Uint8Array(PL * H);
-    for (let pz = 0; pz < PW; pz++) {
-      const lz = pz - PAD;
-      const sz = lz < 0 ? 0 : lz >= CS ? 2 : 1;
-      const tz = lz - (sz - 1) * CS;
-      for (let px = 0; px < PW; px++) {
-        const lx = px - PAD;
-        const sx = lx < 0 ? 0 : lx >= CS ? 2 : 1;
+    const LL = LW * LW;
+    const blocks = new Uint8Array(LL * H);
+    // copy x-runs: within one source chunk a run of cells along x is contiguous in both layouts
+    for (let lz = 0; lz < LW; lz++) {
+      const wz = lz - LPAD;
+      const sz = wz < 0 ? 0 : wz >= CS ? 2 : 1;
+      const tz = wz - (sz - 1) * CS;
+      let lx = 0;
+      while (lx < LW) {
+        const wx = lx - LPAD;
+        const sx = wx < 0 ? 0 : wx >= CS ? 2 : 1;
+        const tx = wx - (sx - 1) * CS;
+        const run = Math.min(CS - tx, LW - lx);
         const src = chunks[sz * 3 + sx];
-        if (!src) continue;
-        const tx = lx - (sx - 1) * CS;
-        let si = tx + tz * CS;
-        let di = px + pz * PW;
-        for (let y = 0; y < H; y++) {
-          blocks[di] = src[si];
-          si += CS * CS;
-          di += PL;
+        if (src) {
+          let si = tx + tz * CS;
+          let di = lx + lz * LW;
+          for (let y = 0; y < H; y++) {
+            for (let k = 0; k < run; k++) blocks[di + k] = src[si + k];
+            si += CS * CS;
+            di += LL;
+          }
         }
+        lx += run;
       }
     }
-    // column heights with a wider margin (soft sky light)
-    const heights = new Uint8Array(HW * HW);
-    for (let hz = 0; hz < HW; hz++)
-      for (let hx = 0; hx < HW; hx++) {
-        const wx = e.cx * CS + hx - HM;
-        const wz = e.cz * CS + hz - HM;
-        const cx = Math.floor(wx / CS);
-        const cz = Math.floor(wz / CS);
-        if (!this.inWorld(cx, cz)) continue;
-        const h = this.heightsOf(cx, cz);
-        if (h) heights[hx + hz * HW] = h[(wx - cx * CS) + (wz - cz * CS) * CS];
-      }
     // emitters within range of this chunk
-    const em: number[] = [];
+    const em = this.emitScratch;
+    const list: number[] = [];
     for (let dz = -1; dz <= 1; dz++)
       for (let dx = -1; dx <= 1; dx++) {
         const cx = e.cx + dx;
         const cz = e.cz + dz;
         if (!this.inWorld(cx, cz) || !chunks[(dz + 1) * 3 + dx + 1]) continue;
-        const list = this.emittersOf(cx, cz);
-        for (let i = 0; i < list.length; i += 4) {
-          const x = list[i] + dx * CS;
-          const z = list[i + 2] + dz * CS;
+        const src = this.emittersOf(cx, cz);
+        for (let i = 0; i < src.length; i += 4) {
+          const x = src[i] + dx * CS;
+          const z = src[i + 2] + dz * CS;
           if (x < -EMIT_RANGE || z < -EMIT_RANGE || x >= CS + EMIT_RANGE || z >= CS + EMIT_RANGE) continue;
-          em.push(x, list[i + 1], z, list[i + 3]);
+          list.push(x, src[i + 1], z, src[i + 3]);
         }
       }
-    return { type: 'mesh', id: this.nextJobId++, cx: e.cx, cz: e.cz, height: H, blocks, heights, emitters: new Int16Array(em) };
+    em.length = 0;
+    const skipPlants = e.dist > this.plantFar + 24;
+    return { type: 'mesh', id: this.nextJobId++, cx: e.cx, cz: e.cz, height: H, blocks, emitters: new Int16Array(list), skipPlants };
   }
 
   // ---- edits ---------------------------------------------------------------------------------------
@@ -449,20 +652,16 @@ export class ChunkManager {
     const lx = x - cx * CS;
     const lz = z - cz * CS;
     const c = this.columns.get(key(cx, cz));
-    let skyChanged = false;
     if (c?.heights) {
       const data = this.world.getChunkData(cx, cz);
-      if (data) {
-        const nh = this.scanColumn(data, lx, lz);
-        skyChanged = nh !== c.heights[lx + lz * CS];
-        c.heights[lx + lz * CS] = nh;
-      }
-    } else skyChanged = SKY_BLOCKER[prev] !== SKY_BLOCKER[id];
+      if (data) c.heights[lx + lz * CS] = this.scanColumn(data, lx, lz);
+    }
     const lightChanged = EMIT[prev] > 0 || EMIT[id] > 0;
     if (c && lightChanged) c.emitters = null;
     const urgent = source !== 'load';
     this.markDirty(cx, cz, urgent);
-    const reach = lightChanged ? EMIT_RANGE : skyChanged ? HM - 1 : 1;
+    // Any opacity change can shift sky light up to SKY_REACH blocks away (flood fill); lamps reach further.
+    const reach = lightChanged ? EMIT_RANGE : SKY_REACH;
     const west = lx < reach;
     const east = lx >= CS - reach;
     const north = lz < reach;

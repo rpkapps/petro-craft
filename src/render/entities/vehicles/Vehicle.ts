@@ -6,6 +6,7 @@ import { exhaust, smoke } from '../fx/emitters';
 import type { ModelTemplate } from '../geom/Builder';
 import type { MaterialLib } from '../materials';
 import { instantiate, type ModelObject } from '../models/instantiate';
+import type { LandNav, WaterNav } from './nav';
 import type { Terrain } from './terrain';
 
 export interface VehicleEnv {
@@ -15,6 +16,10 @@ export interface VehicleEnv {
   terrain: Terrain;
   group: THREE.Group;
   camera: THREE.Camera;
+  /** Lazily created navigation grids (shared by all traffic). */
+  nav: { land(): LandNav; water(): WaterNav };
+  /** Bumped whenever buildings are placed or removed. */
+  structVersion(): number;
 }
 
 const _v = new THREE.Vector3();

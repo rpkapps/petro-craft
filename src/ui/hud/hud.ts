@@ -4,7 +4,7 @@ import { icon, type IconName } from '../icons';
 import type { GameContext } from '../../core/types';
 import type { PanelId, UIHost } from '../core/host';
 import { keyLabel } from '../format';
-import { ensureNotificationsTracked, unseenNotifications } from '../game';
+import { PerfOverlay } from './perf';
 import { TopBar } from './topBar';
 import { Minimap } from './minimap';
 import { Hotbar } from './hotbar';
@@ -38,6 +38,8 @@ export class Hud {
   private scan: ScanCard;
   private alert: AlertBanner;
   private dockBtns = new Map<PanelId, HTMLButtonElement>();
+  private dockKeys = new Map<PanelId, HTMLElement>();
+  private perf: PerfOverlay;
   private unread: HTMLElement;
   private acc = 0;
   private slowAcc = 0;
@@ -52,26 +54,32 @@ export class Hud {
     this.modes = new ModeStrip(ui, ctx);
     this.scan = new ScanCard();
     this.alert = new AlertBanner(ui, ctx);
+    this.perf = new PerfOverlay(ui.app);
     this.unread = h('span.dk-badge.mono');
     const dock = h('div.pc-dock.glass.flat');
     for (const d of DOCK) {
-      const key = d.bind ? keyLabel(ui.app.settings.keybinds[d.bind]) : '';
-      const b = h<HTMLButtonElement>('button.dk-btn', { type: 'button' }, icon(d.icon), key ? h('span.dk-key', key) : null, d.panel === 'notifications' ? this.unread : null);
+      const keyEl = d.bind ? h('span.dk-key') : null;
+      const b = h<HTMLButtonElement>('button.dk-btn', { type: 'button' }, icon(d.icon), keyEl, d.panel === 'notifications' ? this.unread : null);
       b.addEventListener('click', () => {
         ui.sound('click');
         ui.toggle(d.panel);
       });
       b.addEventListener('mouseenter', () => ui.sound('hover'));
-      ui.tooltip.attach(b, () => h('div', h('div.tt-title', d.label), key ? h('div.tt-sub', `Hotkey ${key}`) : null));
+      ui.tooltip.attach(b, () => {
+        const key = d.bind ? keyLabel(ui.app.settings.keybinds[d.bind]) : '';
+        const unread = d.panel === 'notifications' ? this.unreadCount() : 0;
+        return h('div', h('div.tt-title', d.label), key ? h('div.tt-sub', `Hotkey ${key}`) : null, unread ? h('div.tt-sub', `${unread} unread`) : null);
+      });
       this.dockBtns.set(d.panel, b);
+      if (keyEl && d.bind) this.dockKeys.set(d.panel, keyEl);
       dock.appendChild(b);
     }
-    ensureNotificationsTracked(ctx.state);
+    this.paintDockKeys();
     this.el = h('div.pc-hud',
       this.top.el,
       this.alert.el,
       h('div.hud-left', this.objectives.el),
-      h('div.hud-right', this.minimap.el),
+      h('div.hud-right', this.minimap.el, this.perf.el),
       this.target.el,
       this.modes.el,
       this.scan.el,
@@ -90,6 +98,29 @@ export class Hud {
     this.update(0);
   }
 
+  /** Settings changed (from the settings panel or elsewhere): refresh settings-dependent widgets. */
+  onSettingsChanged(keys: string[]) {
+    if (keys.includes('keybinds')) this.paintDockKeys();
+    if (keys.includes('showFps')) this.perf.frame(0);
+  }
+
+  onPickup(item: string, count: number) {
+    this.hotbar.pickups.push(item, count);
+  }
+
+  private paintDockKeys() {
+    for (const d of DOCK) {
+      const el = this.dockKeys.get(d.panel);
+      if (el && d.bind) setText(el, keyLabel(this.ui.app.settings.keybinds[d.bind]));
+    }
+  }
+
+  private unreadCount(): number {
+    let n = 0;
+    for (const x of this.ctx.state.notifications) if (!x.read) n++;
+    return n;
+  }
+
   toggleHidden() {
     this.hidden = !this.hidden;
     toggleClass(this.el, 'hud-hidden', this.hidden);
@@ -99,6 +130,8 @@ export class Hud {
   frame(dt: number, openPanels: PanelId[]) {
     this.top.frame(dt);
     this.scan.update(dt);
+    this.perf.frame(dt);
+    this.hotbar.pickups.update(dt);
     this.acc += dt;
     this.slowAcc += dt;
     if (this.acc >= 0.1) {
@@ -109,7 +142,7 @@ export class Hud {
       this.slowAcc = 0;
       this.alert.update();
       for (const [p, b] of this.dockBtns) toggleClass(b, 'on', openPanels.includes(p));
-      const u = unseenNotifications(this.ctx.state);
+      const u = this.unreadCount();
       setText(this.unread, u > 0 ? (u > 99 ? '99+' : String(u)) : '');
     }
   }

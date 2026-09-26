@@ -1,4 +1,4 @@
-// Mesher worker entry: receives padded chunk volumes, returns vertex streams (transferred, zero-copy).
+// Mesher worker entry: receives padded chunk volumes, returns per-section vertex streams (transferred, zero-copy).
 import { Mesher } from './mesher';
 import type { WorkerRequest, WorkerResponse, PassData, MeshResult } from './protocol';
 
@@ -11,10 +11,13 @@ function transferables(r: MeshResult): Transferable[] {
     if (!p) return;
     out.push(p.positions.buffer, p.normals.buffer, p.uvs.buffer, p.info.buffer, p.indices.buffer);
   };
-  add(r.opaque);
-  add(r.cutout);
-  add(r.translucent);
-  if (r.quadCenters) out.push(r.quadCenters.buffer);
+  for (const s of r.sections) {
+    add(s.opaque);
+    add(s.cutout);
+    add(s.plants);
+    add(s.translucent);
+    if (s.quadCenters) out.push(s.quadCenters.buffer);
+  }
   return out;
 }
 

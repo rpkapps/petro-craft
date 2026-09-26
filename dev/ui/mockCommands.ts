@@ -8,6 +8,19 @@ import { BLOCK_BY_KEY } from '../../src/core/blocks';
 export function registerMockCommands(cmds: CommandBus) {
   const ok = { ok: true };
   cmds.register('time/setSpeed', (c, ctx) => { ctx.state.time.speed = c.speed; return ok; });
+  cmds.register('notifications/markRead', (c, ctx) => {
+    const ids = c.ids ? new Set(c.ids) : null;
+    for (const n of ctx.state.notifications) if (!ids || ids.has(n.id)) n.read = true;
+    return ok;
+  });
+  cmds.register('player/dropItem', (c, ctx) => {
+    const p = ctx.state.players[ctx.localPlayerId];
+    const s = p?.inventory[c.slot];
+    if (!p || !s) return { ok: false, error: 'Nothing to drop' };
+    s.count -= Math.min(s.count, c.count ?? s.count);
+    if (s.count <= 0) p.inventory[c.slot] = null;
+    return ok;
+  });
   cmds.register('time/setPaused', (c, ctx) => { ctx.state.time.paused = c.paused; ctx.bus.emit('game:paused', { paused: c.paused }); return ok; });
   cmds.register('player/selectSlot', (c, ctx) => { ctx.state.players[ctx.localPlayerId].selectedSlot = c.slot; return ok; });
   cmds.register('player/moveItem', (c, ctx) => {

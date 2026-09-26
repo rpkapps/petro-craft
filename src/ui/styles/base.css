@@ -518,6 +518,7 @@
 .pc-root .pc-tooltip .tt-title { font-family: var(--f-head); font-weight: 700; font-size: 0.98rem; letter-spacing: 0.03em; margin-bottom: 0.15rem; }
 .pc-root .pc-tooltip .tt-sub { color: var(--text-dim); font-size: 0.72rem; }
 .pc-root .pc-tooltip .tt-body { color: var(--text-2); margin-top: 0.3rem; }
+.pc-root .pc-tooltip .tt-hint { margin-top: 0.35rem; padding-top: 0.3rem; border-top: 1px solid var(--line); color: var(--text-dim); font-family: var(--f-mono); font-size: 0.66rem; letter-spacing: 0.02em; }
 
 /* ---- animations -------------------------------------------------------------------------------- */
 @keyframes pc-pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.7); } }

@@ -45,7 +45,7 @@ export class MesherPool {
     if (best < 0) return false;
     this.inflight[best]++;
     this.jobWorker.set(job.id, best);
-    this.workers[best].postMessage(job, [job.blocks.buffer, job.heights.buffer, job.emitters.buffer]);
+    this.workers[best].postMessage(job, [job.blocks.buffer, job.emitters.buffer]);
     return true;
   }
 

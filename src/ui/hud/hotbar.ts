@@ -8,6 +8,8 @@ import { localPlayer } from '../game';
 import { icon } from '../icons';
 import { ITEMS } from '../../content/items';
 import { tipBody } from '../core/tooltip';
+import { dropHint } from '../format';
+import { PickupFeed } from './pickups';
 
 export class Hotbar {
   readonly el: HTMLElement;
@@ -19,6 +21,7 @@ export class Hotbar {
   private health: HTMLElement;
   private healthTxt: HTMLElement;
   private healthWrap: HTMLElement;
+  readonly pickups = new PickupFeed();
 
   constructor(private ui: UIHost, private ctx: GameContext) {
     const row = h('div.hb-row');
@@ -34,7 +37,8 @@ export class Hotbar {
       ui.tooltip.attach(el, () => {
         const s = localPlayer(this.ctx)?.inventory[idx];
         if (!s) return null;
-        return tipBody(itemName(s.item), s.count > 1 ? `× ${s.count}` : undefined, ITEMS[s.item]?.description ?? (s.item.startsWith('block:') ? 'Building block — place with right click.' : undefined));
+        return tipBody(itemName(s.item), s.count > 1 ? `× ${s.count}` : undefined, ITEMS[s.item]?.description ?? (s.item.startsWith('block:') ? 'Building block — place with right click.' : undefined),
+          [h('div.tt-hint', dropHint(this.ui.app.settings.keybinds))]);
       });
       row.appendChild(el);
       this.slots.push({ el, icon: ic, count, item: null });
@@ -43,7 +47,7 @@ export class Hotbar {
     this.health = bar(1, 'danger', 'hb-health-bar');
     this.healthTxt = h('span.mono');
     this.healthWrap = h('div.hb-health', icon('heart'), this.health, this.healthTxt);
-    this.el = h('div.pc-hotbar', this.nameToast, this.healthWrap, row);
+    this.el = h('div.pc-hotbar', this.nameToast, this.healthWrap, row, this.pickups.el);
   }
 
   update(dt: number) {

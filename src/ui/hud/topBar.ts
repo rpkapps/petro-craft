@@ -44,7 +44,6 @@ export class TopBar {
   private resRing: RingCtl;
   private resName: HTMLElement;
   private resPct: HTMLElement;
-  private fps: HTMLElement;
   private isDay: boolean | null = null;
   private lastPaused: boolean | null = null;
 
@@ -129,11 +128,10 @@ export class TopBar {
     this.resPct = h('div.tb-lbl');
     const research = h('button.tb-research.tb-sec.tb-click', { type: 'button' }, h('div.tb-ring', this.resRing.el, icon('flask')), h('div.col.grow', { style: 'gap:0' }, this.resPct, this.resName));
     research.addEventListener('click', () => { ui.sound('click'); ui.toggle('research'); });
-    this.fps = h('div.tb-fps.mono');
 
     this.el = h('div.pc-topbar.glass.flat',
       h('div.tb-left', brand, this.moneyBox, date, speedSec),
-      h('div.tb-right', weather, ticker, this.powerBox, env, research, this.fps));
+      h('div.tb-right', weather, ticker, this.powerBox, env, research));
     this.moneyTween.set(ctx.state.company.money, true);
   }
 
@@ -226,10 +224,6 @@ export class TopBar {
     this.resRing.set(frac);
     setText(this.resName, t ? t.name : 'No active research');
     setText(this.resPct, t ? `Research ${Math.round(frac * 100)}%` : `Research · ${r.pointsPerDay.toFixed(0)} pts/d`);
-    // fps
-    const showFps = this.ui.app.settings.showFps;
-    toggleClass(this.fps, 'hidden', !showFps);
-    if (showFps) setText(this.fps, `${Math.round(this.ui.app.host?.fps ?? 0)} FPS`);
   }
 }
 

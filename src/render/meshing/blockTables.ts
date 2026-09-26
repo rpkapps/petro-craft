@@ -24,8 +24,17 @@ export const PASS = new Uint8Array(256);
 export const FACE_LAYER = new Uint8Array(256 * 3);
 /** Full opaque cube: hides neighbour faces and occludes AO. */
 export const OPAQUE = new Uint8Array(256);
-/** Stops sky light for the column heightmap (opaque cubes + foliage canopy). */
+/** Stops sky exposure for the column heightmap (opaque cubes, foliage canopy, building volume): rain occlusion. */
 export const SKY_BLOCKER = new Uint8Array(256);
+/** How a block interacts with sky light (see meshing/lighting.ts). */
+export const LC_OPEN = 0;
+export const LC_OPAQUE = 1;
+export const LC_LEAF = 2;
+export const LC_STRUCT = 3;
+export const LC_WATER = 4;
+export const LIGHT_CLASS = new Uint8Array(256);
+/** Swaying cross plants: own mesh pass with distance fade / LOD. */
+export const PLANT = new Uint8Array(256);
 /** Vertex-shader wind sway: 1 = whole block (leaves), 2 = anchored at the bottom (plants). */
 export const SWAY = new Uint8Array(256);
 /** Emitted block light 0..15. */
@@ -52,12 +61,17 @@ for (let id = 0; id < 256; id++) {
   if (SHAPE[id] === SHAPE_LIQUID || isGlassy) PASS[id] = PASS_TRANSLUCENT;
   else if (SHAPE[id] === SHAPE_CROSS || (SHAPE[id] === SHAPE_CUBE && d.transparent)) PASS[id] = PASS_CUTOUT;
   else PASS[id] = PASS_OPAQUE;
-  SKY_BLOCKER[id] = OPAQUE[id] || (SHAPE[id] === SHAPE_CUBE && d.sway) ? 1 : 0;
+  SKY_BLOCKER[id] = OPAQUE[id] || (SHAPE[id] === SHAPE_CUBE && d.sway) || id === B.STRUCTURE ? 1 : 0;
+  LIGHT_CLASS[id] = OPAQUE[id] ? LC_OPAQUE : SHAPE[id] === SHAPE_CUBE && d.sway ? LC_LEAF : id === B.STRUCTURE ? LC_STRUCT : LC_OPEN;
+  PLANT[id] = SHAPE[id] === SHAPE_CROSS && d.sway ? 1 : 0;
   SWAY[id] = d.sway ? (SHAPE[id] === SHAPE_CROSS ? 2 : 1) : 0;
   EMIT[id] = d.light ?? 0;
   PIPE_CAT[id] = d.pipe ? PIPE_CODES[d.pipe] : PIPE_NONE;
   LIQUID_TOP[id] = id === B.OIL_POOL ? 0.14 : 0.875;
 }
+LIGHT_CLASS[B.WATER] = LC_WATER;
+LIGHT_CLASS[B.SEAGRASS] = LC_WATER;
+LIGHT_CLASS[B.KELP] = LC_WATER;
 WATERLOGGED[B.SEAGRASS] = 1;
 WATERLOGGED[B.KELP] = 1;
 FULLBRIGHT[B.FIRE] = 1;

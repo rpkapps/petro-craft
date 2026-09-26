@@ -1,10 +1,12 @@
-// North-up minimap: cached terrain + buildings (by category), wells (by status), fires and the player.
+// North-up minimap: cached terrain + world edits (pads, spills, scorched ground, placed blocks, pipes & roads),
+// buildings (by category), wells (by status), fires and the player.
 import { h, fitCanvas, setText } from '../dom';
 import { icon } from '../icons';
 import { BUILDINGS } from '../../content/buildings';
 import type { GameContext } from '../../core/types';
 import type { UIHost } from '../core/host';
 import { terrainFor, type TerrainMap } from '../render/terrain';
+import { drawWorldLayer, editsFor, type EditRaster } from '../render/edits';
 import { localPlayer } from '../game';
 import { keyLabel } from '../format';
 
@@ -32,10 +34,12 @@ export class Minimap {
   private coords: HTMLElement;
   private zoomIdx = 2;
   private terrain: TerrainMap;
+  private edits: EditRaster;
   private t = 0;
 
   constructor(ui: UIHost, private ctx: GameContext) {
     this.terrain = terrainFor(ctx.geology);
+    this.edits = editsFor(ctx);
     this.canvas = h<HTMLCanvasElement>('canvas.mm-canvas');
     this.coords = h('div.mm-coords.mono');
     const zin = h<HTMLButtonElement>('button.mm-btn', { type: 'button', title: 'Zoom in' }, icon('plus'));
@@ -69,7 +73,13 @@ export class Minimap {
     // terrain
     const T = this.terrain;
     g.imageSmoothingEnabled = span > 120;
-    g.drawImage(T.canvas, 0, 0, T.res, T.res, ox, oz, T.res * T.scale * s, T.res * T.scale * s);
+    drawWorldLayer(g, T.canvas, T.res, T.res, T.scale, ox, oz, s, w, hh);
+    // player & system edits
+    const E = this.edits;
+    const geo = this.ctx.geology;
+    g.imageSmoothingEnabled = s < 1; // keep 1-block lines visible when zoomed far out
+    drawWorldLayer(g, E.ground, geo.sizeX, geo.sizeZ, 1, ox, oz, s, w, hh);
+    drawWorldLayer(g, E.lines, geo.sizeX, geo.sizeZ, 1, ox, oz, s, w, hh);
     // world border
     g.strokeStyle = 'rgba(255,255,255,0.25)';
     g.lineWidth = 1;

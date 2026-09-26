@@ -301,6 +301,13 @@ export function createMockState(geo: IGeology): GameState {
     { id: 'sp2', x: pit.x, y: pit.y, z: pit.z, volume: 400, cleaned: 400, day: DAY - 22, kind: 'water' },
     { id: 'sp3', x: blow.x, y: blow.surfaceY, z: blow.z, volume: 1800, cleaned: 150, day: DAY, kind: 'oil' },
   ], finesTotal: 185_000, carbonCredits: 1200, violations: 1 };
+  // Daily score history (sim-owned, persisted): a slow slide with a recent spill-driven dip.
+  const envHist: number[] = [];
+  for (let d = 0; d < Math.min(365, DAY - 1); d++) {
+    const t = d / Math.max(1, DAY - 2);
+    envHist.push(Math.round(Math.max(0, Math.min(100, 72 - 10 * t + Math.sin(d / 9) * 3 + (d > DAY - 30 ? -6 : 0) + rnd(-1, 1))) * 10) / 10);
+  }
+  st.environment.history = envHist;
   st.weather = { current: 'rain', intensity: 0.6, temperature: 14, windSpeed: 9, windDir: 2.2, cloudCover: 0.85, precipitation: 0.6, season: 'autumn', nextChangeMinute: 0,
     forecast: [
       { day: DAY + 1, kind: 'storm', tempHigh: 16, tempLow: 9, wind: 16 }, { day: DAY + 2, kind: 'cloudy', tempHigh: 18, tempLow: 8, wind: 6 },

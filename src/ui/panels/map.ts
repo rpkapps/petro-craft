@@ -1,15 +1,16 @@
 // Map (N): pan/zoom world map with terrain, lease parcels (quotes & purchase), known reservoirs, wells,
-// buildings, pipelines, surveys, hazards and the player. Tools: 2D seismic line, 3D seismic area, rig skid.
+// buildings, pipelines, surveys, hazards, world edits (pads, spills, scorched ground, placed blocks) and the player.
+// Tools: 2D seismic line, 3D seismic area, rig skid.
 import { h, clear, setText, toggleClass, fitCanvas, bar } from '../dom';
 import { icon, type IconName } from '../icons';
 import { Panel } from '../core/panel';
 import type { PanelArgs, UIHost } from '../core/host';
 import { button, chip, emptyState, stars, toggle, statusInfo, type ToggleCtl } from '../core/components';
 import { BUILDINGS } from '../../content/buildings';
-import { BLOCKS, isPipeBlock } from '../../core/blocks';
 import { PARCEL_SIZE, SEA_LEVEL } from '../../core/constants';
 import type { BuildingState, SurveyState, Vec2 } from '../../core/types';
 import { terrainFor, type TerrainMap } from '../render/terrain';
+import { drawWorldLayer, editsFor, type EditRaster } from '../render/edits';
 import { CATEGORY_COLOR, WELL_COLOR, headingAngle } from '../hud/minimap';
 import { buildingName, isRig, localPlayer } from '../game';
 import { lengthBlocks, money, pct, titleCase } from '../format';
@@ -25,51 +26,15 @@ const LAYERS: { id: Layer; label: string; icon: IconName }[] = [
   { id: 'hazards', label: 'Fires & spills', icon: 'fire' },
 ];
 const layerState: Record<Layer, boolean> = { leases: false, reservoirs: true, wells: true, buildings: true, pipes: true, surveys: true, hazards: true };
-const PIPE_RGB: Record<string, [number, number, number]> = { oil: [242, 163, 30], gas: [232, 210, 58], water: [47, 121, 201], product: [62, 158, 90], road: [60, 62, 66] };
 const FLUID_RGB: Record<string, [number, number, number]> = { oil: [61, 220, 132], condensate: [255, 194, 51], gas: [255, 90, 90] };
 
-/** Offscreen 1-px-per-block raster of pipe & road blocks from world edits (cached per world). */
-class PipeRaster {
-  canvas = document.createElement('canvas');
-  dirty = true;
-  constructor(private ui: UIHost) {
-    const w = ui.game.world;
-    this.canvas.width = w.sizeX;
-    this.canvas.height = w.sizeZ;
-  }
-  rebuild() {
-    const g = this.canvas.getContext('2d')!;
-    const img = g.createImageData(this.canvas.width, this.canvas.height);
-    const d = img.data;
-    const W = this.canvas.width;
-    const roadId = BLOCKS.findIndex((b) => b.key === 'asphalt_road');
-    this.ui.game.world.forEachEdit((x, _y, z, id) => {
-      if (x < 0 || z < 0 || x >= W || z >= this.canvas.height) return;
-      let rgb: [number, number, number] | undefined;
-      if (id === roadId) rgb = PIPE_RGB.road;
-      else if (isPipeBlock(id)) {
-        const cat = BLOCKS[id].pipe;
-        if (cat && cat !== 'casing') rgb = PIPE_RGB[cat];
-      }
-      if (!rgb) return;
-      const i = (z * W + x) * 4;
-      if (d[i + 3] && rgb === PIPE_RGB.road) return;
-      d[i] = rgb[0];
-      d[i + 1] = rgb[1];
-      d[i + 2] = rgb[2];
-      d[i + 3] = 255;
-    });
-    g.putImageData(img, 0, 0);
-    this.dirty = false;
-  }
-}
-const pipeCache = new WeakMap<object, PipeRaster>();
 
 export class MapPanel extends Panel {
   readonly id = 'map' as const;
   private canvas!: HTMLCanvasElement;
   private terrain!: TerrainMap;
-  private pipes!: PipeRaster;
+  private edits!: EditRaster;
+  private lastEditsVersion = -1;
   private cx = 0;
   private cz = 0;
   private scale = 1;
@@ -116,19 +81,7 @@ export class MapPanel extends Panel {
   protected build() {
     const ctx = this.ui.game;
     this.terrain = terrainFor(ctx.geology);
-    let pr = pipeCache.get(ctx.world);
-    if (!pr) {
-      pr = new PipeRaster(this.ui);
-      pipeCache.set(ctx.world, pr);
-    }
-    this.pipes = pr;
-    const offBlock = ctx.bus.on('world:blockChanged', (e) => {
-      if (isPipeBlock(e.id) || isPipeBlock(e.prev) || BLOCKS[e.id]?.key === 'asphalt_road' || BLOCKS[e.prev]?.key === 'asphalt_road') {
-        this.pipes.dirty = true;
-        this.dirty = true;
-      }
-    });
-    this.cleanup.push(offBlock);
+    this.edits = editsFor(ctx);
     this.setSubtitle(`${ctx.geology.sizeX} × ${ctx.geology.sizeZ} blocks · 1 block = 40 m`);
 
     this.canvas = h<HTMLCanvasElement>('canvas.map-canvas');
@@ -142,7 +95,10 @@ export class MapPanel extends Panel {
       ...(['producing', 'drilling', 'kick', 'shut_in', 'plugged'] as const).map((s) => h('span', h('i.dot', { style: { background: WELL_COLOR[s] } }), statusInfo('well', s).label)),
       h('span', h('i.sq', { style: { background: 'rgba(255,138,31,.35)', borderColor: '#ff8a1f' } }), 'Your lease'),
       h('span', h('i.sq', { style: { background: 'rgba(61,220,132,.25)', borderColor: '#3ddc84' } }), 'Oil'),
-      h('span', h('i.sq', { style: { background: 'rgba(255,90,90,.25)', borderColor: '#ff5a5a' } }), 'Gas'));
+      h('span', h('i.sq', { style: { background: 'rgba(255,90,90,.25)', borderColor: '#ff5a5a' } }), 'Gas'),
+      h('span', h('i.sq', { style: { background: '#a8a8a2', borderColor: '#6c6c68' } }), 'Pad'),
+      h('span', h('i.sq', { style: { background: '#120e0a', borderColor: '#ff8a1f' } }), 'Oil spill'),
+      h('span', h('i.sq', { style: { background: '#2e2620', borderColor: '#5a4a3e' } }), 'Scorched'));
     const view = h('div.map-view', this.canvas, h('div.map-vignette'), h('div.map-ctrls', zoomIn, zoomOut, home, fit), this.cursorEl, this.scaleBar, legend);
 
     // sidebar
@@ -532,8 +488,9 @@ export class MapPanel extends Panel {
   frame(dt: number) {
     this.t += dt;
     this.redrawTimer += dt;
-    if (this.terrain.version !== this.lastTerrainVersion) {
+    if (this.terrain.version !== this.lastTerrainVersion || this.edits.version !== this.lastEditsVersion) {
       this.lastTerrainVersion = this.terrain.version;
+      this.lastEditsVersion = this.edits.version;
       this.dirty = true;
     }
     const animated = layerState.hazards && this.st.hazards.fires.length > 0;
@@ -561,19 +518,22 @@ export class MapPanel extends Panel {
     // terrain
     const T = this.terrain;
     g.imageSmoothingEnabled = S * T.scale < 2.5;
-    g.drawImage(T.canvas, 0, 0, T.res, T.res, ox, oz, T.res * T.scale * S, T.res * T.scale * S);
+    drawWorldLayer(g, T.canvas, T.res, T.res, T.scale, ox, oz, S, w, hh);
+    // ground edits: pads, spills, scorched earth, placed blocks
+    const E = this.edits;
+    g.imageSmoothingEnabled = S < 1;
+    drawWorldLayer(g, E.ground, geo.sizeX, geo.sizeZ, 1, ox, oz, S, w, hh);
     g.strokeStyle = 'rgba(255,255,255,0.3)';
     g.lineWidth = 1;
     g.strokeRect(ox, oz, geo.sizeX * S, geo.sizeZ * S);
-    // pipelines
+    // pipelines & roads
     if (layerState.pipes) {
-      if (this.pipes.dirty) this.pipes.rebuild();
-      g.imageSmoothingEnabled = false;
       g.globalAlpha = 0.95;
-      g.drawImage(this.pipes.canvas, ox, oz, geo.sizeX * S, geo.sizeZ * S);
-      if (S < 2) g.drawImage(this.pipes.canvas, ox + 0.6, oz, geo.sizeX * S, geo.sizeZ * S);
+      drawWorldLayer(g, E.lines, geo.sizeX, geo.sizeZ, 1, ox, oz, S, w, hh);
+      if (S < 2) drawWorldLayer(g, E.lines, geo.sizeX, geo.sizeZ, 1, ox + 0.6, oz, S, w, hh);
       g.globalAlpha = 1;
     }
+    g.imageSmoothingEnabled = true;
     // reservoirs
     if (layerState.reservoirs) {
       for (const r of geo.reservoirs) {

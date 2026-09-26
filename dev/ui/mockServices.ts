@@ -2,6 +2,7 @@
 import type { GameState, IGeology, IWorld, SeismicImage, Services, SurveyState, Vec2, Vec3, WellPlan } from '../../src/core/types';
 import { B } from '../../src/core/blocks';
 import { rotatedSize } from '../../src/core/buildingUtil';
+import { BUILDINGS } from '../../src/content/buildings';
 import { SEA_LEVEL, WORLD_HEIGHT } from '../../src/core/constants';
 import { trajectory } from './mockState';
 
@@ -179,6 +180,27 @@ export function createMockWorld(geo: IGeology, st: GameState): IWorld {
   for (const b of bs.filter((x) => x.type === 'wellhead').slice(0, 4)) line(B.PIPE_WATER, [b.x, b.z + 1], [pit.x + 2, pit.z]);
   line(B.PIPE_PRODUCT, [plant.x + 8, plant.z + 4], [plant.x + 30, plant.z + 20]);
   line(B.ASPHALT_ROAD, [170, 210], [300, 210]);
+  // Building pads (facilities levels ground and lays CONCRETE_PAD / GRAVEL_PAD under every land footprint).
+  const top = (x: number, z: number) => geo.surfaceHeight(x, z);
+  const setTop = (x: number, z: number, id: number, dy = 0) => { if (x >= 0 && z >= 0 && x < geo.sizeX && z < geo.sizeZ) edits.set(key(x, top(x, z) + dy, z), id); };
+  for (const b of bs) {
+    if (BUILDINGS[b.type]?.placement === 'water') continue;
+    const pad = BUILDINGS[b.type]?.category === 'drilling' || b.type === 'wellhead' ? B.GRAVEL_PAD : B.CONCRETE_PAD;
+    for (let dz = -1; dz <= b.size[1]; dz++) for (let dx = -1; dx <= b.size[0]; dx++) setTop(b.x + dx, b.z + dz, pad, -1);
+  }
+  // Oil spills around the open spill sites, scorched ground around burning buildings.
+  for (const sp of st.environment.spills) {
+    if (sp.kind !== 'oil' || sp.cleaned >= sp.volume) continue;
+    const r = Math.min(6, 2 + Math.sqrt(sp.volume - sp.cleaned) / 10);
+    for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dz * dz <= r * r * (0.7 + 0.3 * Math.sin(dx * 3 + dz))) setTop(Math.round(sp.x + dx + 6), Math.round(sp.z + dz), B.OIL_POOL);
+  }
+  for (const b of bs.filter((x) => x.status === 'fire')) {
+    for (let dz = -3; dz < b.size[1] + 3; dz++) for (let dx = -3; dx < b.size[0] + 3; dx++) if ((dx * 7 + dz * 13) % 5 !== 0) setTop(b.x + dx, b.z + dz, (dx + dz) % 3 ? B.SCORCHED_EARTH : B.ASH);
+  }
+  // A few player-placed blocks near spawn: a brick wall, containers and a lamp-lit steel yard.
+  for (let i = 0; i < 14; i++) setTop(200 + i, 250, B.BRICK);
+  for (let i = 0; i < 3; i++) { setTop(203 + i * 3, 253, B.CONTAINER_RED); setTop(204 + i * 3, 253, B.CONTAINER_BLUE); }
+  for (let dz = 0; dz < 5; dz++) for (let dx = 0; dx < 6; dx++) setTop(222 + dx, 248 + dz, dx % 5 === 0 && dz % 4 === 0 ? B.LAMP : B.STEEL_PLATE);
   const sizeX = geo.sizeX;
   const sizeZ = geo.sizeZ;
   return {

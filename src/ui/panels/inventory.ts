@@ -9,7 +9,7 @@ import { BLOCK_BY_KEY } from '../../core/blocks';
 import { ITEMS, SUPPLY_IDS } from '../../content/items';
 import { itemIconEl, itemName } from '../render/itemIcons';
 import { localPlayer } from '../game';
-import { money, int, compact } from '../format';
+import { money, int, compact, dropHint } from '../format';
 import { tipBody } from '../core/tooltip';
 import type { InventorySlot } from '../../core/types';
 import { SHOP_BLOCKS, supplyPrice } from '../../sim/economy';
@@ -105,7 +105,7 @@ export class InventoryPanel extends Panel {
       el.addEventListener('mouseenter', () => this.showDetail(idx));
       this.ui.tooltip.attach(el, () => {
         const s = this.inv()[idx];
-        return s ? tipBody(itemName(s.item), `× ${s.count}`, ITEMS[s.item]?.description) : null;
+        return s ? tipBody(itemName(s.item), `× ${s.count}`, ITEMS[s.item]?.description, [h('div.tt-hint', dropHint(this.ui.app.settings.keybinds))]) : null;
       });
       this.slots.push({ el, ic, count, item: null });
       (i < HOTBAR_SLOTS ? hot : main).appendChild(el);
@@ -115,7 +115,7 @@ export class InventoryPanel extends Panel {
       h('div.col', { style: 'gap:.8rem' },
         h('div.section-title', icon('inventory'), 'Backpack'), main,
         h('div.section-title', icon('menu'), 'Hotbar'), hot,
-        h('div.tiny.dim', 'Drag items between slots, or click one slot and then another to swap them.')),
+        h('div.tiny.dim', `Drag items between slots, or click one slot and then another to swap them. In the world: ${dropHint(this.ui.app.settings.keybinds)}.`)),
       this.detail));
     this.showDetail(localPlayer(this.ui.game)?.selectedSlot ?? 0);
   }
@@ -146,8 +146,19 @@ export class InventoryPanel extends Panel {
       h('div.inv-dname', itemName(s.item)),
       h('div.dim.small', it ? `${it.kind === 'tool' ? 'Tool' : it.kind} · ${s.count} ${it.unit}` : blk ? `Block · ${s.count} in stack` : ''),
       h('p.inv-ddesc', it?.description ?? (blk?.pipe ? `Pipeline block for the ${blk.pipe} network. Connects to adjacent same-type pipes and building ports.` : blk ? 'Building block. Select it on the hotbar and right-click to place.' : '')),
-      idx < HOTBAR_SLOTS ? button('Select on hotbar', { icon: 'check', size: 'sm', onClick: () => { this.ui.dispatch({ type: 'player/selectSlot', slot: idx }); this.ui.sound('click'); } }) : '',
+      h('div.row.inv-dactions',
+        idx < HOTBAR_SLOTS ? button('Select on hotbar', { icon: 'check', size: 'sm', onClick: () => { this.ui.dispatch({ type: 'player/selectSlot', slot: idx }); this.ui.sound('click'); } }) : null,
+        button('Drop 1', { icon: 'download', size: 'sm', variant: 'ghost', title: 'Drop one in front of you', onClick: () => this.drop(idx, 1) }),
+        s.count > 1 ? button('Drop stack', { size: 'sm', variant: 'ghost', title: 'Drop the whole stack', onClick: () => this.drop(idx, s.count) }) : null),
     );
+  }
+
+  private drop(idx: number, count: number) {
+    const r = this.ui.dispatch({ type: 'player/dropItem', slot: idx, count });
+    if (!r.ok) return;
+    this.ui.sound('click');
+    this.update();
+    this.showDetail(idx);
   }
 
   // ---- block shop ----------------------------------------------------------------------------

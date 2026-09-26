@@ -191,3 +191,9 @@ export function keyLabel(code: string | undefined): string {
   };
   return map[code] ?? code;
 }
+
+/** "Q drop · Ctrl+Q drop stack" for the current keybinds. */
+export function dropHint(keybinds: Record<string, string>): string {
+  const k = keyLabel(keybinds.drop);
+  return `${k} drop · Ctrl+${k} drop stack`;
+}
