@@ -83,7 +83,7 @@ export const WORLD_RECIPES: RecipeMap = {
       r.thump(body, t, r.r(52, 62), 1.0, 1.3, 0.45);
       r.burst(glue, t, 1.3, 0.8, { color: 'pink', type: 'lowpass', freq: 2600, sweepTo: 280, q: 0.7, attack: 0.002 });
       r.burst(glue, t + 0.02, 3.8, 1.0, { color: 'brown', type: 'lowpass', freq: 190, q: 0.8, attack: 0.04 });
-      r.grains(glue, t + 0.3, 2.6, 40, 0.22, 800, 5000, 0.02, 1.2);
+      r.grains(glue, t + 0.3, 2.6, 34, 0.13, 500, 3200, 0.025, 1.2);
     },
   },
   explosion_far: {
@@ -246,8 +246,7 @@ export const WORLD_RECIPES: RecipeMap = {
     build(r, t) {
       const o = r.out;
       // subterranean rumble building to the gush
-      const rum = r.burst(o, t, 1.3, 0.9, { color: 'brown', type: 'lowpass', freq: 200, q: 0.8, attack: 0.85 });
-      void rum;
+      r.burst(o, t, 1.3, 0.9, { color: 'brown', type: 'lowpass', freq: 200, q: 0.8, attack: 0.85 });
       const gush = r.pan(0);
       gush.connect(o);
       r.burst(gush, t + 0.9, 2.2, 0.55, { color: 'pink', type: 'lowpass', freq: 400, sweepTo: 5200, q: 0.7, attack: 0.03 });

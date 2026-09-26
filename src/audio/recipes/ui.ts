@@ -165,11 +165,12 @@ export const UI_RECIPES: RecipeMap = {
         }
         const sh = r.shaper(3);
         const bp = r.filter('peaking', 1150, 1.4, 9);
-        const lp = r.filter('lowpass', 3600, 0.7);
+        const lp = r.filter('lowpass', 3400, 0.7);
+        const lp2 = r.filter('lowpass', 4200, 0.6);
         const hp = r.filter('highpass', 140, 0.7);
         const env = r.gain(0);
         r.adsr(env.gain, tt, 0.6, 0.035, 0.1, 0.9, 0.44, 0.06);
-        r.chain(sum, sh, bp, lp, hp, env, o);
+        r.chain(sum, sh, bp, lp, lp2, hp, env, o);
       }
     },
   },

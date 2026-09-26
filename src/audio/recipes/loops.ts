@@ -113,10 +113,10 @@ export const LOOP_RECIPES: RecipeMap = {
     const o = r.out;
     // one stroke = 5 s (12 strokes/min at rate 1)
     const cycle = (c: number) => {
-      creak(r, o, c + 0.6, 1.3, 24, 38, 1100, 0.22);
+      creak(r, o, c + 0.6, 1.3, 24, 38, 1100, 0.5);
       r.thump(o, c + 2.3, 90, 0.35, 0.15, 0.7);
-      r.metal(o, c + 2.3, 260, 0.1, 0.3, [1, 2.5, 4.2]);
-      creak(r, o, c + 3.0, 1.1, 30, 20, 850, 0.18);
+      r.metal(o, c + 2.3, 260, 0.18, 0.3, [1, 2.5, 4.2]);
+      creak(r, o, c + 3.0, 1.1, 30, 20, 850, 0.4);
       r.thump(o, c + 4.6, 60, 0.55, 0.25, 0.6);
       r.burst(o, c + 4.6, 0.1, 0.2, { type: 'lowpass', freq: 300, q: 0.7 });
     };
@@ -124,9 +124,9 @@ export const LOOP_RECIPES: RecipeMap = {
     cycle(t + L);
     const hum = r.osc('sine', qf(60, L), t, end);
     const hum2 = r.osc('sine', qf(120, L), t, end);
-    const hg = r.gain(0.06);
+    const hg = r.gain(0.022);
     hum.connect(hg);
-    const hg2 = r.gain(0.03);
+    const hg2 = r.gain(0.012);
     hum2.connect(hg2);
     hg.connect(o);
     hg2.connect(o);

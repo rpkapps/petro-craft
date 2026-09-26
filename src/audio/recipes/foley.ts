@@ -33,7 +33,7 @@ const FOOTSTEPS: RecipeMap = {
   footstep_stone: step((r, t) => {
     const o = r.out;
     r.thump(o, t, 110, 0.45, 0.05, 0.7);
-    r.partial(o, t, r.r(360, 460), 0.22, 0.05);
+    r.partial(o, t, r.r(360, 460), 0.1, 0.03);
     r.burst(o, t, 0.02, 0.7, { freq: r.r(2300, 2900), q: 2 });
     r.grains(o, t + 0.01, 0.04, 3, 0.15, 2000, 5000, 0.008, 2);
   }, 0.2),

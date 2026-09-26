@@ -41,7 +41,8 @@ export const NATURE_RECIPES: RecipeMap = {
     const sd = r.r(0.05, 0.1);
     const ratio = r.r(0.65, 1.5);
     for (let i = 0; i < trillN; i++) {
-      syllable(r, o, tt, base, base * ratio, sd, 0.5, r.r(30, 70), r.r(80, 300));
+      const j = r.r(0.96, 1.04);
+      syllable(r, o, tt, base * j, base * ratio * j, sd * r.r(0.9, 1.1), r.r(0.38, 0.5), r.r(30, 70), r.r(80, 300));
       tt += sd + r.r(0.02, 0.05);
     }
     tt += r.r(0.05, 0.12);
