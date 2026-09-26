@@ -8,6 +8,7 @@ import { RIG_TYPES } from '../../core/buildingUtil';
 import { BuildingView, type ViewEnv } from './BuildingView';
 import { RECONCILE_INTERVAL } from './config';
 import { FxManager } from './fx/FxManager';
+import { InstanceBatcher } from './instancing/InstanceBatcher';
 import { createGhost } from './ghost';
 import { MaterialLib } from './materials';
 import { RIG_BUSY } from './models/rigSpecs';
@@ -16,6 +17,8 @@ import { clearTemplates } from './models/registry';
 import { clearConstructionTemplates } from './status/construction';
 import { clearRuinTemplates } from './status/ruin';
 import { clearVehicleTemplates } from './vehicles/templates';
+import { DropLayer } from './items/Drops';
+import { AvatarLayer, clearAvatarTemplates } from './npc/Avatars';
 import { WorkerCrowd } from './npc/Workers';
 import { TrafficManager } from './vehicles/TrafficManager';
 import { Terrain } from './vehicles/terrain';
@@ -34,6 +37,9 @@ export interface EntityLayerDebug {
   readonly traffic: TrafficManager;
   readonly workers: WorkerCrowd;
   readonly weather: WeatherFx;
+  readonly batcher: InstanceBatcher;
+  readonly avatars: AvatarLayer;
+  readonly drops: DropLayer;
   /** Force a full reconcile now. */
   reconcile(): void;
 }
@@ -47,6 +53,9 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
   readonly traffic: TrafficManager;
   readonly workers: WorkerCrowd;
   readonly terrain: Terrain;
+  readonly batcher: InstanceBatcher;
+  readonly avatars: AvatarLayer;
+  readonly drops: DropLayer;
   private readonly buildingsGroup = new THREE.Group();
   private readonly env: ViewEnv;
   private readonly offs: (() => void)[] = [];
@@ -67,18 +76,22 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
     host.renderer.localClippingEnabled = true;
     const company = ctx.state.company;
     this.lib = new MaterialLib(company.color || '#ff8a1f', company.name || ctx.state.meta.companyName);
+    this.batcher = new InstanceBatcher(this.lib);
     this.env = {
       lib: this.lib,
       ctx,
       shadows: ctx.settings.shadows !== false,
       wellFor: (b) => this.wellFor(b),
+      batcher: this.batcher,
     };
     this.fx = new FxManager(host, ctx);
     this.weather = new WeatherFx(host, ctx, this.fx);
     this.terrain = new Terrain(ctx);
     this.traffic = new TrafficManager(host, ctx, this.lib, this.fx, this.terrain, this.views);
     this.workers = new WorkerCrowd(host, ctx, this.lib, this.terrain, this.views);
-    this.root.add(this.buildingsGroup, this.fx.group, this.weather.group, this.traffic.group, this.workers.group);
+    this.avatars = new AvatarLayer(ctx, this.lib, this.terrain, host.camera, this.env.shadows);
+    this.drops = new DropLayer(ctx, this.terrain, host.camera);
+    this.root.add(this.buildingsGroup, this.batcher.group, this.fx.group, this.weather.group, this.traffic.group, this.workers.group, this.avatars.group, this.drops.group);
     host.scene.add(this.root);
     host.buildingPreview = { create: (type: string) => createGhost(type, this.lib) };
 
@@ -188,9 +201,12 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
       v.mem.hazardFire = burning.has(v.id) ? 1 : 0;
       this.fx.buildingFx(v, b, dt, night);
     }
+    this.batcher.flush();
     this.terrain.tick(dt);
     this.traffic.update(sdt, this.simTime);
     this.workers.update(sdt, this.simTime);
+    this.avatars.update(dt);
+    this.drops.update(dt);
     this.weather.update(dt, this.time);
     this.fx.update(dt, this.time, this.views);
   }
@@ -201,8 +217,11 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
     for (const o of this.offs) o();
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
+    this.batcher.dispose();
     this.traffic.dispose();
     this.workers.dispose();
+    this.avatars.dispose();
+    this.drops.dispose();
     this.weather.dispose();
     this.fx.dispose();
     this.root.removeFromParent();
@@ -212,5 +231,6 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
     clearConstructionTemplates();
     clearRuinTemplates();
     clearVehicleTemplates();
+    clearAvatarTemplates();
   }
 }

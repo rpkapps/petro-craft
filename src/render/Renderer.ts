@@ -1,5 +1,8 @@
 // The render engine: owns the WebGL renderer, scene, camera, lights and all visual subsystems, and
 // implements the RenderHost contract used by the entity layer, player controller and audio.
+// Live settings (render scale, antialiasing, brightness, post effects, shadows, render distance) are
+// polled every frame; AutoQuality may lower the effective values without touching the saved settings.
+// `stats` exposes per-frame counters for the performance overlay (see RenderStats).
 import * as THREE from 'three';
 import type { GameContext, Vec3 } from '../core/types';
 import type { MapOverlay } from '../core/EventBus';
@@ -15,7 +18,9 @@ import { Clouds } from './sky/Clouds';
 import { Lightning } from './sky/Lightning';
 import { createAtmosphere, updateAtmosphere, type Atmosphere } from './sky/atmosphere';
 import { ShadowRig } from './ShadowRig';
-import { PostFX } from './post/PostFX';
+import { PostFX, type PostSettings } from './post/PostFX';
+import { AutoQuality, clampScale, type EffectiveQuality } from './quality/AutoQuality';
+import { GpuTimer } from './quality/GpuTimer';
 import { Overlays } from './overlay/Overlays';
 import { BlockHighlight } from './helpers/BlockHighlight';
 import { SelectionBox } from './helpers/SelectionBox';
@@ -26,7 +31,30 @@ const WATER_SHALLOW = new THREE.Color(0.04, 0.26, 0.32);
 const WATER_DEEP = new THREE.Color(0.008, 0.05, 0.12);
 const WATER_SHALLOW_GREY = new THREE.Color(0.2, 0.26, 0.28);
 const WATER_DEEP_GREY = new THREE.Color(0.05, 0.07, 0.09);
-const MAX_PIXEL_RATIO = 1.5;
+/** Device pixel ratio cap before the render-scale multiplier. */
+const MAX_PIXEL_RATIO = 2;
+const BASE_EXPOSURE = 0.82;
+/** Streaming budgets per frame: while the loading screen is up / during play. */
+const BUDGET_LOADING = { genMs: 12, dispatchMs: 6, uploadBytes: 32 * 1024 * 1024 };
+const BUDGET_PLAY = { genMs: 4, dispatchMs: 2, uploadBytes: 2 * 1024 * 1024 };
+
+/** Per-frame renderer statistics for the performance overlay (`host.stats`). */
+export interface RenderStats {
+  /** CPU time of the presentation frame (renderer update → render end, incl. entity/audio updates), smoothed ms. */
+  frameMs: number;
+  /** GPU time of the frame from EXT_disjoint_timer_query_webgl2, smoothed ms; NaN when unavailable. */
+  gpuMs: number;
+  /** Draw calls of the last frame (main view + shadow map + post passes). */
+  drawCalls: number;
+  /** Triangles of the last frame (same scope as drawCalls). */
+  triangles: number;
+  /** Chunk columns with meshes. */
+  chunks: number;
+  /** Effective render distance in chunks (after auto quality). */
+  renderDistance: number;
+  /** Number of auto-quality steps currently applied (0 = full user settings). */
+  autoQualityStep: number;
+}
 
 export class RenderEngine implements Renderer {
   readonly renderer: THREE.WebGLRenderer;
@@ -70,14 +98,26 @@ export class RenderEngine implements Renderer {
   private progressCache = 0;
   private tmpColor = new THREE.Color();
   private tmpVec = new THREE.Vector3();
+  private auto = new AutoQuality();
+  private eff: EffectiveQuality = { renderScale: 1, ssao: false, shadowDegrade: 0, bloomScale: 0.5, renderDistance: 8 };
+  private postCfg: PostSettings = { bloom: true, ssao: false, antialias: true, bloomScale: 0.5 };
+  private gpuTimer: GpuTimer;
+  private pixelRatio = 1;
+  private dpr = 1;
+  private frameStart = 0;
+  private lastFrameAt = 0;
+  private cpuMs = 0;
+  private inFrame = false;
+  private plantFar = -1;
+  readonly stats: RenderStats = { frameMs: 0, gpuMs: NaN, drawCalls: 0, triangles: 0, chunks: 0, renderDistance: 8, autoQualityStep: 0 };
 
   constructor(readonly canvas: HTMLCanvasElement, private ctx: GameContext) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false, preserveDrawingBuffer: false });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.82;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO));
+    this.renderer.toneMappingExposure = BASE_EXPOSURE;
     this.renderer.info.autoReset = false;
+    this.gpuTimer = new GpuTimer(this.renderer.getContext() as WebGL2RenderingContext);
 
     const s = ctx.settings;
     this.camera = new THREE.PerspectiveCamera(s.fov, 1, 0.08, 1000);
@@ -116,6 +156,8 @@ export class RenderEngine implements Renderer {
     this.scene.add(this.highlight.group, this.selection.group);
 
     this.post = new PostFX(this.renderer, this.scene, this.camera);
+    this.auto.configure(s);
+    this.auto.effective(s, this.eff);
 
     this.offBus.push(
       ctx.bus.on('weather:lightning', (e) => this.onLightning(e.x, e.z)),
@@ -127,6 +169,8 @@ export class RenderEngine implements Renderer {
       ctx.bus.on('ui:overlay', (e) => {
         this.overlay = e.overlay === 'none' ? null : e.overlay;
       }),
+      // settings are also polled each frame; a change is a moment of hitching (rebuilds), not slowness
+      ctx.bus.on('settings:changed', () => this.auto.hold()),
     );
     this.canvas.addEventListener('webglcontextlost', this.onContextLost, false);
     this.resize(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
@@ -159,9 +203,7 @@ export class RenderEngine implements Renderer {
     this.shakeFx.add(intensity, duration);
   }
 
-  // ---- extras (not part of RenderHost; duck-typed by other presentation modules) --------------
-
-  /** First y with open sky above at a world column (0 if the chunk is not loaded). E.g. rain occlusion. */
+  /** First y with open sky above at a world column: terrain, foliage and building volume block the sky (0 if the chunk is not loaded). */
   skyHeightAt(x: number, z: number): number {
     return this.chunks.columnTop(Math.floor(x), Math.floor(z));
   }
@@ -171,10 +213,20 @@ export class RenderEngine implements Renderer {
     return this.underwater > 0.5;
   }
 
+  /** Render scale actually used (user setting, possibly lowered by auto quality). */
+  get effectiveRenderScale(): number {
+    return this.eff.renderScale;
+  }
+
   // ---- frame ----------------------------------------------------------------------------------
 
   update(dt: number) {
     if (this.disposed) return;
+    const now = performance.now();
+    const interval = this.lastFrameAt > 0 ? now - this.lastFrameAt : 1000 / 60;
+    this.lastFrameAt = now;
+    this.frameStart = now;
+    this.inFrame = true;
     dt = Math.min(Math.max(dt, 0), 0.25);
     this.lastDt = dt;
     this.time += dt;
@@ -183,19 +235,43 @@ export class RenderEngine implements Renderer {
     const s = this.ctx.settings;
     const st = this.ctx.state;
 
+    // adaptive quality (never mutates the user's settings)
+    this.gpuTimer.poll();
+    const gpu = this.gpuTimer.ms;
+    const gpuKnown = Number.isFinite(gpu);
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    const reconfigured = this.auto.configure(s);
+    const stepped = this.auto.sample(interval, gpuKnown ? Math.max(this.cpuMs, gpu) : this.cpuMs, gpuKnown, hidden || this.progressCache < 1);
+    if (reconfigured || stepped) this.auto.effective(s, this.eff);
+    this.stats.autoQualityStep = this.auto.level;
+    this.applyPixelRatio();
+
     // live settings
     if (s.fov !== this.lastFov) {
       this.lastFov = s.fov;
       this.camera.fov = s.fov;
       this.camera.updateProjectionMatrix();
     }
-    const rd = Math.max(2, Math.min(16, Math.round(s.renderDistance || 8)));
+    const rd = this.eff.renderDistance;
     if (rd !== this.lastRd) {
       this.lastRd = rd;
       this.camera.far = Math.max(600, rd * CHUNK_SIZE * 2.2);
       this.camera.updateProjectionMatrix();
+      // plants dissolve towards ~62% of the view distance and are not meshed beyond it
+      const far = Math.min(96, Math.max(40, rd * CHUNK_SIZE * 0.62));
+      if (far !== this.plantFar) {
+        this.plantFar = far;
+        this.materials.plantFade.value.set(far * 0.7, far);
+        this.chunks.setPlantLod(far);
+      }
     }
-    this.post.configure({ bloom: s.bloom, ssao: s.ssao });
+    this.stats.renderDistance = rd;
+    const pc = this.postCfg;
+    pc.bloom = s.bloom;
+    pc.ssao = this.eff.ssao;
+    pc.antialias = s.antialias !== false;
+    pc.bloomScale = this.eff.bloomScale;
+    this.post.configure(pc);
 
     // environment
     this.lightning.update(dt);
@@ -206,10 +282,11 @@ export class RenderEngine implements Renderer {
 
     // world
     const loading = this.progressCache < 1;
-    this.chunks.update(this.camera, rd, loading ? 12 : 5);
+    this.chunks.update(this.camera, rd, loading ? BUDGET_LOADING : BUDGET_PLAY);
     this.progressCache = this.chunks.progress(this.camera.position, Math.min(rd, 4));
+    this.stats.chunks = this.chunks.stats.meshed;
     this.clouds.update(dt, this.camera, st.weather.cloudCover, this.atmosphere.windDir, this.atmosphere.windStrength, s.clouds);
-    this.shadows.update(this.camera, this.atmosphere.lightDir, s);
+    this.shadows.update(this.camera, this.atmosphere.lightDir, s, this.eff.shadowDegrade);
 
     // overlays & helpers
     const mode = this.overlays.update(dt, this.camera, this.overlay, s.units);
@@ -228,7 +305,6 @@ export class RenderEngine implements Renderer {
 
   render() {
     if (this.disposed) return;
-    const s = this.ctx.settings;
     this.renderer.info.reset();
     this.shakeFx.apply(this.camera);
     const pu = this.post.uniforms;
@@ -236,22 +312,47 @@ export class RenderEngine implements Renderer {
     pu.uUnderwater.value = this.underwater;
     pu.uXray.value = this.uniforms.uXray.value;
     pu.uFlash.value = this.uniforms.uFlash.value;
+    const timed = this.inFrame;
+    if (timed) this.gpuTimer.begin();
     try {
-      if (PostFX.wanted({ bloom: s.bloom, ssao: s.ssao })) this.post.render(this.lastDt);
+      if (PostFX.wanted(this.postCfg)) this.post.render(this.lastDt);
       else this.renderer.render(this.scene, this.camera);
     } finally {
+      if (timed) this.gpuTimer.end();
       this.shakeFx.restore(this.camera);
+    }
+    const info = this.renderer.info.render;
+    this.stats.drawCalls = info.calls;
+    this.stats.triangles = info.triangles;
+    if (timed) {
+      // a render() outside the frame loop (e.g. a save thumbnail) is not a frame
+      this.inFrame = false;
+      const cpu = performance.now() - this.frameStart;
+      this.cpuMs += (cpu - this.cpuMs) * 0.1;
+      this.stats.frameMs = this.cpuMs;
+      this.stats.gpuMs = this.gpuTimer.ms;
     }
   }
 
   resize(width: number, height: number) {
     this.width = Math.max(1, Math.floor(width));
     this.height = Math.max(1, Math.floor(height));
-    const pr = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
-    this.renderer.setPixelRatio(pr);
-    this.renderer.setSize(this.width, this.height, false);
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
+    this.pixelRatio = -1; // force
+    this.applyPixelRatio();
+    this.auto.hold();
+  }
+
+  /** Drawing-buffer pixel ratio = min(devicePixelRatio, 2) × effective render scale. */
+  private applyPixelRatio() {
+    const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, MAX_PIXEL_RATIO);
+    const pr = dpr * clampScale(this.eff.renderScale);
+    if (pr === this.pixelRatio && dpr === this.dpr) return;
+    this.pixelRatio = pr;
+    this.dpr = dpr;
+    this.renderer.setPixelRatio(pr);
+    this.renderer.setSize(this.width, this.height, false);
     this.post.setSize(this.width, this.height, pr);
   }
 
@@ -270,6 +371,7 @@ export class RenderEngine implements Renderer {
     this.highlight.dispose();
     this.selection.dispose();
     this.post.dispose();
+    this.gpuTimer.dispose();
     this.materials.dispose();
     this.atlas.dispose();
     this.sun.shadow.map?.dispose();

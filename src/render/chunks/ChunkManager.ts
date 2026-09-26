@@ -9,7 +9,7 @@ import type { IWorld } from '../../core/types';
 import type { EventBus } from '../../core/EventBus';
 import { MesherPool } from '../meshing/MesherPool';
 import { LPAD, LW, EMIT_RANGE, SECTION, type MeshJob, type MeshResult } from '../meshing/protocol';
-import { EMIT, SKY_BLOCKER } from '../meshing/blockTables';
+import { EMIT, SKY_BLOCKER, LIGHT_CLASS } from '../meshing/blockTables';
 import { ChunkMeshes, resultBytes, type TerrainMode } from './ChunkMeshes';
 import type { TerrainMaterialSet } from '../materials/TerrainMaterials';
 
@@ -54,8 +54,6 @@ interface Entry {
   dist: number;
   /** The current meshes were built without plants (distance LOD). */
   plantsSkipped: boolean;
-  /** Whether the chunk is in the wanted set (within render distance). */
-  wanted: boolean;
 }
 
 export interface ChunkStats {
@@ -202,13 +200,12 @@ export class ChunkManager {
     const ccz = Math.floor(camera.position.z / CS);
     this.reprioritizeTimer -= 1;
     if (ccx !== this.center.cx || ccz !== this.center.cz || rd !== this.center.rd || this.reprioritizeTimer <= 0) {
-      const rdChanged = rd !== this.center.rd;
       this.center.cx = ccx;
       this.center.cz = ccz;
       this.center.rd = rd;
       this.reprioritizeTimer = 20;
       this.rebuildWanted(camera, rd);
-      if (rdChanged || this.reprioritizeTimer === 20) this.unloadFar(rd);
+      this.unloadFar(rd);
     }
     this.stats.uploadBytes = 0;
     this.applyResults(budget.uploadBytes);
@@ -245,7 +242,6 @@ export class ChunkManager {
     const px = camera.position.x / CS;
     const pz = camera.position.z / CS;
     const list = this.wanted;
-    for (const e of list) e.wanted = false;
     list.length = 0;
     const r2 = (rd + 0.5) * (rd + 0.5);
     const plantIn = this.plantFar + 16;
@@ -259,7 +255,7 @@ export class ChunkManager {
         const k = key(cx, cz);
         let e = this.entries.get(k);
         if (!e) {
-          e = { cx, cz, meshes: null, version: 0, meshedVersion: -1, inflight: 0, urgent: false, distSq: 0, dist: 0, plantsSkipped: false, wanted: false };
+          e = { cx, cz, meshes: null, version: 0, meshedVersion: -1, inflight: 0, urgent: false, distSq: 0, dist: 0, plantsSkipped: false };
           this.entries.set(k, e);
           this.cullDirty = true;
         }
@@ -270,7 +266,6 @@ export class ChunkManager {
         const behind = d2 > 4 && dot < -0.1 ? 2.5 : d2 > 4 && dot < 0.4 ? 1.4 : 1;
         e.distSq = d2 * behind;
         e.dist = Math.sqrt(d2) * CS;
-        e.wanted = true;
         // plant LOD: re-mesh with plants when a chunk that was meshed without them comes closer
         if (e.plantsSkipped && e.meshedVersion >= 0 && e.dist < plantIn && e.meshedVersion >= e.version) e.version++;
         e.meshes?.setPlantsVisible(e.dist < plantShow);
@@ -617,7 +612,6 @@ export class ChunkManager {
       }
     }
     // emitters within range of this chunk
-    const em = this.emitScratch;
     const list: number[] = [];
     for (let dz = -1; dz <= 1; dz++)
       for (let dx = -1; dx <= 1; dx++) {
@@ -632,7 +626,6 @@ export class ChunkManager {
           list.push(x, src[i + 1], z, src[i + 3]);
         }
       }
-    em.length = 0;
     const skipPlants = e.dist > this.plantFar + 24;
     return { type: 'mesh', id: this.nextJobId++, cx: e.cx, cz: e.cz, height: H, blocks, emitters: new Int16Array(list), skipPlants };
   }
@@ -660,8 +653,9 @@ export class ChunkManager {
     if (c && lightChanged) c.emitters = null;
     const urgent = source !== 'load';
     this.markDirty(cx, cz, urgent);
-    // Any opacity change can shift sky light up to SKY_REACH blocks away (flood fill); lamps reach further.
-    const reach = lightChanged ? EMIT_RANGE : SKY_REACH;
+    // Opacity/filter changes shift sky light up to SKY_REACH blocks away (flood fill); lamps reach further;
+    // anything else only affects faces and AO of direct neighbours.
+    const reach = lightChanged ? EMIT_RANGE : LIGHT_CLASS[prev] !== LIGHT_CLASS[id] ? SKY_REACH : 1;
     const west = lx < reach;
     const east = lx >= CS - reach;
     const north = lz < reach;

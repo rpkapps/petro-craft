@@ -5,7 +5,9 @@
 // grid; on offshore structures they patrol the deck walkways declared by the model ('walk' anchors).
 import * as THREE from 'three';
 import type { RenderHost } from '../../../core/client';
+import { SEA_LEVEL } from '../../../core/constants';
 import type { BuildingState, GameContext } from '../../../core/types';
+import { BUILDINGS } from '../../../content/buildings';
 import type { BuildingView } from '../BuildingView';
 import { MAX_WORKERS } from '../config';
 import { Builder } from '../geom/Builder';
@@ -164,7 +166,7 @@ export class WorkerCrowd {
       if (v.status !== 'active' || v.hidden) continue;
       const b = s.buildings[v.id];
       if (!b || b.workers.length === 0) continue;
-      if (v.def && this.isOffshore(v) && this.ways(v).length === 0) continue;
+      if (this.isOffshore(v) && this.ways(v).length === 0) continue;
       const d = cam.distanceTo(v.center);
       if (d > VISIBLE_DIST + v.radius) continue;
       cands.push({ b, d, n: Math.min(PER_BUILDING, Math.ceil(b.workers.length * 0.75)) });
@@ -200,7 +202,7 @@ export class WorkerCrowd {
   }
 
   private isOffshore(v: BuildingView): boolean {
-    return v.anchors.some((a) => a.def.kind === 'walk');
+    return BUILDINGS[v.type]?.placement === 'water';
   }
 
   /** Deck walkways of an offshore model (world space, cached per placement). */
@@ -288,7 +290,7 @@ export class WorkerCrowd {
       for (let x = 0; x < w; x++) {
         const i = x + z * w;
         h[i] = this.terrain.probe(x0 + x, z0 + z, probe);
-        if (probe.trunk || this.ctx.geology.waterDepth(x0 + x, z0 + z) > 0.3 && h[i] <= 62) blocked[i] = 1;
+        if (probe.trunk || (this.ctx.geology.waterDepth(x0 + x, z0 + z) > 0.3 && h[i] <= SEA_LEVEL)) blocked[i] = 1;
       }
     // building footprints overlapping the window (with a little clearance)
     const bs = this.ctx.state.buildings;

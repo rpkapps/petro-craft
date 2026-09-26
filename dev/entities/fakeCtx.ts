@@ -1,4 +1,7 @@
-// Minimal GameContext for the entity showcase: flat land for z < COAST_Z, ocean beyond.
+// Minimal GameContext for the entity showcase: land for z < COAST_Z, ocean beyond.
+// `terrain: 'hills'` adds rolling hills, a lake, a river and a few trees (for traffic pathfinding tests);
+// the fake world records block edits (roads) and emits 'world:blockChanged' like the real one.
+import { B } from '../../src/core/blocks';
 import { CommandBus } from '../../src/core/commands';
 import { EventBus } from '../../src/core/EventBus';
 import { DEFAULT_SETTINGS } from '../../src/core/settings';
@@ -9,18 +12,35 @@ import type { BuildingState, GameContext, IGeology, IWorld, Rotation, Services, 
 export const LAND_Y = 64;
 export const SEABED_Y = 49;
 export const COAST_Z = 118;
+export const WORLD = 512;
 
-export function fakeGeology(): IGeology {
-  const surface = (_x: number, z: number) => (z < COAST_Z ? LAND_Y : SEABED_Y);
+export type FakeTerrain = 'flat' | 'hills';
+
+/** Lake & river used by the hills terrain (block coords). */
+export const LAKE = { x: 150, z: 52, r: 16 };
+export const RIVER_X = 232;
+
+export function fakeGeology(kind: FakeTerrain = 'flat'): IGeology {
+  const surface = (x: number, z: number): number => {
+    if (z >= COAST_Z) return SEABED_Y;
+    if (kind === 'flat') return LAND_Y;
+    const dl = Math.hypot(x - LAKE.x, z - LAKE.z);
+    if (dl < LAKE.r) return 57;
+    if (Math.abs(x - RIVER_X) < 4 && z < COAST_Z) return 58;
+    const hills = 2.2 + 3.2 * Math.sin(x / 19) * Math.cos(z / 23) + 2.5 * Math.sin((x + 2 * z) / 41) + (x > 260 && z < 60 ? 7 * Math.sin((x - 260) / 30) ** 2 : 0);
+    const shore = Math.min(1, (COAST_Z - z) / 12, dl > LAKE.r ? (dl - LAKE.r) / 8 : 0, Math.abs(x - RIVER_X) >= 4 ? (Math.abs(x - RIVER_X) - 4) / 6 : 0);
+    return Math.round(LAND_Y + hills * Math.max(0, shore));
+  };
+  const water = (x: number, z: number) => Math.max(0, 63 - surface(x, z));
   return {
     seed: 1,
-    sizeX: 512,
-    sizeZ: 512,
+    sizeX: WORLD,
+    sizeZ: WORLD,
     reservoirs: [],
     faults: [],
     aquifers: [],
     surfaceHeight: surface,
-    waterDepth: (x, z) => (z < COAST_Z ? 0 : 63 - surface(x, z)),
+    waterDepth: (x, z) => (surface(x, z) < 63 ? water(x, z) : 0),
     isOffshore: (_x, z) => z >= COAST_Z,
     biomeAt: (_x, z) => (z < COAST_Z ? 'plains' : 'ocean'),
     rockAt: () => 'sandstone',
@@ -33,31 +53,82 @@ export function fakeGeology(): IGeology {
   };
 }
 
-export function fakeWorld(geology: IGeology): IWorld {
-  return {
-    sizeX: 512,
-    sizeZ: 512,
+export interface FakeWorld extends IWorld {
+  bus: EventBus | null;
+  /** Tree trunks (x,z) → trunk height. */
+  trees: Map<number, number>;
+}
+
+export function fakeWorld(geology: IGeology): FakeWorld {
+  const edits = new Map<string, number>();
+  const colTop = new Map<number, number>();
+  const trees = new Map<number, number>();
+  const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
+  const natural = (x: number, y: number, z: number): number => {
+    const s = geology.surfaceHeight(x, z);
+    if (y < s) return B.STONE;
+    const t = trees.get(x * 4096 + z);
+    if (t && y < s + t) return B.LOG_OAK;
+    if (t && y < s + t + 2 && y >= s + t - 1) return B.LEAVES_OAK;
+    return y <= 62 ? B.WATER : B.AIR;
+  };
+  const world: FakeWorld = {
+    bus: null,
+    trees,
+    sizeX: WORLD,
+    sizeZ: WORLD,
     height: 160,
     seed: 1,
     geology,
-    getBlock: (x, y, z) => (y < geology.surfaceHeight(x, z) ? 3 : z >= COAST_Z && y <= 62 ? 9 : 0),
-    setBlock: () => true,
-    inBounds: (x, y, z) => x >= 0 && z >= 0 && x < 512 && z < 512 && y >= 0 && y < 160,
-    isSolid: (x, y, z) => y < geology.surfaceHeight(x, z),
-    getSurfaceY: (x, z) => geology.surfaceHeight(x, z),
+    getBlock: (x, y, z) => {
+      x = Math.floor(x);
+      y = Math.floor(y);
+      z = Math.floor(z);
+      const e = edits.get(key(x, y, z));
+      return e ?? natural(x, y, z);
+    },
+    setBlock: (x, y, z, id, source = 'system') => {
+      x = Math.floor(x);
+      y = Math.floor(y);
+      z = Math.floor(z);
+      const prev = world.getBlock(x, y, z);
+      edits.set(key(x, y, z), id);
+      if (id !== B.AIR) colTop.set(x * 4096 + z, Math.max(colTop.get(x * 4096 + z) ?? 0, y + 1));
+      world.bus?.emit('world:blockChanged', { x, y, z, prev, id, source });
+      return true;
+    },
+    inBounds: (x, y, z) => x >= 0 && z >= 0 && x < WORLD && z < WORLD && y >= 0 && y < 160,
+    isSolid: (x, y, z) => {
+      const id = world.getBlock(x, y, z);
+      return id !== B.AIR && id !== B.WATER;
+    },
+    getSurfaceY: (x, z) => {
+      x = Math.floor(x);
+      z = Math.floor(z);
+      let y = geology.surfaceHeight(x, z);
+      const t = trees.get(x * 4096 + z);
+      if (t) y += t + 2;
+      return Math.max(y, colTop.get(x * 4096 + z) ?? 0);
+    },
     ensureChunk: () => {},
     isChunkGenerated: () => true,
     getChunkData: () => undefined,
-    chunksX: 32,
-    chunksZ: 32,
-    forEachEdit: () => {},
+    chunksX: WORLD / 16,
+    chunksZ: WORLD / 16,
+    forEachEdit: (fn) => {
+      for (const [k, id] of edits) {
+        const [x, y, z] = k.split(',').map(Number);
+        fn(x, y, z, id);
+      }
+    },
     serializeEdits: () => ({ chunks: {} }),
     loadEdits: () => {},
   };
+  return world;
 }
 
-export function createFakeContext(): GameContext {
-  const geology = fakeGeology();
+export function createFakeContext(terrain: FakeTerrain = 'flat'): GameContext & { world: FakeWorld } {
+  const geology = fakeGeology(terrain);
   const world = fakeWorld(geology);
   const state = createInitialState(
     { saveName: 'showcase', companyName: 'Blackrock Energy', seed: 1, worldSize: 'medium', difficulty: 'normal', tutorial: false, hazards: true, creative: true },
@@ -69,18 +140,20 @@ export function createFakeContext(): GameContext {
   state.weather.windDir = 0.5;
   let n = 1;
   const services = {} as Services;
-  const ctx: GameContext = {
+  const bus = new EventBus();
+  world.bus = bus;
+  const ctx = {
     state,
     world,
     geology,
-    bus: new EventBus(),
+    bus,
     commands: new CommandBus(),
     services,
     settings: structuredClone(DEFAULT_SETTINGS),
     localPlayerId: 'p1',
     isAuthority: true,
     rng: () => Math.random(),
-    newId: (p) => `${p}${n++}`,
+    newId: (p: string) => `${p}${n++}`,
     notify: () => {},
     transact: () => true,
     hasTech: () => true,

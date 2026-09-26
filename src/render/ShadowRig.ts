@@ -1,17 +1,26 @@
 // Directional shadow map that follows the camera with texel snapping (no shimmering while moving) and
-// a quantised light direction (the sun creeps across the sky continuously).
+// a quantised light direction (the sun creeps across the sky continuously). Auto quality can step the
+// map resolution and covered distance below the user's setting (`degrade` tiers).
 import * as THREE from 'three';
 import type { Settings } from '../core/types';
 import type { SharedUniforms } from './materials/uniforms';
 
-const QUALITY: Record<Settings['shadowQuality'], { size: number; radius: number; blur: number }> = {
-  low: { size: 1024, radius: 44, blur: 1.2 },
-  medium: { size: 2048, radius: 56, blur: 1.6 },
-  high: { size: 4096, radius: 72, blur: 2.2 },
-};
+interface Tier {
+  size: number;
+  radius: number;
+  blur: number;
+}
+/** Quality tiers, lowest first; the user's setting picks low/medium/high, auto quality may step below. */
+const TIERS: Tier[] = [
+  { size: 512, radius: 34, blur: 1.0 },
+  { size: 1024, radius: 44, blur: 1.2 },
+  { size: 2048, radius: 56, blur: 1.6 },
+  { size: 4096, radius: 72, blur: 2.2 },
+];
+const TIER_OF: Record<Settings['shadowQuality'], number> = { low: 1, medium: 2, high: 3 };
 
 export class ShadowRig {
-  private quality: Settings['shadowQuality'] | null = null;
+  private tier = -1;
   private enabled: boolean | null = null;
   private dir = new THREE.Vector3(0, 1, 0);
   private right = new THREE.Vector3();
@@ -30,14 +39,20 @@ export class ShadowRig {
     light.shadow.camera.far = 480;
   }
 
-  update(camera: THREE.PerspectiveCamera, lightDir: THREE.Vector3, settings: Settings) {
+  /** Effective shadow map size (0 when shadows are off). */
+  get mapSize() {
+    return this.enabled ? this.light.shadow.mapSize.x : 0;
+  }
+
+  update(camera: THREE.PerspectiveCamera, lightDir: THREE.Vector3, settings: Settings, degrade = 0) {
     if (settings.shadows !== this.enabled) {
       this.enabled = settings.shadows;
       this.light.castShadow = settings.shadows;
     }
-    if (settings.shadowQuality !== this.quality) {
-      this.quality = settings.shadowQuality;
-      const q = QUALITY[this.quality] ?? QUALITY.medium;
+    const tier = Math.max(0, (TIER_OF[settings.shadowQuality] ?? 2) - Math.max(0, degrade));
+    if (tier !== this.tier) {
+      this.tier = tier;
+      const q = TIERS[tier];
       const cap = this.renderer.capabilities.maxTextureSize;
       const size = Math.min(q.size, cap);
       this.light.shadow.mapSize.set(size, size);

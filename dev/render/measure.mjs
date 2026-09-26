@@ -25,6 +25,7 @@ while (Date.now() - t0 < Number(settle)) {
   await page.waitForTimeout(2000);
   const busy = await page.evaluate(() => {
     const c = window.petrocraft.host.chunks;
+    if (typeof c.idle === 'boolean') return c.idle ? 0 : 1;
     return c.stats.meshing + c.stats.pendingGen + (c.results?.length ?? 0) + c.wanted.filter((e) => e.meshedVersion < e.version || e.meshedVersion < 0).length;
   });
   if (busy === 0) break;
@@ -32,9 +33,15 @@ while (Date.now() - t0 < Number(settle)) {
 const r = await page.evaluate(() => {
   const app = window.petrocraft;
   const host = app.host;
-  // freeze the camera where the player put it
+  // fixed, reproducible view: 20 blocks above the spawn surface looking north-east and slightly down
+  const cam = host.camera;
+  cam.position.set(163.5, 92, 143.5);
+  cam.rotation.order = 'YXZ';
+  cam.rotation.set(-0.25, -0.8, 0);
+  cam.updateMatrixWorld();
+  window.petrocraft.player && (window.petrocraft.player.update = () => {});
   const t = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 8; i++) {
     const a = performance.now();
     host.update(1 / 60);
     const b = performance.now();
@@ -44,19 +51,33 @@ const r = await page.evaluate(() => {
   }
   const info = host.renderer.info;
   let meshes = 0, tris = 0, visible = 0;
+  const byPass = {};
   host.chunks.forEachMesh((m) => {
     meshes++;
     const g = m.geometry;
-    tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
-    if (m.visible) visible++;
+    const n = (g.index ? g.index.count : g.attributes.position.count) / 3;
+    tris += n;
+    const pass = m.userData.pass;
+    const b = (byPass[pass] ??= { meshes: 0, tris: 0, visibleMeshes: 0, visibleTris: 0 });
+    b.meshes++;
+    b.tris += n;
+    if (m.visible) { visible++; b.visibleMeshes++; b.visibleTris += n; }
   });
+  // main view only (no shadow map, no post): one plain render
+  const sh = host.renderer.shadowMap.enabled;
+  host.renderer.shadowMap.enabled = false;
+  host.renderer.info.reset();
+  host.renderer.render(host.scene, host.camera);
+  const mainOnly = { calls: host.renderer.info.render.calls, triangles: host.renderer.info.render.triangles };
+  host.renderer.shadowMap.enabled = sh;
   return {
     cam: host.camera.position.toArray().map((v) => +v.toFixed(1)),
     calls: info.render.calls, triangles: info.render.triangles, programs: info.programs?.length,
     geometries: info.memory.geometries, textures: info.memory.textures,
-    chunkEntries: host.chunks.entries.size, terrainMeshes: meshes, terrainTrianglesLoaded: tris,
+    chunkEntries: host.chunks.entries.size, terrainMeshes: meshes, terrainTrianglesLoaded: tris, visibleMeshes: visible, byPass, mainOnly,
     updateMs: t.map((x) => +x[0].toFixed(2)), renderMs: t.map((x) => +x[1].toFixed(1)),
     stats: host.stats ?? null,
+    culledSections: host.chunks.stats?.culledSections,
   };
 });
 console.log(JSON.stringify(r, null, 1));

@@ -1,7 +1,9 @@
 // Tanker trucks: routed over the land nav grid (roads preferred, around buildings, water and steep
-// ground) from the nearest reachable map edge into a free bay of a selling truck terminal, load, drive
-// out through the lane and on to the nearest edge. Spawn rate ∝ the terminal's sales utilisation.
-// Routes are cached per (terminal, bay) and recomputed when buildings or roads change.
+// ground) from the nearest reachable map edge into a free bay of a selling truck terminal, load, and
+// leave for the nearest edge. Drive-through when both lane ends are clear; when one end is blocked
+// the truck enters from the open end, backs out after loading, turns and drives off.
+// Spawn rate ∝ the terminal's sales utilisation. Routes are cached per (terminal, bay, lane end) and
+// recomputed when buildings or roads change.
 import * as THREE from 'three';
 import type { BuildingState } from '../../../core/types';
 import type { BuildingView } from '../BuildingView';
@@ -14,6 +16,8 @@ import { Vehicle, yawOf, type VehicleEnv } from './Vehicle';
 const VMAX = 9;
 const ACCEL = 3.2;
 const DECEL = 2.6;
+const REVERSE_SPEED = 2.2;
+const PIVOT_RATE = 0.9;
 const LOAD_TIME = 14;
 /** Lateral offset to the right of travel outside the terminal (two-way traffic). */
 const KEEP_RIGHT = 0.85;
@@ -21,24 +25,35 @@ const KEEP_RIGHT = 0.85;
 const HEADWAY = 9;
 const RETRY = 20;
 
+/** One lane end: its approach point and the path from it to the map edge. */
+interface LaneEnd {
+  p: Pt;
+  open: boolean;
+  pts: Pt[] | null;
+  ver: number;
+  pending: SearchHandle | null;
+  failedAt: number;
+}
+
 interface Lane {
   bay: number;
   pos: THREE.Vector3;
   dir: THREE.Vector3;
-  pin: Pt;
-  pout: Pt;
-  inPts: Pt[] | null;
-  outPts: Pt[] | null;
-  inVer: number;
-  outVer: number;
-  pending: SearchHandle[];
+  /** Lane ends behind (−dir) and ahead (+dir) of the bay. */
+  ends: [LaneEnd, LaneEnd];
+  openVer: number;
   route: Route | null;
   routeKey: string;
+  /** Exit route for back-out lanes (from the open end to the edge). */
+  exit: Route | null;
+  /** Which end trucks use when only one is open (0 = behind, 1 = ahead), −1 = drive-through. */
+  single: number;
   sBay: number;
   sIn: number;
   sOut: number;
-  failedAt: number;
 }
+
+type TruckState = 'in' | 'load' | 'out' | 'reverse' | 'turn' | 'leave';
 
 interface Truck {
   v: Vehicle;
@@ -46,10 +61,14 @@ interface Truck {
   route: Route;
   s: number;
   speed: number;
-  state: 'in' | 'load' | 'out';
+  state: TruckState;
   timer: number;
+  x: number;
+  z: number;
   y: number;
   yaw: number;
+  /** Lateral keep-right offset applied (smoothed). */
+  off: number;
 }
 
 interface Terminal {
@@ -60,6 +79,16 @@ interface Terminal {
 }
 
 const _smp: RouteSample = { x: 0, z: 0, dx: 1, dz: 0 };
+const RING = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+];
 
 export class TruckTraffic {
   private readonly terminals = new Map<string, Terminal>();
@@ -105,7 +134,7 @@ export class TruckTraffic {
 
   private drop(id: string, t: Terminal): void {
     for (const tr of t.trucks) tr.v.dispose();
-    for (const l of t.lanes) for (const h of l.pending) h.cancel();
+    for (const l of t.lanes) for (const e of l.ends) e.pending?.cancel();
     this.terminals.delete(id);
   }
 
@@ -119,70 +148,64 @@ export class TruckTraffic {
       const pos = a.pos.clone();
       const dir = new THREE.Vector3(d.pos.x - pos.x, 0, d.pos.z - pos.z).normalize();
       const half = Math.abs(dir.x) * (b.size[0] / 2) + Math.abs(dir.z) * (b.size[1] / 2);
-      const e = half + 4.5;
-      out.push({
-        bay: a.def.data.i,
-        pos,
-        dir,
-        pin: [pos.x - dir.x * e, pos.z - dir.z * e],
-        pout: [pos.x + dir.x * e, pos.z + dir.z * e],
-        inPts: null,
-        outPts: null,
-        inVer: -1,
-        outVer: -1,
-        pending: [],
-        route: null,
-        routeKey: '',
-        sBay: 0,
-        sIn: 0,
-        sOut: 0,
-        failedAt: -Infinity,
-      });
+      const e = half + 3.5;
+      const end = (sg: number): LaneEnd => ({ p: [pos.x + dir.x * e * sg, pos.z + dir.z * e * sg], open: false, pts: null, ver: -1, pending: null, failedAt: -Infinity });
+      out.push({ bay: a.def.data.i, pos, dir, ends: [end(-1), end(1)], openVer: -1, route: null, routeKey: '', exit: null, single: -1, sBay: 0, sIn: 0, sOut: 0 });
     }
     return out;
   }
 
-  /** Request (re)computation of a lane's approach/departure paths when stale. */
+  /** Re-evaluate which lane ends are usable and request stale paths (async). */
   private prepare(l: Lane): void {
     const nav = this.env.nav.land();
-    if (l.pending.length) return;
-    const needIn = !l.inPts || l.inVer !== nav.version;
-    const needOut = !l.outPts || l.outVer !== nav.version;
-    if (!needIn && !needOut) return;
-    if (this.clock - l.failedAt < RETRY && l.inVer === nav.version && l.outVer === nav.version) return;
-    const done = (which: 'in' | 'out') => (r: SearchResult | null) => {
-      l.pending = l.pending.filter((h) => h !== handle[which]);
-      if (which === 'in') {
-        l.inPts = r?.points ?? null;
-        l.inVer = r?.version ?? nav.version;
-      } else {
-        l.outPts = r?.points ?? null;
-        l.outVer = r?.version ?? nav.version;
+    if (l.openVer !== nav.version) {
+      l.openVer = nav.version;
+      // usable when the end cell is clear and there is room to turn away from the lane
+      for (const e of l.ends) {
+        const c = nav.cellOf(e.p[0], e.p[1]);
+        let room = 0;
+        for (const [ox, oz] of RING) if (nav.passable(nav.cellOf(e.p[0] + ox * nav.cell, e.p[1] + oz * nav.cell))) room++;
+        e.open = nav.passable(c) && room >= 3;
       }
-      if (!r) l.failedAt = this.clock;
-      l.route = null;
-    };
-    const handle: Partial<Record<'in' | 'out', SearchHandle>> = {};
-    if (needIn) l.pending.push((handle.in = nav.search(l.pin[0], l.pin[1], done('in'))));
-    if (needOut) l.pending.push((handle.out = nav.search(l.pout[0], l.pout[1], done('out'))));
+    }
+    for (const e of l.ends) {
+      if (!e.open || e.pending) continue;
+      if (e.pts && e.ver === nav.version) continue;
+      if (e.ver === nav.version && this.clock - e.failedAt < RETRY) continue;
+      e.pending = nav.search(e.p[0], e.p[1], (r: SearchResult | null) => {
+        e.pending = null;
+        e.pts = r?.points ?? null;
+        e.ver = r?.version ?? nav.version;
+        if (!r) e.failedAt = this.clock;
+        l.route = null;
+      });
+    }
   }
 
-  /** Full smoothed route edge → lane → edge (null while unavailable). */
+  /** Smoothed arrival route for a lane (null while unavailable). */
   private route(l: Lane): Route | null {
-    if (!l.inPts || !l.outPts || l.pending.length) return null;
-    const key = `${l.inVer}:${l.outVer}`;
+    const [a, b] = l.ends;
+    const ready = (e: LaneEnd) => e.open && !!e.pts && !e.pending;
+    const through = ready(a) && ready(b);
+    const single = through ? -1 : ready(a) ? 0 : ready(b) ? 1 : -2;
+    if (single === -2) return null;
+    const key = `${single}:${a.ver}:${b.ver}`;
     if (l.route && l.routeKey === key) return l.route;
     const { pos, dir } = l;
-    const half = Math.hypot(l.pin[0] - pos.x, l.pin[1] - pos.z) - 3;
-    const pts: Pt[] = [...l.inPts].reverse();
-    pts.push([pos.x - dir.x * half, pos.z - dir.z * half], [pos.x, pos.z], [pos.x + dir.x * half, pos.z + dir.z * half]);
-    pts.push(...l.outPts);
+    const inner = Math.hypot(a.p[0] - pos.x, a.p[1] - pos.z) - 2.5;
+    const entry = single === 1 ? b : a;
+    const sg = single === 1 ? 1 : -1;
+    const pts: Pt[] = [...entry.pts!].reverse();
+    pts.push([pos.x + dir.x * inner * sg, pos.z + dir.z * inner * sg], [pos.x, pos.z]);
+    if (single === -1) pts.push([pos.x + dir.x * inner, pos.z + dir.z * inner], ...b.pts!);
     const r = new Route(pts, 1);
     l.route = r;
     l.routeKey = key;
+    l.single = single;
+    l.exit = single >= 0 ? new Route(entry.pts!, 1) : null;
     l.sBay = nearestS(r, pos.x, pos.z);
-    l.sIn = nearestS(r, l.pin[0], l.pin[1]);
-    l.sOut = nearestS(r, l.pout[0], l.pout[1]);
+    l.sIn = nearestS(r, entry.p[0], entry.p[1]);
+    l.sOut = single === -1 ? nearestS(r, b.p[0], b.p[1]) : l.sBay;
     return r;
   }
 
@@ -192,75 +215,147 @@ export class TruckTraffic {
     const lane = free[Math.floor(Math.random() * free.length)];
     const route = this.route(lane);
     if (!route) return;
-    // terrain streamed in since the search (trees, edits) may have closed the path: recompute
+    // terrain streamed in since the search (trees, edits) may have closed a path: recompute
     const nav = this.env.nav.land();
-    if ((lane.inPts && !nav.validate(lane.inPts, 3)) || (lane.outPts && !nav.validate(lane.outPts, 3))) {
-      lane.inVer = lane.outVer = -1;
-      lane.failedAt = -Infinity;
-      return;
-    }
-    // don't spawn on top of a truck still leaving on the same stretch
-    for (const tr of t.trucks) if (tr.route === route && tr.s < HEADWAY) return;
+    for (const e of lane.ends)
+      if (e.pts && !nav.validate(e.pts, 3)) {
+        e.pts = null;
+        e.ver = -1;
+        lane.route = null;
+        return;
+      }
+    // don't spawn on top of a truck still on the first stretch
+    for (const tr of t.trucks) if (tr.route === route && tr.state === 'in' && tr.s < HEADWAY) return;
     const v = new Vehicle(this.env, truckTemplate(this.env.lib.company));
     route.sample(0, _smp);
-    const tr: Truck = { v, lane, route, s: 0, speed: VMAX * 0.7, state: 'in', timer: 0, y: this.env.terrain.smooth(_smp.x, _smp.z), yaw: yawOf(_smp.dx, _smp.dz) };
-    t.trucks.push(tr);
+    t.trucks.push({
+      v, lane, route, s: 0, speed: VMAX * 0.7, state: 'in', timer: 0, x: _smp.x, z: _smp.z,
+      y: this.env.terrain.smooth(_smp.x, _smp.z), yaw: yawOf(_smp.dx, _smp.dz), off: KEEP_RIGHT,
+    });
   }
 
-  /** Advance one truck; false when it has left the map. */
-  private step(t: Terminal, tr: Truck, dt: number, act: number): boolean {
+  /** Speed limit from the bend ahead and the truck in front on the same route. */
+  private limit(t: Terminal, tr: Truck): number {
     const r = tr.route;
-    const l = tr.lane;
-    // speed limit from the bend ahead and the truck in front
     const bend = r.turn(tr.s, 7);
     let vmax = VMAX * (1 - Math.min(0.65, bend * 0.9));
-    if (tr.s > l.sIn - 3 && tr.s < l.sOut + 3) vmax = Math.min(vmax, 4.5);
+    const l = tr.lane;
+    if (r === l.route && tr.s > l.sIn - 3 && tr.s < l.sOut + 3) vmax = Math.min(vmax, 4.5);
     for (const o of t.trucks) {
       if (o === tr || o.route !== r || o.s <= tr.s) continue;
       const gap = o.s - tr.s - HEADWAY;
       vmax = Math.min(vmax, Math.max(0, Math.sqrt(2 * DECEL * Math.max(0, gap))));
     }
-    if (tr.state === 'in') {
-      const remain = l.sBay - tr.s;
-      const target = Math.min(vmax, Math.sqrt(2 * DECEL * Math.max(0, remain)) + 0.2);
-      tr.speed = tr.speed < target ? Math.min(target, tr.speed + ACCEL * dt) : target;
-      tr.s = Math.min(l.sBay, tr.s + tr.speed * dt);
-      if (tr.s >= l.sBay - 0.01) {
-        tr.state = 'load';
-        tr.timer = LOAD_TIME * (1.2 - act * 0.4);
-        tr.speed = 0;
+    return vmax;
+  }
+
+  /** Advance one truck; false when it has left the map. */
+  private step(t: Terminal, tr: Truck, dt: number, act: number): boolean {
+    const l = tr.lane;
+    switch (tr.state) {
+      case 'in': {
+        const vmax = this.limit(t, tr);
+        const remain = l.sBay - tr.s;
+        const target = Math.min(vmax, Math.sqrt(2 * DECEL * Math.max(0, remain)) + 0.2);
+        tr.speed = tr.speed < target ? Math.min(target, tr.speed + ACCEL * dt) : target;
+        tr.s = Math.min(l.sBay, tr.s + tr.speed * dt);
+        if (tr.s >= l.sBay - 0.01) {
+          tr.state = 'load';
+          tr.timer = LOAD_TIME * (1.2 - act * 0.4);
+          tr.speed = 0;
+        }
+        this.follow(tr, dt, true);
+        break;
       }
-    } else if (tr.state === 'load') {
-      tr.timer -= dt;
-      if (tr.timer <= 0) tr.state = 'out';
-    } else {
-      tr.speed = tr.speed < vmax ? Math.min(vmax, tr.speed + ACCEL * dt) : Math.max(vmax, tr.speed - DECEL * 2 * dt);
-      tr.s += tr.speed * dt;
-      if (tr.s >= r.length) return false;
+      case 'load':
+        tr.timer -= dt;
+        if (tr.timer <= 0) {
+          if (tr.route === l.route && l.single === -1) tr.state = 'out';
+          else if (l.exit) {
+            // back out along the lane to the open end
+            l.exit.sample(0, _smp);
+            tr.state = 'reverse';
+            tr.route = new Route([[tr.x, tr.z], [_smp.x, _smp.z]], 1);
+            tr.s = 0;
+          } else return false;
+        }
+        break;
+      case 'out': {
+        const vmax = this.limit(t, tr);
+        tr.speed = tr.speed < vmax ? Math.min(vmax, tr.speed + ACCEL * dt) : Math.max(vmax, tr.speed - DECEL * 2 * dt);
+        tr.s += tr.speed * dt;
+        if (tr.s >= tr.route.length) return false;
+        this.follow(tr, dt, true);
+        break;
+      }
+      case 'reverse': {
+        const remain = tr.route.length - tr.s;
+        tr.speed = Math.min(REVERSE_SPEED, Math.sqrt(2 * DECEL * Math.max(0, remain)) + 0.15);
+        tr.s = Math.min(tr.route.length, tr.s + tr.speed * dt);
+        this.follow(tr, dt, false);
+        if (tr.s >= tr.route.length - 0.01) {
+          tr.state = 'turn';
+          tr.route = l.exit!;
+          tr.s = 0;
+          tr.speed = 0;
+        }
+        break;
+      }
+      case 'turn': {
+        tr.route.sample(2, _smp);
+        const want = yawOf(_smp.dx, _smp.dz);
+        const d = Math.atan2(Math.sin(want - tr.yaw), Math.cos(want - tr.yaw));
+        tr.yaw += Math.sign(d) * Math.min(Math.abs(d), PIVOT_RATE * dt);
+        if (Math.abs(d) < 0.03) tr.state = 'leave';
+        this.follow(tr, dt, true, true);
+        break;
+      }
+      case 'leave': {
+        const vmax = this.limit(t, tr);
+        tr.speed = Math.min(vmax, tr.speed + ACCEL * dt);
+        tr.s += tr.speed * dt;
+        if (tr.s >= tr.route.length) return false;
+        this.follow(tr, dt, true);
+        break;
+      }
     }
-    r.sample(tr.s, _smp);
-    // keep right outside the loading lanes
-    const off = KEEP_RIGHT * Math.max(smoothstep(l.sIn - tr.s, 0, 8), smoothstep(tr.s - l.sOut, 0, 8));
-    const x = _smp.x - _smp.dz * off;
-    const z = _smp.z + _smp.dx * off;
+    this.pose(tr, dt);
+    return true;
+  }
+
+  /** Position along the current route (+ keep-right offset outside the terminal); heading follows the tangent. */
+  private follow(tr: Truck, dt: number, forward: boolean, holdYaw = false): void {
+    const l = tr.lane;
+    tr.route.sample(tr.s, _smp);
+    let want = 0;
+    if (tr.route === l.route) {
+      want = KEEP_RIGHT * Math.max(smoothstep(l.sIn - tr.s, 0, 8), l.single === -1 ? smoothstep(tr.s - l.sOut, 0, 8) : 0);
+    } else if (tr.route === l.exit) want = KEEP_RIGHT * smoothstep(tr.s, 0, 8);
+    tr.off += (want - tr.off) * Math.min(1, dt * 3);
+    tr.x = _smp.x - _smp.dz * tr.off;
+    tr.z = _smp.z + _smp.dx * tr.off;
+    if (holdYaw) return;
+    const wantYaw = forward ? yawOf(_smp.dx, _smp.dz) : yawOf(-_smp.dx, -_smp.dz);
+    tr.yaw += Math.atan2(Math.sin(wantYaw - tr.yaw), Math.cos(wantYaw - tr.yaw)) * Math.min(1, dt * 6);
+  }
+
+  private pose(tr: Truck, dt: number): void {
     const terrain = this.env.terrain;
-    const fx = _smp.dx * 2.2;
-    const fz = _smp.dz * 2.2;
-    const gf = terrain.smooth(x + fx, z + fz);
-    const gb = terrain.smooth(x - fx, z - fz);
-    const gc = terrain.smooth(x, z);
+    const fx = Math.cos(tr.yaw) * 2.2;
+    const fz = -Math.sin(tr.yaw) * 2.2;
+    const gf = terrain.smooth(tr.x + fx, tr.z + fz);
+    const gb = terrain.smooth(tr.x - fx, tr.z - fz);
+    const gc = terrain.smooth(tr.x, tr.z);
     // never sink into a bump: ride on the highest of the axle/centre samples
     const gy = Math.max(gc, (gf + gb) / 2, Math.min(gf, gb) + 0.35);
     tr.y += (gy - tr.y) * Math.min(1, dt * 8);
     if (tr.y < gy - 0.4) tr.y = gy - 0.4;
     const pitch = Math.atan2(gf - gb, 4.4) * 0.85;
-    const want = yawOf(_smp.dx, _smp.dz);
-    tr.yaw += Math.atan2(Math.sin(want - tr.yaw), Math.cos(want - tr.yaw)) * Math.min(1, dt * 6);
-    tr.v.place(x, tr.y, z, tr.yaw, pitch);
+    tr.v.place(tr.x, tr.y, tr.z, tr.yaw, pitch);
     const d = tr.v.distanceTo(this.env.camera.position);
     tr.v.obj.visible = d < 220;
-    tr.v.emit(dt, tr.state === 'load' ? 0.4 : 0.6 + (tr.speed < vmax - 0.5 ? 0.8 : 0));
-    return true;
+    const moving = tr.state !== 'load' && tr.state !== 'turn';
+    tr.v.emit(dt, moving ? 0.6 + (tr.speed < VMAX - 0.5 ? 0.8 : 0) : 0.4);
   }
 
   dispose(): void {

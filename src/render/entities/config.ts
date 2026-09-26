@@ -7,6 +7,12 @@ export const ANIM_DISTANCE = 150;
 /** Detail meshes (railings, valves, flags) are hidden beyond base + radius * factor. */
 export const DETAIL_DISTANCE = 55;
 export const DETAIL_RADIUS_FACTOR = 2.2;
+/**
+ * Shared instanced rendering of buildings: beyond `near` blocks (camera → footprint edge) buildings are
+ * drawn through per-(template, look, cell) InstancedMeshes instead of their own meshes. Mutable so dev
+ * harnesses can compare draw calls with it switched off.
+ */
+export const INSTANCING = { enabled: true, near: 55, hysteresis: 6 };
 /** FX emitters of buildings only run within this distance. */
 export const FX_DISTANCE = 220;
 

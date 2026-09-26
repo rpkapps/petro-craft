@@ -1,6 +1,7 @@
-// Post-processing chain: scene → (GTAO) → bloom → colour grade (vignette, grain, underwater, x-ray,
-// lightning) → tone mapping + sRGB → FXAA. When bloom and SSAO are both off the renderer bypasses the
-// composer entirely (direct render fast path).
+// Post-processing chain: scene → (GTAO) → (bloom) → colour grade (vignette, grain, underwater, x-ray,
+// lightning) → tone mapping + sRGB → (FXAA). When bloom, SSAO and antialiasing are all off the renderer
+// bypasses the composer entirely (direct render fast path). Bloom runs at a configurable fraction of
+// the drawing-buffer resolution (auto quality lowers it).
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -79,6 +80,9 @@ const GradeShader = {
 export interface PostSettings {
   bloom: boolean;
   ssao: boolean;
+  antialias: boolean;
+  /** Bloom input resolution as a fraction of the drawing buffer (its mip chain starts at half of that). */
+  bloomScale: number;
 }
 
 export class PostFX {
@@ -92,7 +96,7 @@ export class PostFX {
   private width = 1;
   private height = 1;
   private pixelRatio = 1;
-  private cfg: PostSettings = { bloom: true, ssao: false };
+  private cfg: PostSettings = { bloom: true, ssao: false, antialias: true, bloomScale: 0.5 };
   private depthTexture: THREE.DepthTexture;
 
   constructor(private renderer: THREE.WebGLRenderer, private scene: THREE.Scene, private camera: THREE.PerspectiveCamera) {
@@ -114,12 +118,22 @@ export class PostFX {
 
   /** Whether any composer pass is required (otherwise render directly). */
   static wanted(s: PostSettings) {
-    return s.bloom || s.ssao;
+    return s.bloom || s.ssao || s.antialias;
   }
 
   configure(s: PostSettings) {
-    if (s.bloom === this.cfg.bloom && s.ssao === this.cfg.ssao) return;
-    this.cfg = { ...s };
+    const c = this.cfg;
+    if (s.bloom === c.bloom && s.ssao === c.ssao && s.antialias === c.antialias) {
+      if (s.bloomScale !== c.bloomScale) {
+        c.bloomScale = s.bloomScale;
+        this.setSize(this.width, this.height, this.pixelRatio);
+      }
+      return;
+    }
+    c.bloom = s.bloom;
+    c.ssao = s.ssao;
+    c.antialias = s.antialias;
+    c.bloomScale = s.bloomScale;
     this.rebuild();
   }
 
@@ -138,7 +152,7 @@ export class PostFX {
     if (this.cfg.bloom) c.addPass(this.bloom);
     c.addPass(this.grade);
     c.addPass(this.output);
-    c.addPass(this.fxaa);
+    if (this.cfg.antialias) c.addPass(this.fxaa);
     this.setSize(this.width, this.height, this.pixelRatio);
   }
 
@@ -151,7 +165,8 @@ export class PostFX {
     const pw = Math.max(1, Math.floor(w * pixelRatio));
     const ph = Math.max(1, Math.floor(h * pixelRatio));
     this.fxaa.setSize(pw, ph);
-    this.bloom.setSize(Math.floor(pw / 2), Math.floor(ph / 2));
+    const bs = Math.min(1, Math.max(0.125, this.cfg.bloomScale));
+    this.bloom.setSize(Math.max(1, Math.floor(pw * bs)), Math.max(1, Math.floor(ph * bs)));
     this.gtao?.setSize(pw, ph);
     this.uniforms.uResolution.value.set(pw, ph);
   }

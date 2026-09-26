@@ -22,6 +22,17 @@ interface Blast {
 }
 
 const FIRE_TINT = rgb(0xffb070);
+/** Types whose flares follow the facilities-published `data.flareRate` (mcf/d) instead of activity. */
+const RATE_FLARES = new Set(['wellhead', 'production_platform', 'fpso']);
+
+/** Flare intensity 0..1 for a flared rate (mcf/d), with `full` the rate that gives a roaring flame. */
+function rateAct(rate: number, full: number): number {
+  return rate > 0 ? Math.min(1, 0.22 + 0.78 * Math.sqrt(rate / full)) : 0;
+}
+
+function num(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
@@ -329,14 +340,26 @@ export class FxManager {
         continue;
       }
       if (!v.visible && v.distance > 40) continue;
-      if (k === 'flare') {
-        const f = v.status === 'active' || v.status === 'idle' ? Math.max(act, a.def.data.pilot ?? 0.12) : 0;
-        if (f <= 0) continue;
+      if (k === 'flare' || k === 'wellFlare') {
+        const operational = v.status === 'active' || v.status === 'idle';
+        if (!operational) continue;
         const p = v.anchorPos(a, _v);
-        const sc = a.def.data.scale ?? 1;
+        const small = k === 'wellFlare';
+        let f: number;
+        if (small) f = rateAct(num(b.data?.flareRate), 4000);
+        else if (RATE_FLARES.has(v.type)) f = Math.max(a.def.data.pilot ?? 0.12, rateAct(num(b.data?.flareRate), 30000));
+        else f = Math.max(act, a.def.data.pilot ?? 0.12);
+        const vent = num(b.data?.ventRate);
+        if (vent > 0) {
+          // cold vent: a shimmering grey-white plume (worse for the environment than flaring)
+          const vr = Math.min(1, 0.25 + Math.sqrt(vent / (small ? 3000 : 20000)));
+          gasJet(ps, p.x, p.y, p.z, 0, 1, 0, small ? 3.2 : 5, (small ? 14 : 30) * vr, dt, this.q, COL.GAS_DIRTY);
+        }
+        if (f <= 0) continue;
+        const sc = small ? 0.42 : (a.def.data.scale ?? 1);
         flare(ps, p.x, p.y, p.z, f, dt, this.q, sc);
         const fl = 0.8 + 0.2 * Math.sin(this.time * 21 + p.x) * Math.sin(this.time * 12.7);
-        this.lights.offer(p.x, p.y + 1.5 * sc, p.z, 0xff8a3a, (40 + 260 * f) * sc * fl, 22 + 30 * f * sc, this.cam, 3);
+        this.lights.offer(p.x, p.y + 1.5 * sc, p.z, 0xff8a3a, (40 + 260 * f) * sc * fl, 22 + 30 * f * sc, this.cam, small ? 1.5 : 3);
       } else if (act > 0.02) {
         const p = v.anchorPos(a, _v);
         const r = a.def.data.r ?? 0.4;

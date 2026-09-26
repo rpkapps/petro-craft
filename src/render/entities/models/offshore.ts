@@ -19,6 +19,11 @@ function seabedVariant(bs: BuildingState, ctx: GameContext): string {
 }
 const depthOf = (v: string, def = 12) => Math.max(2, Number(v.slice(1)) || def);
 
+/** Deck walkway polyline for NPC workers ('walk' anchors, in order; `loop` closes it). */
+function walkway(b: Builder, line: number, y: number, pts: [number, number][], loop: boolean): void {
+  pts.forEach(([x, z], i) => b.anchor('walk', x, y, z, { line, i, loop: loop && i === 0 ? 1 : 0 }));
+}
+
 /** Octagonal helideck at (x, y, z) with radius r (+ anchor for helicopters). */
 function helideck(b: Builder, x: number, y: number, z: number, r: number): void {
   b.cyl(x, y - 0.25, z, r, 0.25, C.GUNMETAL, 'metal', 8);
@@ -139,6 +144,7 @@ const jackup_rig: ModelDef = {
     lifeboat(b, -1.0, deckY + 0.6, -3.5);
     railRect(b, -4.3, -3.8, 2.3, 3.8, deckY, C.HAZARD);
     b.anchor('light', 0, deckY + 2, 0, { intensity: 1.2, range: 16 });
+    walkway(b, 0, deckY, [[-1.75, -2.05], [1.95, -2.05], [1.95, 1.75], [-1.75, 1.75]], true);
   },
   animate(a) {
     animateRig(a, RIG_FLOOR.jackup_rig, RIG_TRAVEL.jackup_rig, 21.4);
@@ -211,6 +217,7 @@ const semi_sub_rig: ModelDef = {
     lifeboat(b, -1.5, deckY + 0.5, -5.6);
     railRect(b, -5.3, -5.3, 5.3, 5.3, deckY, C.HAZARD);
     b.anchor('light', 0, deckY + 2, 0, { intensity: 1.4, range: 18 });
+    walkway(b, 0, deckY, [[-2.0, -2.1], [4.9, -2.1], [4.9, 2.2], [-2.0, 2.2]], true);
   },
   animate(a) {
     animateRig(a, RIG_FLOOR.semi_sub_rig, RIG_TRAVEL.semi_sub_rig, 23.4);
@@ -307,6 +314,8 @@ const production_platform: ModelDef = {
     b.slab(4.2, -0.05, -1.2, 5.6, 0.25, 1.2, C.GUNMETAL, 'metal'); // boat landing
     b.anchor('light', 0, main + 1.5, 0, { intensity: 1.4, range: 18 });
     b.anchor('light', -2, cellar + 1.5, -2, { intensity: 1, range: 12 });
+    walkway(b, 0, main, [[-4.2, -1.1], [4.3, -1.1], [4.3, 1.3], [-4.2, 1.3]], true);
+    walkway(b, 1, cellar, [[-3.2, -3.6], [3.0, -3.6], [3.0, 1.2], [-3.2, 1.2]], true);
   },
   animate(a) {
     slewCranes(a, ['crane0']);
@@ -383,6 +392,8 @@ const fpso: ModelDef = {
     b.anchor('berthDir', 0, 0, -33, {});
     b.anchor('light', 0, deck + 3, 0, { intensity: 1.4, range: 18 });
     b.anchor('light', 0, deck + 3, -7, { intensity: 1, range: 14 });
+    walkway(b, 0, deck, [[-2.3, -6.4], [-2.3, 6.2]], false);
+    walkway(b, 1, deck, [[2.3, -6.4], [2.3, 6.2]], false);
   },
   animate(a) {
     slewCranes(a, ['crane0', 'crane1']);

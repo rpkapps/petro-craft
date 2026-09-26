@@ -2,8 +2,9 @@
 // level of detail and per-frame animation.
 import * as THREE from 'three';
 import type { BuildingState, GameContext, WellState } from '../../core/types';
-import { ANIM_DISTANCE, DETAIL_DISTANCE, DETAIL_RADIUS_FACTOR } from './config';
+import { ANIM_DISTANCE, DETAIL_DISTANCE, DETAIL_RADIUS_FACTOR, INSTANCING } from './config';
 import type { AnchorDef } from './geom/Builder';
+import type { InstanceBatcher, InstanceMember } from './instancing/InstanceBatcher';
 import type { MaterialLib, MatKind, MatMode } from './materials';
 import { instantiate, type ModelObject } from './models/instantiate';
 import { defSize, getModelDef, getTemplate } from './models/registry';
@@ -24,6 +25,8 @@ export interface ViewEnv {
   shadows: boolean;
   /** Well linked to a building (rig → current well, wellhead → its well). */
   wellFor(b: BuildingState): WellState | undefined;
+  /** Shared instanced renderer for distant buildings (null = always draw individually). */
+  batcher: InstanceBatcher | null;
 }
 
 const _sphere = new THREE.Sphere();
@@ -48,8 +51,10 @@ export function statusMode(status: string): MatMode {
 /** Yaw applied for a building rotation step (clockwise seen from above). */
 export const rotationYaw = (r: number) => (-r * Math.PI) / 2;
 
-export class BuildingView {
+export class BuildingView implements InstanceMember {
   readonly group = new THREE.Group();
+  /** Instanced-batch membership (managed by the InstanceBatcher). */
+  inst: InstanceMember['inst'] = null;
   readonly def: ModelDef;
   model!: ModelObject;
   variant = '';
@@ -73,7 +78,7 @@ export class BuildingView {
   private readonly anim: AnimState;
   readonly size: [number, number, number];
 
-  constructor(readonly id: string, readonly type: string, private readonly env: ViewEnv, parent: THREE.Object3D) {
+  constructor(readonly id: string, readonly type: string, private readonly env: ViewEnv, private readonly parent: THREE.Object3D) {
     this.def = getModelDef(type);
     this.size = defSize(type);
     this.group.name = `building:${id}`;
@@ -101,7 +106,19 @@ export class BuildingView {
     if (this.site) this.site.setProgress(b.constructionProgress);
   }
 
+  /** Whether this building is currently drawn through the shared instanced batches. */
+  get instanced(): boolean {
+    return this.inst !== null;
+  }
+
+  private uninstance(): void {
+    if (!this.inst) return;
+    this.env.batcher?.remove(this);
+    if (this.group.parent !== this.parent) this.parent.add(this.group);
+  }
+
   private rebuild(b: BuildingState, variant: string): void {
+    this.uninstance();
     this.clearStatusLooks();
     if (this.model) this.model.root.removeFromParent();
     this.variant = variant;
@@ -115,6 +132,7 @@ export class BuildingView {
   }
 
   private place(b: BuildingState, key: string): void {
+    this.uninstance();
     this.placeKey = key;
     this.group.position.set(b.x + b.size[0] / 2, b.y, b.z + b.size[1] / 2);
     this.group.rotation.set(0, rotationYaw(b.rotation), 0);
@@ -155,6 +173,7 @@ export class BuildingView {
     if (status === this.status) return;
     this.clearStatusLooks();
     this.status = status;
+    if (status === 'constructing' || status === 'destroyed') this.uninstance();
     const [w, d, h] = this.size;
     if (status === 'constructing') {
       this.site = new ConstructionSite(this.env.lib, this.model, w, d, h, b.y);
@@ -179,6 +198,7 @@ export class BuildingView {
     if (mode === this.mode) return;
     this.mode = mode;
     for (const m of this.model.meshes) m.material = this.env.lib.get(m.userData.kind as MatKind, mode);
+    if (this.inst) this.env.batcher?.add(this, mode);
   }
 
   /** Whether lights/emissive FX should run (not off, not ruined, not under construction). */
@@ -210,7 +230,18 @@ export class BuildingView {
     this.distance = cam.position.distanceTo(this.center);
     // beyond the fog nothing is visible: skip rendering entirely
     const inRange = this.distance - this.radius < cullDistance;
-    if (inRange !== this.group.visible) this.group.visible = inRange;
+    // distant buildings in a plain look are drawn through the shared instanced batches
+    const batcher = this.env.batcher;
+    if (batcher) {
+      const edge = this.distance - this.radius;
+      const far = edge > INSTANCING.near + (this.inst ? -INSTANCING.hysteresis : INSTANCING.hysteresis);
+      const want = INSTANCING.enabled && far && inRange && this.mode !== null && !this.site && !this.ruin;
+      if (want && !this.inst) {
+        batcher.add(this, this.mode!);
+        if (this.inst) this.group.removeFromParent();
+      } else if (!want && this.inst) this.uninstance();
+    }
+    if (!this.inst && inRange !== this.group.visible) this.group.visible = inRange;
     _sphere.center.copy(this.center);
     _sphere.radius = this.radius;
     this.visible = inRange && frustum.intersectsSphere(_sphere);
@@ -233,15 +264,18 @@ export class BuildingView {
     a.b = b;
     a.well = this.env.wellFor(b);
     this.def.animate(a);
+    if (this.inst) this.env.batcher?.animated(this);
   }
 
   setHidden(h: boolean): void {
     if (h === this.hidden) return;
     this.hidden = h;
+    if (h) this.uninstance();
     this.group.visible = !h;
   }
 
   dispose(): void {
+    this.env.batcher?.remove(this);
     this.clearStatusLooks();
     this.group.removeFromParent();
   }

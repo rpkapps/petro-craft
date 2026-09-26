@@ -77,6 +77,15 @@ export class Terrain {
     return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz;
   }
 
+  /** Solid block at a point (false for unloaded chunks / out of bounds; never generates chunks). */
+  solidAt(x: number, y: number, z: number): boolean {
+    const ix = Math.floor(x);
+    const iz = Math.floor(z);
+    const w = this.ctx.world;
+    if (ix < 0 || iz < 0 || ix >= w.sizeX || iz >= w.sizeZ || !this.generated(ix, iz)) return false;
+    return IS_SOLID[w.getBlock(ix, Math.floor(y), iz)] === 1;
+  }
+
   /** Ground or water surface (whichever is higher) — for things that float. */
   surface(x: number, z: number): number {
     return this.isWater(x, z) ? SEA_LEVEL + 1 : this.ground(x, z);

@@ -12,7 +12,15 @@ ${COMMON_UNIFORMS_GLSL}
 ${NOISE_GLSL}
 ${FOG_GLSL}
 ${TERRAIN_LIGHTING_GLSL}
+#ifdef PLANTS
+uniform vec2 uPlantFade;
+#endif
 void main() {
+  #ifdef PLANTS
+  // distance LOD: plants dissolve (stable per-texel pattern) between uPlantFade.x and .y blocks
+  float plantKeep = 1.0 - smoothstep(uPlantFade.x, uPlantFade.y, length(vWorldPos.xz - cameraPosition.xz));
+  if (hash13(vec3(floor(vUv * 6.0), floor(vWorldPos.x) * 7.0 + floor(vWorldPos.z) * 13.0)) >= plantKeep) discard;
+  #endif
   float layer = floor(vLayer + 0.5);
   vec4 props = texelFetch(uLayerProps, ivec2(int(layer), 0), 0);
   float kind = floor(props.b * 255.0 + 0.5);
@@ -245,6 +253,10 @@ void main() {
 export interface TerrainMaterialSet {
   opaque: THREE.ShaderMaterial;
   cutout: THREE.ShaderMaterial;
+  /** Cut-out variant for swaying cross plants with a distance dissolve. */
+  plants: THREE.ShaderMaterial;
+  /** (fade start, fade end) distance of plants in blocks. */
+  plantFade: { value: THREE.Vector2 };
   cutoutDepth: THREE.ShaderMaterial;
   translucent: THREE.ShaderMaterial;
   ghost: THREE.ShaderMaterial;
@@ -272,6 +284,17 @@ export function createTerrainMaterials(u: SharedUniforms): TerrainMaterialSet {
     vertexShader: TERRAIN_VERTEX_GLSL,
     fragmentShader: SOLID_FRAGMENT,
     defines: { CUTOUT: 1 },
+    lights: true,
+    side: THREE.DoubleSide,
+  });
+
+  const plantFade = { value: new THREE.Vector2(56, 80) };
+  const plants = new THREE.ShaderMaterial({
+    name: 'terrain-plants',
+    uniforms: withShared({ uPlantFade: plantFade }),
+    vertexShader: TERRAIN_VERTEX_GLSL,
+    fragmentShader: SOLID_FRAGMENT,
+    defines: { CUTOUT: 1, PLANTS: 1 },
     lights: true,
     side: THREE.DoubleSide,
   });
@@ -326,6 +349,8 @@ export function createTerrainMaterials(u: SharedUniforms): TerrainMaterialSet {
   return {
     opaque,
     cutout,
+    plants,
+    plantFade,
     cutoutDepth,
     translucent,
     ghost,
@@ -333,6 +358,7 @@ export function createTerrainMaterials(u: SharedUniforms): TerrainMaterialSet {
     dispose() {
       opaque.dispose();
       cutout.dispose();
+      plants.dispose();
       cutoutDepth.dispose();
       translucent.dispose();
       ghost.dispose();
