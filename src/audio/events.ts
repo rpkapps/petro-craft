@@ -2,7 +2,7 @@
 import type { EventBus } from '../core/EventBus';
 import type { GameContext, Vec3 } from '../core/types';
 import { clamp } from './dsp';
-import { breakSound, footstepSound, hitSound, materialOf, placeSound } from './materials';
+import { breakSound, footstepSound, hitSound, placeSound } from './materials';
 import type { PlayOptions } from './voices';
 
 /** What the event layer needs from the engine. */
@@ -296,5 +296,3 @@ export function wireEvents(bus: EventBus, a: SoundActions): () => void {
   };
 }
 
-/** Material helper re-exported for other modules that want consistent naming. */
-export { materialOf };

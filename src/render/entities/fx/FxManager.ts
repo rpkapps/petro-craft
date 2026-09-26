@@ -36,7 +36,7 @@ export class FxManager {
   private readonly waves = new Shockwaves();
   private readonly blasts: Blast[] = [];
   private readonly offs: (() => void)[] = [];
-  private foamUntil = 0;
+  private foamUntil = -1;
   private readonly foamTarget = new THREE.Vector3();
   readonly wind = new THREE.Vector3();
   /** Emission multiplier from settings.particles. */

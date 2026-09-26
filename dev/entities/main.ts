@@ -211,8 +211,8 @@ if (fb) {
   host.camera.position.set(60, 110, 150);
   controls.target.set(80, 64, 80);
 } else {
-  host.camera.position.set(-30, 150, 250);
-  controls.target.set(120, 60, 80);
+  host.camera.position.set(70, 120, 175);
+  controls.target.set(120, 62, 60);
 }
 const cam = v3(P.get('cam'));
 const look = v3(P.get('look'));
@@ -235,7 +235,7 @@ let last = performance.now();
 let tAcc = 0;
 function frame(now: number): void {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.1, (now - last) / 1000);
+  const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
   last = now;
   tAcc += dt;
   if ((scene === 'anim' || scene === 'fx') && Math.floor(tAcc / 6) !== Math.floor((tAcc - dt) / 6)) ctx.bus.emit('hazard:explosion', { x: 78, y: LAND_Y, z: 62, power: 1.5 });

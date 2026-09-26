@@ -143,7 +143,7 @@ export class WorkforcePanel extends Panel {
           } }));
           return (x) => { w = x; };
         } },
-      ], (w) => w.id, { sortKey: 'role', sortDir: 1 });
+      ], (w) => w.id, { sortKey: 'name', sortDir: 1 });
       this.content.append(h('div.row', { style: 'margin-bottom:.6rem' }, seg.el), h('div.card.wf-table', { style: 'padding:0' }, this.staff.el));
     } else if (this.tab === 'hire') {
       const grid = h('div.wf-cands');

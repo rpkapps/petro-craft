@@ -141,8 +141,9 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
     }
   }
 
-  update(dt: number): void {
+  update(rawDt: number): void {
     if (this.disposed) return;
+    const dt = Math.max(0, Math.min(0.25, Number.isFinite(rawDt) ? rawDt : 0));
     const s = this.ctx.state;
     const paused = s.time.paused;
     const sdt = paused ? 0 : dt;
