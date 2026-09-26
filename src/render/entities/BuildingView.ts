@@ -122,7 +122,7 @@ export class BuildingView implements InstanceMember {
     this.clearStatusLooks();
     if (this.model) this.model.root.removeFromParent();
     this.variant = variant;
-    const t = getTemplate(this.type, variant, this.env.lib.company);
+    const t = getTemplate(this.type, variant, this.env.lib.company, this.env.lib.fine);
     this.model = instantiate(t, this.env.lib, this.env.shadows);
     this.group.add(this.model.root);
     this.mode = null;

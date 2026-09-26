@@ -209,7 +209,7 @@ export class ShipTraffic {
         bt.s = 0;
         bt.sEnd = bt.route.length;
         bt.speed = VMAX;
-        bt.v = new Vehicle(this.env, shipTemplate(this.env.lib.company));
+        bt.v = new Vehicle(this.env, shipTemplate(this.env.lib.company, this.env.lib.fine));
         bt.route.sample(0, _smp);
         bt.x = _smp.x;
         bt.z = _smp.z;

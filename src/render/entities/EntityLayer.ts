@@ -9,6 +9,7 @@ import { BuildingView, type ViewEnv } from './BuildingView';
 import { RECONCILE_INTERVAL } from './config';
 import { FxManager } from './fx/FxManager';
 import { InstanceBatcher } from './instancing/InstanceBatcher';
+import { EnvLighting } from './textures/EnvLighting';
 import { createGhost } from './ghost';
 import { MaterialLib } from './materials';
 import { RIG_BUSY } from './models/rigSpecs';
@@ -66,6 +67,8 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
   private readonly projScreen = new THREE.Matrix4();
   private time = 0;
   private simTime = 0;
+  private env3: EnvLighting | null = null;
+  private builtFine = false;
   private reconcileTimer = RECONCILE_INTERVAL;
   private disposed = false;
 
@@ -181,6 +184,7 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
       }
       this.dirty.clear();
     }
+    this.updateQuality(dt);
     this.lib.update(this.time, this.host.daylight);
 
     const cam = this.host.camera;
@@ -211,6 +215,28 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
     this.fx.update(dt, this.time, this.views);
   }
 
+  /** Follow settings.textureQuality: re-configure materials, env map for ultra, finer templates. */
+  private updateQuality(dt: number): void {
+    const lib = this.lib;
+    lib.setQuality(this.ctx.settings.textureQuality ?? 'classic');
+    if (lib.fine !== this.builtFine) {
+      // ultra adds template geometry (chamfers, bolt rings): rebuild the building views once
+      this.builtFine = lib.fine;
+      for (const v of this.views.values()) v.dispose();
+      this.views.clear();
+      this.reconcile();
+    }
+    if (lib.quality === 'ultra') {
+      this.env3 ??= new EnvLighting(this.host.renderer);
+      const w = this.ctx.state.weather;
+      if (this.env3.update(dt, this.host.daylight, this.host.sunDirection, w?.cloudCover ?? 0)) lib.setEnvMap(this.env3.texture);
+    } else if (this.env3) {
+      lib.setEnvMap(null);
+      this.env3.dispose();
+      this.env3 = null;
+    }
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -226,6 +252,8 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
     this.fx.dispose();
     this.root.removeFromParent();
     if (this.host.buildingPreview) this.host.buildingPreview = null;
+    this.env3?.dispose();
+    this.env3 = null;
     this.lib.dispose();
     clearTemplates();
     clearConstructionTemplates();

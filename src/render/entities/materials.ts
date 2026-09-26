@@ -4,6 +4,11 @@
 // per-instance clipping planes or tints).
 import * as THREE from 'three';
 import { C } from './palette';
+import { loadSurfaceTextures, type SurfaceTextureSet } from './textures/SurfaceTextures';
+import { createSurfaceUniforms, solidPatch, type SurfaceQuality, type SurfaceUniforms } from './textures/surfaceShader';
+
+/** Texture resolution per quality (px per surface tile). */
+const TEX_SIZE: Record<Exclude<SurfaceQuality, 'classic'>, number> = { high: 128, ultra: 512 };
 
 export type MatKind =
   | 'solid' // merged bucket: paint/metal/rough/glassDark with per-vertex roughness & metalness
@@ -101,6 +106,17 @@ export class MaterialLib {
   private companyName: string;
   private flagTex: THREE.CanvasTexture;
   private signTex: THREE.CanvasTexture;
+  /** Applied texture quality (materials are configured for it). */
+  private applied: SurfaceQuality = 'classic';
+  private disposed = false;
+  private requested: SurfaceQuality = 'classic';
+  private surfTex: SurfaceTextureSet | null = null;
+  private envMap: THREE.Texture | null = null;
+  readonly surfUniforms: SurfaceUniforms = createSurfaceUniforms();
+  /** GPU bytes held by the current surface textures (diagnostics). */
+  get textureBytes(): number {
+    return this.surfTex?.bytes ?? 0;
+  }
 
   constructor(companyColor = '#ff8a1f', companyName = 'PetroCraft') {
     this.companyColor = companyColor;
@@ -111,6 +127,104 @@ export class MaterialLib {
 
   get company(): string {
     return this.companyColor;
+  }
+
+  /** Texture quality the materials currently use. */
+  get quality(): SurfaceQuality {
+    return this.applied;
+  }
+
+  /** Extra geometric detail in templates (ultra). */
+  get fine(): boolean {
+    return this.applied === 'ultra';
+  }
+
+  /**
+   * Request a texture quality. Classic applies at once; textured qualities apply when their procedural
+   * textures are ready (generated off the main thread, cached). Existing materials are re-configured in
+   * place, so meshes, instanced batches and clones keep their material objects.
+   */
+  setQuality(q: SurfaceQuality): void {
+    if (q !== 'classic' && q !== 'high' && q !== 'ultra') q = 'classic';
+    if (q === this.requested) return;
+    this.requested = q;
+    if (q === 'classic') {
+      this.apply('classic', null);
+      return;
+    }
+    loadSurfaceTextures(TEX_SIZE[q])
+      .then((set) => {
+        if (this.disposed || this.requested !== q) {
+          set.detail.dispose();
+          set.normal.dispose();
+          return;
+        }
+        this.apply(q, set);
+      })
+      .catch((err) => console.error('[entities] surface texture generation failed', err));
+  }
+
+  /** Environment map for reflections (ultra; null clears). Swapping maps needs no recompile. */
+  setEnvMap(tex: THREE.Texture | null): void {
+    if (tex === this.envMap) return;
+    const had = !!this.envMap;
+    this.envMap = tex;
+    for (const [key, m] of this.variants) this.configureEnv(m, key.slice(0, key.indexOf('|')) as MatKind, had !== !!tex);
+    for (const [clone, base] of this.clones) {
+      const b = base as THREE.MeshStandardMaterial;
+      const c = clone as THREE.MeshStandardMaterial;
+      if ('envMap' in c) {
+        c.envMap = b.envMap;
+        if (had !== !!tex) c.needsUpdate = true;
+      }
+    }
+  }
+
+  private apply(q: SurfaceQuality, set: SurfaceTextureSet | null): void {
+    const old = this.surfTex;
+    this.surfTex = set;
+    this.applied = q;
+    this.surfUniforms.uSurfDetail.value = set?.detail ?? null;
+    this.surfUniforms.uSurfNormal.value = set?.normal ?? null;
+    for (const [key, m] of this.variants) {
+      const kind = key.slice(0, key.indexOf('|')) as MatKind;
+      const mode = key.slice(key.indexOf('|') + 1) as MatMode;
+      this.configure(m, kind, mode);
+    }
+    for (const [clone, base] of this.clones) {
+      clone.onBeforeCompile = base.onBeforeCompile;
+      clone.customProgramCacheKey = base.customProgramCacheKey;
+      if ('envMap' in clone) (clone as THREE.MeshStandardMaterial).envMap = (base as THREE.MeshStandardMaterial).envMap;
+      clone.needsUpdate = true;
+    }
+    if (q !== 'ultra') this.setEnvMap(null);
+    if (old && old !== set) {
+      old.detail.dispose();
+      old.normal.dispose();
+    }
+  }
+
+  /** (Re)apply the quality-dependent shader patch & parameters to a cached material variant. */
+  private configure(m: THREE.Material, kind: MatKind, mode: MatMode): void {
+    if (kind === 'solid') {
+      const p = solidPatch(this.applied, mode === 'charred', this.surfUniforms);
+      m.onBeforeCompile = p.onBeforeCompile;
+      m.customProgramCacheKey = () => p.key;
+      m.needsUpdate = true;
+    }
+    this.configureEnv(m, kind, true);
+  }
+
+  private configureEnv(m: THREE.Material, kind: MatKind, recompile: boolean): void {
+    if (!(m instanceof THREE.MeshStandardMaterial) || kind === 'flag' || kind === 'sign') return;
+    const env = this.applied === 'ultra' ? this.envMap : null;
+    if (m.envMap === env) return;
+    m.envMap = env;
+    // the scene's own hemisphere/ambient lights already provide diffuse fill: keep the IBL modest
+    m.envMapIntensity = kind === 'glass' || kind === 'glassDark' ? 1 : 0.5;
+    // glass reads as glass once it has something to reflect
+    if (kind === 'glass' || kind === 'glassDark') m.roughness = env ? 0.04 : (m.userData.baseRoughness ?? m.roughness);
+    if (recompile) m.needsUpdate = true;
   }
 
   /** Update company branding (flag & sign textures are redrawn in place). */
@@ -131,6 +245,8 @@ export class MaterialLib {
     let m = this.variants.get(key);
     if (!m) {
       m = this.create(kind, mode);
+      if (m instanceof THREE.MeshStandardMaterial) m.userData.baseRoughness = m.roughness;
+      this.configure(m, kind, mode);
       this.variants.set(key, m);
     }
     return m;
@@ -142,13 +258,11 @@ export class MaterialLib {
     const charColor = new THREE.Color(0.1, 0.088, 0.078);
     switch (kind) {
       case 'solid': {
-        const m = std({
+        return std({
           color: charred ? charColor : new THREE.Color(dim, dim, dim),
           roughness: 1,
           metalness: charred ? 0.15 : 1,
         });
-        patchSurface(m, charred);
-        return m;
       }
       case 'paint':
         return charred ? std({ color: charColor, roughness: 1, metalness: 0 }) : std({ color: new THREE.Color(dim, dim, dim), roughness: 0.72, metalness: 0.08 });
@@ -268,32 +382,24 @@ export class MaterialLib {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const m of this.variants.values()) m.dispose();
     for (const m of this.clones.keys()) m.dispose();
     this.variants.clear();
     this.clones.clear();
     this.flagTex.dispose();
     this.signTex.dispose();
+    if (this.surfTex) {
+      this.surfTex.detail.dispose();
+      this.surfTex.normal.dispose();
+      this.surfTex = null;
+    }
   }
 
   static readonly kinds = ALL_KINDS;
 }
 
 const key = (k: MatKind, m: MatMode) => `${k}|${m}`;
-
-/** Per-vertex roughness/metalness (attribute `surf`) for the merged 'solid' material. */
-function patchSurface(m: THREE.MeshStandardMaterial, charred: boolean): void {
-  m.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 surf;\nvarying vec2 vSurf;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSurf = surf;');
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vSurf;')
-      .replace('#include <roughnessmap_fragment>', charred ? 'float roughnessFactor = 1.0;' : 'float roughnessFactor = roughness * vSurf.x;')
-      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = metalness * vSurf.y;');
-  };
-  m.customProgramCacheKey = () => (charred ? 'pc-solid-charred' : 'pc-solid');
-}
 
 /** Translucent material used for build ghosts (one per mesh; the player module tints them). */
 export function makeGhostMaterial(): THREE.MeshStandardMaterial {

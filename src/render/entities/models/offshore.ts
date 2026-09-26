@@ -8,6 +8,7 @@ import { C } from '../palette';
 import { spinY } from './common';
 import { animateRig, bopStack, derrick, drillFloor } from './rigCommon';
 import { RIG_FLOOR, RIG_TRAVEL } from './rigSpecs';
+import { SURF } from '../textures/texgen';
 import type { AnimState, ModelDef } from './types';
 
 /** Variant: seabed depth below the sea surface at the footprint centre (blocks). */
@@ -334,11 +335,15 @@ const fpso: ModelDef = {
     const keel = -2.4;
     const hullDark = C.NAVY;
     // hull: antifouling below the waterline, dark topsides, bow ellipse
-    b.slab(-3.9, keel, -10.4, 3.9, -0.1, 8.6, C.RED_DARK, 'paint');
-    b.slab(-3.9, -0.1, -10.4, 3.9, deck, 8.6, hullDark, 'paint');
+    b.surface(SURF.HULL, () => {
+      b.slab(-3.9, keel, -10.4, 3.9, -0.1, 8.6, C.RED_DARK, 'paint');
+      b.slab(-3.9, -0.1, -10.4, 3.9, deck, 8.6, hullDark, 'paint');
+    });
     b.push().translate(0, 0, 8.6).scale(1, 1, 0.62);
-    b.cyl(0, keel, 0, 3.9, -0.1 - keel, C.RED_DARK, 'paint', 20);
-    b.cyl(0, -0.1, 0, 3.9, deck + 0.3, hullDark, 'paint', 20);
+    b.surface(SURF.HULL, () => {
+      b.cyl(0, keel, 0, 3.9, -0.1 - keel, C.RED_DARK, 'paint', 20);
+      b.cyl(0, -0.1, 0, 3.9, deck + 0.3, hullDark, 'paint', 20);
+    });
     b.cyl(0, deck + 0.3 - 0.05, 0, 3.85, 0.05, C.GUNMETAL, 'metal', 20);
     b.pop();
     b.slab(-3.92, deck - 0.5, -10.42, 3.92, deck - 0.25, 8.6, b.company, 'paint');

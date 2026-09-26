@@ -5,6 +5,7 @@
 //   only=type1,type2   focus=type   cam=x,y,z   look=x,y,z   warm=seconds
 //   scene=grid|anim|fx|vehicles|traffic|stress|avatar|drops
 //   inst=0 (disable instanced building rendering)   paths=1 (traffic: draw truck/ship routes)
+//   tex=classic|high|ultra (entity texture quality)
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
@@ -25,6 +26,8 @@ const canvas = document.getElementById('c') as HTMLCanvasElement;
 const host = new FakeHost(canvas, night);
 const ctx = createFakeContext(scene === 'traffic' ? 'hills' : 'flat');
 const geo = ctx.geology;
+const tex = P.get('tex');
+if (tex === 'high' || tex === 'ultra' || tex === 'classic') ctx.settings.textureQuality = tex;
 const labels = new CSS2DRenderer();
 labels.domElement.className = 'labels';
 document.body.appendChild(labels.domElement);
@@ -419,11 +422,12 @@ else flatGround();
 water();
 pads();
 const layer = createEntityLayer(host, ctx) as unknown as EntityLayerDebug & { update(dt: number): void };
-const stats = { calls: 0, triangles: 0, geometries: 0, frames: 0, instancedBatches: 0, instancedMembers: 0, fps: 0 };
+const stats = { calls: 0, triangles: 0, geometries: 0, frames: 0, instancedBatches: 0, instancedMembers: 0, fps: 0, tex: 'classic', texBytes: 0 };
 (window as unknown as Record<string, unknown>).harness = { host, ctx, layer, THREE, stats };
 
 // ---- camera ---------------------------------------------------------------------------------------
 const controls = new OrbitControls(host.camera, canvas);
+(window as unknown as { harness: Record<string, unknown> }).harness.controls = controls;
 const v3 = (s: string | null) => (s ? new THREE.Vector3(...(s.split(',').map(Number) as [number, number, number])) : null);
 const focus = P.get('focus');
 const fb = focus ? Object.values(ctx.state.buildings).find((b) => b.type === focus) : undefined;
@@ -539,6 +543,8 @@ function frame(now: number): void {
   stats.frames++;
   stats.instancedBatches = layer.batcher.batchCount;
   stats.instancedMembers = layer.batcher.memberCount;
-  if (statsEl) statsEl.textContent = `draw calls ${stats.calls} · tris ${(stats.triangles / 1000).toFixed(0)}k · instanced ${stats.instancedMembers} in ${stats.instancedBatches} batches · ${stats.fps.toFixed(1)} fps`;
+  stats.tex = layer.lib.quality;
+  stats.texBytes = layer.lib.textureBytes;
+  if (statsEl) statsEl.textContent = `${stats.tex} · draw calls ${stats.calls} · tris ${(stats.triangles / 1000).toFixed(0)}k · instanced ${stats.instancedMembers} in ${stats.instancedBatches} batches · ${stats.fps.toFixed(1)} fps`;
 }
 requestAnimationFrame(frame);

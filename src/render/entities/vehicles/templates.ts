@@ -1,6 +1,7 @@
 // Moving-vehicle model templates (built once per company colour, instanced per vehicle).
 import { Builder, type ModelTemplate } from '../geom/Builder';
 import { C } from '../palette';
+import { SURF } from '../textures/texgen';
 import { locomotive, tankCar, tankerTruck, vibroseisBody } from './props';
 
 const cache = new Map<string, ModelTemplate>();
@@ -19,11 +20,12 @@ export function clearVehicleTemplates(): void {
   cache.clear();
 }
 
-function cached(key: string, company: string, build: (b: Builder) => void): ModelTemplate {
-  const k = `${key}|${company}`;
+function cached(key: string, company: string, build: (b: Builder) => void, fine = false): ModelTemplate {
+  const k = `${key}|${company}|${fine ? 1 : 0}`;
   let t = cache.get(k);
   if (!t) {
-    const b = new Builder(company);
+    const b = new Builder(company, fine);
+    b.paintClass = key === 'ship' ? SURF.HULL : SURF.AUTO;
     build(b);
     t = b.build();
     cache.set(k, t);
@@ -31,15 +33,15 @@ function cached(key: string, company: string, build: (b: Builder) => void): Mode
   return t;
 }
 
-export const truckTemplate = (company: string) => cached('truck', company, (b) => tankerTruck(b, 0, 0, 0, 0, C.STEEL_LIGHT));
+export const truckTemplate = (company: string, fine = false) => cached('truck', company, (b) => tankerTruck(b, 0, 0, 0, 0, C.STEEL_LIGHT), fine);
 
-export const locoTemplate = (company: string) => cached('loco', company, (b) => locomotive(b, 0, 0, 0, 0));
+export const locoTemplate = (company: string, fine = false) => cached('loco', company, (b) => locomotive(b, 0, 0, 0, 0), fine);
 
-export const tankCarTemplate = (company: string, variant: number) =>
-  cached(`car${variant}`, company, (b) => tankCar(b, 0, 0, 0, 0, [C.GUNMETAL, C.WHITE, C.BLACK][variant % 3]));
+export const tankCarTemplate = (company: string, variant: number, fine = false) =>
+  cached(`car${variant}`, company, (b) => tankCar(b, 0, 0, 0, 0, [C.GUNMETAL, C.WHITE, C.BLACK][variant % 3]), fine);
 
 /** Crude tanker, bow at +x, waterline at y = 0. Length ≈ 26. */
-export const shipTemplate = (company: string) =>
+export const shipTemplate = (company: string, fine = false) =>
   cached('ship', company, (b) => {
     const L = 26;
     const hw = 2.4;
@@ -80,7 +82,7 @@ export const shipTemplate = (company: string) =>
     b.box(-L / 2 + 3.5, 7.45, hw + 0.62, 0.12, 0.12, 0.05, C.LAMP_GREEN, 'lamp');
     b.box(-L / 2 + 3.5, 7.45, -hw - 0.62, 0.12, 0.12, 0.05, C.LAMP_RED, 'lamp');
     b.anchor('smoke', -L / 2 + 1.4, 9.2, 0, { r: 0.35, rate: 0.6, dark: 0.4 });
-  });
+  }, fine);
 
 /** Helicopter, nose at +x; rotor nodes 'rotor' (Y axis) and 'tail' (Z axis). */
 export const heliTemplate = (company: string) =>

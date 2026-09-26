@@ -22,7 +22,7 @@ export class BuildingGhost extends THREE.Group {
     this.buildingType = type;
     this.name = `ghost:${type}`;
     const def = getModelDef(type);
-    const model = instantiate(getTemplate(type, def.ghostVariant ?? '', lib.company), lib, false);
+    const model = instantiate(getTemplate(type, def.ghostVariant ?? '', lib.company, lib.fine), lib, false);
     for (const m of model.meshes) {
       m.material = makeGhostMaterial();
       m.castShadow = false;

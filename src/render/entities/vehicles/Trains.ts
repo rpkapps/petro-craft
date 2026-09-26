@@ -115,9 +115,10 @@ export class TrainTraffic {
     line.track = this.buildTrack(line, halfT);
     this.env.group.add(line.track.root);
     const company = this.env.lib.company;
-    line.cars.push(new Vehicle(this.env, locoTemplate(company)));
-    for (let i = 0; i < CARS; i++) line.cars.push(new Vehicle(this.env, tankCarTemplate(company, i)));
-    line.cars.push(new Vehicle(this.env, locoTemplate(company)));
+    const fine = this.env.lib.fine;
+    line.cars.push(new Vehicle(this.env, locoTemplate(company, fine)));
+    for (let i = 0; i < CARS; i++) line.cars.push(new Vehicle(this.env, tankCarTemplate(company, i, fine)));
+    line.cars.push(new Vehicle(this.env, locoTemplate(company, fine)));
     for (const c of line.cars) c.obj.visible = false;
     return line;
   }

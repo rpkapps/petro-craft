@@ -6,6 +6,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { MatKind } from '../materials';
+import { C } from '../palette';
+import { SURF } from '../textures/texgen';
 import { beamProto, boxProto, cylProto, domeProto, floorProto, planeProto, prismProto, sphereProto, torusProto, wedgeProto } from './prims';
 
 export type V3 = readonly [number, number, number];
@@ -83,6 +85,39 @@ const SURFACE: Partial<Record<MatKind, readonly [number, number]>> = {
   glassDark: [0.14, 0.45],
 };
 
+const ROUGH_CLASS = new Map<number, number>([
+  [C.RUBBER, SURF.RUBBER],
+  [C.BLACK, SURF.RUBBER],
+  [C.WOOD, SURF.WOOD],
+  [0x5b3a33, SURF.WOOD],
+  [0x6b4e2e, SURF.WOOD],
+  [C.GRAVEL, SURF.GRAVEL],
+  [C.ASPHALT, SURF.CONCRETE],
+  [0x7a6f5c, SURF.GRAVEL],
+]);
+const METAL_CLASS = new Map<number, number>([
+  [C.INSULATION, SURF.INSULATION],
+  [C.GALV, SURF.GALV],
+  [C.PANEL, SURF.GLASS],
+]);
+
+/** Textured-quality surface class of a part (stored in the 'surf' attribute's third component). */
+function surfaceClass(kind: MatKind, color: number, override: number, paintClass: number): number {
+  if (kind === 'glassDark') return SURF.GLASS;
+  if (kind === 'rough') {
+    const c = ROUGH_CLASS.get(color);
+    if (c !== undefined) return c;
+    const r = (color >> 16) & 255;
+    const g = (color >> 8) & 255;
+    const b = color & 255;
+    return r + g + b < 90 ? SURF.RUBBER : SURF.CONCRETE;
+  }
+  if (kind === 'metal') return METAL_CLASS.get(color) ?? (override >= 0 ? override : SURF.STEEL);
+  if (color === C.HAZARD) return SURF.HAZARD;
+  if (color === C.INSULATION) return SURF.INSULATION;
+  return override >= 0 ? override : paintClass;
+}
+
 export class Builder {
   private node: BNode;
   private readonly rootNode: BNode;
@@ -93,8 +128,14 @@ export class Builder {
   private readonly allNodes = new Map<string, BNode>();
   /** Company accent colour for this build (hex). */
   readonly company: number;
+  /** Surface class for 'paint' parts outside surface() scopes (vehicles use glossy AUTO paint). */
+  paintClass: number = SURF.PAINT;
+  private surfOverride = -1;
 
-  constructor(company: number | string = 0xff8a1f) {
+  /**
+   * @param fine Extra geometric detail for the 'ultra' texture quality (chamfered box edges ...).
+   */
+  constructor(company: number | string = 0xff8a1f, readonly fine = false) {
     this.company = typeof company === 'string' ? new THREE.Color(company).getHex() : company;
     this.rootNode = new BNode('', new THREE.Matrix4());
     this.node = this.rootNode;
@@ -159,6 +200,15 @@ export class Builder {
     return this;
   }
 
+  /** Parts added inside fn use surface class `cls` (paint/metal parts; hazard, galvanized & insulation keep theirs). */
+  surface(cls: number, fn: () => void): this {
+    const prev = this.surfOverride;
+    this.surfOverride = cls;
+    fn();
+    this.surfOverride = prev;
+    return this;
+  }
+
   /** Create a named, separately transformable node pivoting at (x,y,z) in the current frame. */
   group(name: string, x: number, y: number, z: number, fn: () => void): this {
     const pivot = this.cur.clone().multiply(_m.makeTranslation(x, y, z));
@@ -177,7 +227,7 @@ export class Builder {
   }
 
   // ---- core part insertion -----------------------------------------------------------------------
-  private add(proto: THREE.BufferGeometry, local: THREE.Matrix4, color: number, kind: MatKind): void {
+  private add(proto: THREE.BufferGeometry, local: THREE.Matrix4, color: number, kind: MatKind, owned = false): void {
     const detail = this.detailDepth > 0;
     const surf = SURFACE[kind];
     const bucketKind: MatKind = surf ? 'solid' : kind;
@@ -188,7 +238,7 @@ export class Builder {
       b = { kind: bucketKind, detail, shadow, geos: [] };
       this.node.buckets.set(key, b);
     }
-    const g = proto.clone();
+    const g = owned ? proto : proto.clone();
     g.applyMatrix4(_m2.multiplyMatrices(this.cur, local));
     const n = g.attributes.position.count;
     const arr = new Float32Array(n * 3);
@@ -200,12 +250,18 @@ export class Builder {
     }
     g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
     if (surf) {
-      const sa = new Float32Array(n * 2);
+      // roughness, metalness, textured surface class, height above the model origin (ground grime)
+      const cls = surfaceClass(kind, color, this.surfOverride, this.paintClass);
+      const nw = this.nodeWorld.get(this.node)!.elements;
+      const pa = g.attributes.position.array as ArrayLike<number>;
+      const sa = new Float32Array(n * 4);
       for (let i = 0; i < n; i++) {
-        sa[i * 2] = surf[0];
-        sa[i * 2 + 1] = surf[1];
+        sa[i * 4] = surf[0];
+        sa[i * 4 + 1] = surf[1];
+        sa[i * 4 + 2] = cls;
+        sa[i * 4 + 3] = nw[1] * pa[i * 3] + nw[5] * pa[i * 3 + 1] + nw[9] * pa[i * 3 + 2] + nw[13];
       }
-      g.setAttribute('surf', new THREE.BufferAttribute(sa, 2));
+      g.setAttribute('surf', new THREE.BufferAttribute(sa, 4));
     }
     b.geos.push(g);
   }
@@ -213,6 +269,13 @@ export class Builder {
   // ---- primitives --------------------------------------------------------------------------------
   /** Box centred at (cx,cy,cz) with size (sx,sy,sz). */
   box(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, color: number, kind: MatKind = 'paint'): this {
+    const m = Math.min(Math.abs(sx), Math.abs(sy), Math.abs(sz));
+    if (this.fine && this.detailDepth === 0 && m >= 0.1 && SURFACE[kind]) {
+      // ultra: chamfered edges catch the light like real fabricated steel & cast concrete
+      const r = Math.min(0.045, m * 0.16);
+      this.add(chamferBox(Math.abs(sx) / 2, Math.abs(sy) / 2, Math.abs(sz) / 2, r), _m.makeTranslation(cx, cy, cz).clone(), color, kind, true);
+      return this;
+    }
     _m.compose(_v.set(cx, cy, cz), _q.identity(), _s.set(sx, sy, sz));
     this.add(boxProto(), _m.clone(), color, kind);
     return this;
@@ -243,6 +306,12 @@ export class Builder {
     const len = _v.length();
     if (len < 1e-5) return this;
     _q.setFromUnitVectors(_up, _v.divideScalar(len));
+    if (this.fine && this.detailDepth === 0 && Math.min(t, t2, len) >= 0.1 && SURFACE[kind]) {
+      const r = Math.min(0.045, Math.min(t, t2, len) * 0.16);
+      _m.compose(_v2.set(p0[0], p0[1], p0[2]), _q, _s.set(1, 1, 1)).multiply(_m2.makeTranslation(0, len / 2, 0));
+      this.add(chamferBox(t / 2, len / 2, t2 / 2, r), _m.clone(), color, kind, true);
+      return this;
+    }
     _m.compose(_v2.set(p0[0], p0[1], p0[2]), _q, _s.set(t, len, t2));
     this.add(beamProto(), _m.clone(), color, kind);
     return this;
@@ -366,4 +435,84 @@ export class Builder {
     if (bounds.isEmpty()) bounds.set(new THREE.Vector3(-0.5, 0, -0.5), new THREE.Vector3(0.5, 1, 0.5));
     return { root, anchors: this.anchors, bounds, drawCalls, triangles };
   }
+}
+
+/**
+ * Box with 45° chamfers of width r on all 12 edges (half sizes a, b, c): 6 faces, 12 edge strips and
+ * 8 corner triangles, flat-shaded, indexed, with the same attribute set as the primitive prototypes.
+ */
+function chamferBox(a: number, b: number, c: number, r: number): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const nor: number[] = [];
+  const idx: number[] = [];
+  const h = [a, b, c];
+  const poly = (pts: number[][]) => {
+    // flat normal, oriented outward (the solid is convex and centred on the origin)
+    const [p0, p1, p2] = pts;
+    const ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2];
+    const vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const cx = pts.reduce((s, p) => s + p[0], 0), cy = pts.reduce((s, p) => s + p[1], 0), cz = pts.reduce((s, p) => s + p[2], 0);
+    const flip = nx * cx + ny * cy + nz * cz < 0;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    nx /= len;
+    ny /= len;
+    nz /= len;
+    if (flip) {
+      nx = -nx;
+      ny = -ny;
+      nz = -nz;
+    }
+    const base = pos.length / 3;
+    for (const p of pts) {
+      pos.push(p[0], p[1], p[2]);
+      nor.push(nx, ny, nz);
+    }
+    for (let i = 1; i + 1 < pts.length; i++) {
+      if (flip) idx.push(base, base + i + 1, base + i);
+      else idx.push(base, base + i, base + i + 1);
+    }
+  };
+  const P = (i: number, si: number, vi: number, j: number, sj: number, vj: number, k: number, sk: number, vk: number) => {
+    const p = [0, 0, 0];
+    p[i] = si * vi;
+    p[j] = sj * vj;
+    p[k] = sk * vk;
+    return p;
+  };
+  // faces
+  for (let i = 0; i < 3; i++) {
+    const j = (i + 1) % 3;
+    const k = (i + 2) % 3;
+    for (const s of [-1, 1])
+      poly([P(i, s, h[i], j, -1, h[j] - r, k, -1, h[k] - r), P(i, s, h[i], j, 1, h[j] - r, k, -1, h[k] - r), P(i, s, h[i], j, 1, h[j] - r, k, 1, h[k] - r), P(i, s, h[i], j, -1, h[j] - r, k, 1, h[k] - r)]);
+  }
+  // edge strips between faces i and j, running along k
+  for (let i = 0; i < 3; i++) {
+    const j = (i + 1) % 3;
+    const k = (i + 2) % 3;
+    for (const si of [-1, 1])
+      for (const sj of [-1, 1])
+        poly([
+          P(i, si, h[i], j, sj, h[j] - r, k, -1, h[k] - r),
+          P(i, si, h[i] - r, j, sj, h[j], k, -1, h[k] - r),
+          P(i, si, h[i] - r, j, sj, h[j], k, 1, h[k] - r),
+          P(i, si, h[i], j, sj, h[j] - r, k, 1, h[k] - r),
+        ]);
+  }
+  // corners
+  for (const sx of [-1, 1])
+    for (const sy of [-1, 1])
+      for (const sz of [-1, 1])
+        poly([
+          [sx * a, sy * (b - r), sz * (c - r)],
+          [sx * (a - r), sy * b, sz * (c - r)],
+          [sx * (a - r), sy * (b - r), sz * c],
+        ]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
+  g.setIndex(idx);
+  return g;
 }

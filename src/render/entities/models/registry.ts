@@ -33,12 +33,12 @@ export function defSize(type: string): [number, number, number] {
   return (BUILDINGS[type]?.size ?? [2, 2, 2]) as [number, number, number];
 }
 
-export function getTemplate(type: string, variant: string, company: string): ModelTemplate {
-  const key = `${type}|${variant}|${company}`;
+export function getTemplate(type: string, variant: string, company: string, fine = false): ModelTemplate {
+  const key = `${type}|${variant}|${company}|${fine ? 1 : 0}`;
   let t = templates.get(key);
   if (!t) {
     const [w, d, h] = defSize(type);
-    const b = new Builder(company);
+    const b = new Builder(company, fine);
     getModelDef(type).build(b, { w, d, h, variant });
     t = b.build();
     templates.set(key, t);

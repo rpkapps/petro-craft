@@ -3,6 +3,7 @@ import type { Builder } from '../geom/Builder';
 import { ladder, lampPost, spiralStair, tank } from '../geom/parts';
 import { C } from '../palette';
 import { fillFraction } from './common';
+import { SURF } from '../textures/texgen';
 import type { ModelDef } from './types';
 
 /** Low concrete bund wall around the footprint. */
@@ -40,7 +41,7 @@ const oil_tank_large: ModelDef = {
     const h = 5.8;
     const y0 = 0.04;
     b.cyl(0, y0, 0, r + 0.12, 0.15, C.CONCRETE, 'rough', 32);
-    b.cyl(0, y0 + 0.15, 0, r, h, C.WHITE, 'paint', 32);
+    b.surface(SURF.TANK, () => b.cyl(0, y0 + 0.15, 0, r, h, C.WHITE, 'paint', 32));
     // open top: inner wall visible
     b.cyl(0, y0 + 0.2, 0, r - 0.06, h - 0.05, C.STEEL, 'metal', 32);
     b.cyl(0, y0 + h * 0.62, 0, r + 0.03, 0.75, b.company, 'paint', 32);
@@ -97,7 +98,7 @@ const gas_sphere: ModelDef = {
     const cy = 3.85;
     const r = 2.65;
     b.slab(-2.95, 0, -2.95, 2.95, 0.12, 2.95, C.CONCRETE, 'rough');
-    b.sphere(0, cy, 0, r, C.WHITE, 'paint', 28);
+    b.surface(SURF.TANK, () => b.sphere(0, cy, 0, r, C.WHITE, 'paint', 28));
     b.cyl(0, cy - 0.2, 0, r + 0.02, 0.4, b.company, 'paint', 28);
     // legs with X bracing
     const n = 8;

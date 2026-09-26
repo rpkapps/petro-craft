@@ -238,7 +238,7 @@ export class TruckTraffic {
       }
     // don't spawn on top of a truck still on the first stretch
     for (const tr of t.trucks) if (tr.route === route && tr.state === 'in' && tr.s < HEADWAY) return;
-    const v = new Vehicle(this.env, truckTemplate(this.env.lib.company));
+    const v = new Vehicle(this.env, truckTemplate(this.env.lib.company, this.env.lib.fine));
     route.sample(0, _smp);
     t.trucks.push({
       v, lane, route, s: 0, speed: VMAX * 0.7, state: 'in', timer: 0, x: _smp.x, z: _smp.z,

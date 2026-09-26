@@ -1,6 +1,7 @@
 // Reusable industrial sub-assemblies built from Builder primitives: lattice masts, stairs, ladders,
 // railings, tanks, vessels, columns, pipe racks, sheds with windows, skids, fin-fan coolers, stacks.
 import type { Builder, V3 } from './Builder';
+import { SURF } from '../textures/texgen';
 import { C } from '../palette';
 
 /** Small deterministic PRNG for procedural variety inside templates. */
@@ -253,7 +254,17 @@ export function tank(b: Builder, o: TankOpts): void {
   const col = o.color ?? C.WHITE;
   const seg = o.seg ?? 20;
   b.cyl(o.x, y0, o.z, o.r + 0.12, 0.15, C.CONCRETE, 'rough', seg);
-  b.cyl(o.x, y0 + 0.15, o.z, o.r, o.h - 0.15, col, 'paint', seg);
+  b.surface(SURF.TANK, () => b.cyl(o.x, y0 + 0.15, o.z, o.r, o.h - 0.15, col, 'paint', seg));
+  if (b.fine) {
+    // ultra: bolted base ring and a rolled top edge
+    b.ring(o.x, y0 + 0.2, o.z, o.r + 0.03, 0.05, C.STEEL_DARK, 'metal', seg);
+    b.ring(o.x, y0 + o.h - 0.04, o.z, o.r + 0.02, 0.045, col, 'paint', seg);
+    const bolts = Math.max(8, Math.round(o.r * 10));
+    for (let i = 0; i < bolts; i++) {
+      const a = (i / bolts) * Math.PI * 2;
+      b.box(o.x + Math.cos(a) * (o.r + 0.07), y0 + 0.24, o.z + Math.sin(a) * (o.r + 0.07), 0.06, 0.06, 0.06, C.GUNMETAL, 'metal');
+    }
+  }
   // weld seams / stiffener rings
   b.detail(() => {
     for (let y = y0 + 1; y < y0 + o.h - 0.3; y += 1.1) b.ring(o.x, y, o.z, o.r + 0.015, 0.025, col, 'paint', seg);
@@ -264,8 +275,8 @@ export function tank(b: Builder, o: TankOpts): void {
   }
   const top = y0 + o.h;
   const roof = o.roof ?? 'cone';
-  if (roof === 'cone') b.cyl(o.x, top, o.z, o.r + 0.05, Math.max(0.25, o.r * 0.22), col, 'paint', seg, 0.25);
-  else if (roof === 'dome') b.dome(o.x, top, o.z, o.r, col, 'paint', seg, o.r * 0.35);
+  if (roof === 'cone') b.surface(SURF.TANK, () => b.cyl(o.x, top, o.z, o.r + 0.05, Math.max(0.25, o.r * 0.22), col, 'paint', seg, 0.25));
+  else if (roof === 'dome') b.surface(SURF.TANK, () => b.dome(o.x, top, o.z, o.r, col, 'paint', seg, o.r * 0.35));
   else if (roof === 'flat') b.cyl(o.x, top, o.z, o.r + 0.05, 0.1, C.STEEL, 'metal', seg);
   else b.ring(o.x, top, o.z, o.r, 0.08, col, 'paint', seg);
   if (roof !== 'open' && o.ladder !== false) ringRail(b, o.x, top + 0.02, o.z, o.r - 0.12, C.HAZARD, -0.7, 0.7);
@@ -394,7 +405,7 @@ export function shed(b: Builder, o: ShedOpts): void {
   const roofC = o.roof ?? C.STEEL_LIGHT;
   const trim = o.trim ?? b.company;
   const r = prng(o.seed ?? 7);
-  b.slab(o.x0, y0, o.z0, o.x1, y0 + o.h, o.z1, o.wall, 'paint');
+  b.surface(SURF.CLAD, () => b.slab(o.x0, y0, o.z0, o.x1, y0 + o.h, o.z1, o.wall, 'paint'));
   // trim band just below the roof
   b.slab(o.x0 - 0.03, y0 + o.h - 0.25, o.z0 - 0.03, o.x1 + 0.03, y0 + o.h, o.z1 + 0.03, trim, 'paint');
   // base plinth
