@@ -57,8 +57,8 @@ export class GeoFeatures {
   constructor(private ctx: GameContext, shared: Shared) {
     this.group.name = 'xray-geo';
     this.group.add(this.aquifers, this.faults, this.rings);
-    this.aquiferMat = createHoloMaterial(shared, { color: 0x3aa8ff, opacity: 0.55, fill: 0.05, rim: 0.4, scan: 0.03 });
-    this.faultMat = createHoloMaterial(shared, { color: 0xff6040, opacity: 0.6, fill: 0.05, rim: 0.12, grid: 0.3, gridScale: new THREE.Vector3(4, 4, 4) });
+    this.aquiferMat = createHoloMaterial(shared, { color: 0x3aa8ff, opacity: 0.4, fill: 0.03, rim: 0.35, scan: 0.02, side: THREE.FrontSide });
+    this.faultMat = createHoloMaterial(shared, { color: 0xff5a30, opacity: 0.35, fill: 0.03, rim: 0.05, grid: 0.12, gridScale: new THREE.Vector3(8, 8, 8) });
     this.ringMat = new THREE.ShaderMaterial({
       uniforms: { uRadius: { value: this.ringRadius }, uFade: shared.uXray, uTime: shared.uTime, uColor: { value: new THREE.Color(0x4fd8ff) } },
       vertexShader: RING_VERT,
@@ -123,7 +123,7 @@ export class GeoFeatures {
         const rz = r.center.z - f.p0.z;
         const along = rx * tx + rz * tz;
         const perp = Math.abs(rx * -tz + rz * tx);
-        if (perp > Math.max(r.radiusX, r.radiusZ) + 30) continue;
+        if (perp > Math.max(r.radiusX, r.radiusZ) + 12) continue;
         const cx = f.p0.x + tx * along;
         const cz = f.p0.z + tz * along;
         let top = 70;
@@ -133,7 +133,7 @@ export class GeoFeatures {
           /* keep default */
         }
         const bottom = Math.max(4, Math.min(r.bottomY, r.topY) - 24);
-        const half = Math.max(r.radiusX, r.radiusZ) + 24;
+        const half = Math.max(r.radiusX, r.radiusZ) + 10;
         const run = (top - bottom) / Math.tan((Math.max(20, Math.min(89, f.dip)) * Math.PI) / 180);
         const p = [
           [cx - tx * half, top, cz - tz * half],

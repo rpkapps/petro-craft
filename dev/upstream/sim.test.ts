@@ -34,7 +34,7 @@ section('1. Init: reservoirs, services, commands');
 {
   const h = newHarness();
   const rs = h.ctx.state.reservoirs;
-  check('3 reservoir states created', Object.keys(rs).length === 3);
+  check('4 reservoir states created', Object.keys(rs).length === 4);
   check('initial pressure & undiscovered', rs.r_eagle.pressure === 2200 && !rs.r_eagle.discovered && rs.r_eagle.knowledge === 0);
   const q = h.ctx.services.seismic.quote('2d', 10, 64, 130, 64);
   check('seismic quote installed', q.cost > 0 && q.days > 0, `2D 120 blocks: ${money(q.cost)}, ${q.days} d`);
@@ -213,7 +213,7 @@ section('5. Gas well (Falcon, overpressured, sour) with 3D-informed plan');
   const chem0 = w.cost;
   runDays(h, 30);
   const rs = h.ctx.state.reservoirs.r_falcon;
-  check('p/z depletion & H2S chemicals cost', rs.pressure < 4300 && w.cost > chem0, `P ${f0(rs.pressure)} psi, gas ${f0(w.rates.gas)} mcf/d, cum ${f0(w.cumulative.gas)} mcf`);
+  check('p/z depletion & H2S chemicals cost', rs.pressure < 4300 && w.cost > chem0, `P ${f0(rs.pressure)} psi, pL ${f0(wellExt(w).res.r_falcon?.pL ?? 0)}, gas ${f0(w.rates.gas)} mcf/d, cum ${f0(w.cumulative.gas)} mcf`);
   cmd(h, { type: 'well/setChoke', wellId: w.id, choke: 0.5 });
   const before = w.rates.gas;
   runHours(h, 2);
@@ -284,6 +284,15 @@ section('6. Kick → wait & weight; then gas kick ignored → blowout → cap');
   const oilPools = (() => { let n = 0; for (let x = 40; x < 80; x++) for (let z = 40; z < 80; z++) { const y = o.world.getSurfaceY(x, z); if (o.world.getBlock(x, y, z) === B.OIL_POOL) n++; } return n; })();
   const spill = o.ctx.state.environment.spills[0];
   check('oil blowout spills (OIL_POOL + spill record)', ow.status === 'blowout' && (oilPools > 0 || (ow.blowout?.onFire ?? false)) && !!spill, `pools ${oilPools}, spill ${f0(spill?.volume ?? 0)} bbl, fire ${ow.blowout?.onFire}, kickFluid ${ex.kickFluid}`);
+  if (ow.blowout?.onFire) {
+    // Emulate fire crews putting the fire out (facilities' job): oil then sprays onto the ground.
+    const fi = o.ctx.state.hazards.fires.findIndex((f) => f.wellId === ow.id);
+    if (fi >= 0) o.ctx.state.hazards.fires.splice(fi, 1);
+    runHours(o, 24);
+  }
+  let pools2 = 0;
+  for (let x = 40; x < 80; x++) for (let z = 40; z < 80; z++) { const y = o.world.getSurfaceY(x, z); if (o.world.getBlock(x, y, z) === B.OIL_POOL) pools2++; }
+  check('unignited oil blowout places OIL_POOL blocks', pools2 > 0 && !ow.blowout?.onFire, `pools ${pools2}, spill ${f0(o.ctx.state.environment.spills[0]?.volume ?? 0)} bbl, flow ${f0(ow.blowout?.flowRate ?? 0)} bbl/d`);
   const rr = cmd(o, { type: 'well/capBlowout', wellId: ow.id, method: 'relief_well' });
   runDays(o, 12, () => ow.status !== 'blowout');
   check('relief well kills & plugs', rr.ok && ow.status === 'plugged', ow.status);
@@ -340,6 +349,42 @@ section('7. Shale: horizontal well + 30-stage frac, 200 days');
 }
 
 // =================================================================================================
+section('7b. Offshore: jack-up well, platform hub, depletion drive, hurricane shut-in');
+{
+  const h = newHarness({ techs: ['directional_drilling', 'bop_upgrade', 'offshore_shallow', 'pumpjacks', 'esp_pumps', 'well_logging'], money: 40_000_000 });
+  place(h, 'production_platform', 236, 110);
+  const plan = h.ctx.services.wells.suggestPlan(240, 128, 31, 'vertical');
+  const { well: w, rig, quote } = drillWell(h, 'jackup_rig', 240, 128, plan, 'development');
+  console.log(`    plan ${JSON.stringify(plan)} quote ${money(quote.cost)} ${quote.days} d ${quote.warnings.join(' | ')}`);
+  check('offshore well surface at sea level + 1', w.offshore && w.surfaceY === 63, `surfaceY ${w.surfaceY}`);
+  runDays(h, 4, () => w.status === 'drilled' || w.status === 'kick');
+  check('offshore well drilled', w.status === 'drilled', `${w.status}; riser casing block at y 60: ${h.world.getBlock(240, 60, 128) === B.CASING}`);
+  cmd(h, { type: 'well/complete', wellId: w.id });
+  runHours(h, 24, () => w.status === 'producing');
+  runHours(h, 2);
+  check('no wellhead offshore; flows to platform', !w.wellheadId && w.rates.oil > 100, `oil ${f0(w.rates.oil)} bbl/d, rig ${rig.status}`);
+  const pj = cmd(h, { type: 'well/setLift', wellId: w.id, lift: 'pumpjack' });
+  check('pumpjacks refused offshore', !pj.ok, pj.error);
+  h.ctx.state.weather.current = 'hurricane';
+  runHours(h, 1);
+  check('hurricane shuts offshore wells in', w.status === 'shut_in' && w.rates.oil === 0);
+  h.ctx.state.weather.current = 'clear';
+  runHours(h, 1);
+  check('production resumes after the storm', w.status === 'producing');
+  const rows: string[] = [];
+  let esp = false;
+  for (let d = 1; d <= 120; d++) {
+    runDays(h, 1);
+    if (!esp && w.rates.oil < 5 && !wellExt(w).op) { esp = true; console.log(`    day ${d}: ${wellExt(w).limit} → ESP ${cmd(h, { type: 'well/setLift', wellId: w.id, lift: 'esp' }).ok}`); }
+    if ([1, 7, 14, 30, 60, 90, 120].includes(d)) { const rs = h.ctx.state.reservoirs.r_marlin; rows.push(`    day ${String(d).padStart(3)}: oil ${f0(w.rates.oil).padStart(5)}  GOR ${f0(w.gor).padStart(5)}  wc ${(w.waterCut * 100).toFixed(0)}%  P ${f0(rs.pressure)} psi  RF ${(rs.cumulative.oil / 2.5e6 * 100).toFixed(1)}%  lift ${w.lift}`); }
+  }
+  console.log(rows.join('\n'));
+  const rs = h.ctx.state.reservoirs.r_marlin;
+  check('depletion drive: pressure falls below bubble point, GOR rises', rs.pressure < 1800 && w.gor > 450 * 1.2, `P ${f0(rs.pressure)}, GOR ${f0(w.gor)}`);
+  check('recovery capped by drive mechanism', rs.cumulative.oil / 2.5e6 < 0.2, `RF ${(rs.cumulative.oil / 2.5e6 * 100).toFixed(1)}%`);
+}
+
+// =================================================================================================
 section('8. Validation errors');
 {
   const h = newHarness();
@@ -370,6 +415,38 @@ section('8. Validation errors');
   rig.workers = [];
   runHours(h, 3);
   check('no crew → no progress, rig idle', Math.abs(cw.measuredDepth - md0) < 1e-9 && rig.status === 'idle', `status ${rig.status}`);
+}
+
+// =================================================================================================
+section('8b. Run casing early, lost circulation, gas lift, save/load round-trip');
+{
+  const h = newHarness({ techs: ['pumpjacks', 'gas_lift', 'compression', 'well_logging'], money: 40_000_000 });
+  const plan = h.ctx.services.wells.suggestPlan(50, 70, 43, 'vertical');
+  const { well: w } = drillWell(h, 'drilling_rig_land', 50, 70, plan);
+  runHours(h, 30, () => w.currentY < 58);
+  const rc = cmd(h, { type: 'well/runCasing', wellId: w.id });
+  check('run casing early', rc.ok && w.status === 'casing', rc.error ?? `at y ${(rc.data as { y: number }).y}`);
+  runHours(h, 12, () => w.status === 'drilling');
+  check('intermediate string set', w.casing.some((c) => c.name === 'intermediate'), w.casing.map((c) => `${c.name}@${c.bottomY}(top ${c.topY})`).join(' '));
+  const lc = cmd(h, { type: 'well/setMudWeight', wellId: w.id, mudWeight: 17.5 });
+  runHours(h, 2);
+  check('overweight mud → lost circulation', lc.ok && wellExt(w).lostCirc, `mw ${w.mudWeight}, frac min ${wellExt(w).fracMin?.toFixed(1)}`);
+  cmd(h, { type: 'well/setMudWeight', wellId: w.id, mudWeight: 9.4 });
+  runDays(h, 2, () => w.status === 'drilled');
+  check('drilled after fixing the mud', w.status === 'drilled', w.status);
+  cmd(h, { type: 'well/complete', wellId: w.id });
+  runHours(h, 24, () => w.status === 'producing');
+  runHours(h, 2);
+  const nat = w.rates.oil;
+  const gl = cmd(h, { type: 'well/setLift', wellId: w.id, lift: 'gaslift' });
+  runHours(h, 10);
+  check('gas lift installed & raises rate', gl.ok && w.lift === 'gaslift' && w.rates.oil > nat, `${f0(nat)} → ${f0(w.rates.oil)} bbl/d`);
+  // Save/load: JSON round-trip of the state (NaN/Infinity → null) and continue simulating.
+  const json = JSON.stringify(h.ctx.state);
+  const h2 = newHarness({ state: JSON.parse(json) });
+  const w2 = h2.ctx.state.wells[w.id];
+  runDays(h2, 2);
+  check('state JSON round-trip keeps producing', w2.status === 'producing' && w2.rates.oil > 0 && finite(w2), `oil ${f0(w2.rates.oil)}, json ${(json.length / 1024).toFixed(0)} kB`);
 }
 
 // =================================================================================================

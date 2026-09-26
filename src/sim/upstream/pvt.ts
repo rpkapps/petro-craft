@@ -55,12 +55,13 @@ export function effectivePerm(k: number): number {
 export const isTight = (r: Reservoir) => r.trap === 'shale_play' || r.permeability < 1;
 
 /**
- * Near-well recharge ratio r: steady-state rate / initial rate = r / (1 + r).
- * Tight rock recharges slowly (steep decline to a low tail); conventional rock stays near reservoir pressure.
+ * Near-well recharge ratio r: steady-state rate / initial (flush) rate = r / (1 + r).
+ * Tight rock recharges slowly (steep decline to a low tail); conventional rock settles at ~70–80 % of the
+ * flush rate within a couple of weeks, then follows the reservoir tank.
  */
 export function rechargeRatio(k: number): number {
-  const t = clamp(Math.log10(Math.max(1e-4, k) / 0.1) / 3, 0, 1);
-  return 0.14 + 40 * t * t;
+  if (k < 1) return 0.2 + 1.3 * clamp(Math.log10(Math.max(1e-6, k) / 0.1), 0, 1);
+  return 1.5 + 3 * clamp(Math.log10(k) / 3, 0, 1);
 }
 
 /** Condensate / liquid yield (bbl per mcf) of a gas or condensate reservoir at initial conditions. */

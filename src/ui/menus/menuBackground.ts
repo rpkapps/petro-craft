@@ -92,12 +92,13 @@ export class MenuBackground {
     sky.height = H;
     const sg = sky.getContext('2d')!;
     const grad = sg.createLinearGradient(0, 0, 0, horizon);
-    grad.addColorStop(0, '#05070f');
-    grad.addColorStop(0.35, '#0e1030');
-    grad.addColorStop(0.62, '#2a1740');
-    grad.addColorStop(0.8, '#6b2a3a');
-    grad.addColorStop(0.92, '#c2522a');
-    grad.addColorStop(1, '#f08a32');
+    grad.addColorStop(0, '#04060d');
+    grad.addColorStop(0.3, '#0c1030');
+    grad.addColorStop(0.55, '#2c1a48');
+    grad.addColorStop(0.72, '#6e2c48');
+    grad.addColorStop(0.86, '#c4532e');
+    grad.addColorStop(0.95, '#f28a36');
+    grad.addColorStop(1, '#ffb45a');
     sg.fillStyle = grad;
     sg.fillRect(0, 0, W, H);
     const sun = sg.createRadialGradient(W * 0.7, horizon, 0, W * 0.7, horizon, W * 0.55);
@@ -136,23 +137,24 @@ export class MenuBackground {
     const l0 = mk();
     {
       const g = l0.getContext('2d')!;
-      const mg = g.createLinearGradient(0, horizon - H * 0.16, 0, horizon + H * 0.05);
-      mg.addColorStop(0, '#2a1a36');
-      mg.addColorStop(1, '#1a1226');
+      const mg = g.createLinearGradient(0, horizon - H * 0.09, 0, horizon + H * 0.03);
+      mg.addColorStop(0, '#4a2c4c');
+      mg.addColorStop(1, '#2a1c34');
       g.fillStyle = mg;
       g.beginPath();
       g.moveTo(0, H);
-      let y = horizon - H * 0.05;
+      let y = horizon - H * 0.03;
       for (let x = 0; x <= LW; x += LW / 90) {
-        y += (R() - 0.5) * H * 0.02;
-        const ridge = Math.sin(x / LW * 7.3) * H * 0.035 + Math.sin(x / LW * 17.1 + 1) * H * 0.015;
-        g.lineTo(x, Math.min(horizon, Math.max(horizon - H * 0.16, y + ridge)));
+        y += (R() - 0.5) * H * 0.012;
+        y += (horizon - H * 0.035 - y) * 0.08;
+        const ridge = Math.sin(x / LW * 7.3) * H * 0.022 + Math.sin(x / LW * 17.1 + 1) * H * 0.01;
+        g.lineTo(x, Math.min(horizon, Math.max(horizon - H * 0.09, y + ridge)));
       }
       g.lineTo(LW, H);
       g.fill();
       const haze = g.createLinearGradient(0, horizon - H * 0.08, 0, horizon + H * 0.02);
-      haze.addColorStop(0, 'rgba(240,120,70,0)');
-      haze.addColorStop(1, 'rgba(240,120,70,0.28)');
+      haze.addColorStop(0, 'rgba(255,140,80,0)');
+      haze.addColorStop(1, 'rgba(255,140,80,0.35)');
       g.fillStyle = haze;
       g.fillRect(0, horizon - H * 0.08, LW, H * 0.1);
     }
@@ -225,7 +227,7 @@ export class MenuBackground {
       // distant derricks on the left
       for (const [fx, hgt] of [[0.08, 16], [0.2, 12], [0.3, 14]]) this.derrick(g, LW * fx, base, unit * hgt, col, 1, R);
       // general window lights along the base
-      for (let i = 0; i < 70; i++) this.lights.push({ x: x0 - this.margin + R() * span, y: base - R() * unit * 8, r: unit * (0.08 + R() * 0.12), color: R() > 0.5 ? '#ffc070' : '#ffe8c0', phase: R() * 6, speed: 0.3 + R() * 3, layer: 1 });
+      for (let i = 0; i < 46; i++) this.lights.push({ x: x0 - this.margin + R() * span, y: base - R() * unit * 8, r: unit * (0.05 + R() * 0.08), color: R() > 0.5 ? '#ffc070' : '#ffe8c0', phase: R() * 6, speed: 0.3 + R() * 3, layer: 1 });
     }
     // layer 2: mid derricks, rig with lights, pipeline
     const l2 = mk();
@@ -365,7 +367,7 @@ export class MenuBackground {
         this.drawJacks(2, offs[2]);
         this.drawLights(2, offs[2], lift);
         this.drawFlares(2, offs[2], lift, dt);
-        this.haze(g, H * 0.76, 0.08, t * 0.025);
+        this.haze(g, H * 0.8, 0.16, t * 0.025);
       }
       if (i === 3) this.drawJacks(3, offs[3]);
     }
@@ -399,7 +401,7 @@ export class MenuBackground {
       let a: number;
       if (l.blink) a = Math.sin(t * l.speed * 2 + l.phase) > 0.55 ? 1 : 0.1;
       else a = 0.6 + 0.4 * Math.sin(t * l.speed + l.phase);
-      const r = l.r * (l.blink ? 5 : 4);
+      const r = l.r * (l.blink ? 5 : 3);
       const grd = g.createRadialGradient(x, y, 0, x, y, r);
       grd.addColorStop(0, l.color);
       grd.addColorStop(0.25, hexToRgba(l.color, 0.45 * a));

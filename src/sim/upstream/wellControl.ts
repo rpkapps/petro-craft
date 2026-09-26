@@ -57,7 +57,7 @@ export function tickKickUnattended(ctx: GameContext, rt: UpstreamRuntime, w: Wel
   const e = ux(w);
   e.kickHours += hours;
   const under = Math.max(0, e.kickPpg - w.mudWeight);
-  w.kickVolume = Math.min(500, w.kickVolume + (6 + 30 * under) * (e.kickFluid === 'gas' ? 1.8 : 1) * hours);
+  w.kickVolume = Math.round(Math.min(500, w.kickVolume + (6 + 30 * under) * (e.kickFluid === "gas" ? 1.8 : 1) * hours) * 10) / 10;
   if (e.kickHours > KICK_UNATTENDED_HOURS - 2 && !e.flags.kickWarn) {
     e.flags.kickWarn = true;
     ctx.notify('danger', `${w.name}: kick still uncontrolled`, `Influx now ${Math.round(w.kickVolume)} bbl. Choose a kill method now or risk a blowout.`, wellPos(w));
@@ -238,7 +238,7 @@ export function tickBlowout(ctx: GameContext, rt: UpstreamRuntime, w: WellState,
       removeFire(ctx, w);
       fire = undefined;
       ctx.notify('success', `${w.name}: fire knocked down`, 'Capping crews extinguished the blowout fire.', wellPos(w));
-    } else if (rig) damageRig(ctx, rig, 6 * hours);
+    } else if (rig) damageRig(ctx, rig, 4 * hours);
   }
   // Flow & losses
   const rate = blowoutRate(ctx, rt, w);

@@ -83,6 +83,9 @@ const RHYTHMS: [number, number][][] = [
   [[0, 16], [16, 8], [24, 8]],
 ];
 
+/** Optional note trace (dev tooling: piano-roll views, tests). */
+export interface NoteTrace { inst: 'pad' | 'sub' | 'pluck' | 'bell' | 'lead' | 'hit'; t: number; dur: number; midi: number[]; name?: string; chord?: string }
+
 interface ArpStep { on: boolean; idx: number; oct: number; vel: number }
 interface MotifNote { step: number; len: number; midi: number; strong: boolean }
 
@@ -111,6 +114,8 @@ export class Performer {
   private nextTime: number;
   private stepDur = 60 / 66 / 4;
   stopAt = Infinity;
+  /** Set by dev tools to observe scheduled notes. */
+  trace: ((e: NoteTrace) => void) | null = null;
 
   // piece
   private pieceMood: Mood = 'day';
@@ -298,7 +303,7 @@ export class Performer {
       else this.key = (this.key + weighted(this.rng, [[5, 3], [7, 3], [9, 2], [2, 1.5], [0, 1], [10, 1]] as [number, number][])) % 12;
       this.mode = weighted(this.rng, this.spec.modes);
       this.setTempo(Math.round(rand(this.rng, this.spec.bpm[0], this.spec.bpm[1])), t);
-      this.sectionsLeft = 3 + Math.floor(this.rng() * 3);
+      this.sectionsLeft = 3 + Math.floor(this.rng() * 4);
       const n = this.sectionsLeft;
       const peak = 0.55 + this.rng() * 0.4;
       this.arc = Array.from({ length: n }, (_, i) => {
@@ -394,7 +399,7 @@ export class Performer {
       len = 48;
     } else {
       degree = nextDegree(r, this.mode, this.chord.degree);
-      len = weighted(r, [[32, 5], [16, 1], [64, 1.2]] as [number, number][]);
+      len = weighted(r, [[32, 5], [16, 0.6], [64, 1.4]] as [number, number][]);
     }
     const ext = weighted(r, this.spec.exts);
     const chord = buildChord(this.mode, degree, ext);
@@ -407,6 +412,7 @@ export class Performer {
 
     const padVel = this.kind === 'menu' ? 0.2 : 0.17;
     const firstOfPiece = this.sectionIndex === 0 && this.sectionChordsLeft === 3;
+    this.trace?.({ inst: 'pad', t, dur, midi: voicing, chord: `${this.mode}:${chord.degree}:${chord.ext}` });
     this.inst.pad(t, voicing, dur, {
       vel: padVel,
       cutoff: this.spec.cutoff * (0.85 + r() * 0.3),
@@ -415,7 +421,10 @@ export class Performer {
       wet: 0.6,
     });
     const bass = noteAtOrAbove((this.key + chord.root) % 12, 33);
-    if (this.layer.sub) this.inst.sub(t, bass, dur, 0.26, firstOfPiece ? 3 : 1.4);
+    if (this.layer.sub) {
+      this.inst.sub(t, bass, dur, 0.26, firstOfPiece ? 3 : 1.4);
+      this.trace?.({ inst: 'sub', t, dur, midi: [bass] });
+    }
     if (this.layer.anvil && r() < (this.kind === 'menu' ? 0.5 : 0.25)) {
       const target = noteAtOrAbove((this.key + chord.root) % 12, 79);
       this.inst.hit('m_anvil', t + this.stepDur * pick(r, [0, 4, 8]), 0.1, { rate: Math.pow(2, (target - 85) / 12), pan: rand(r, -0.5, 0.5), wet: 1, delay: 0.35 });
@@ -510,6 +519,7 @@ export class Performer {
     const human = (this.rng() - 0.5) * 0.012;
     const vel = (this.kind === 'menu' ? 0.2 : 0.17) * a.vel;
     this.inst.pluck(t + Math.max(0, human), m, vel, s % 4 < 2 ? -0.3 : 0.3, 0.3, 0.35, this.spec.cutoff * 2.5);
+    this.trace?.({ inst: 'pluck', t, dur: this.stepDur * 2, midi: [m] });
   }
 
   private percStep(s: number, t: number) {
@@ -542,6 +552,7 @@ export class Performer {
       }
       const dur = n.len * this.stepDur;
       const inst = this.layer.motifInst;
+      this.trace?.({ inst, t, dur, midi: [midi] });
       if (inst === 'bell') this.inst.bell(t, midi, 0.13, rand(this.rng, -0.3, 0.3), Math.max(2, dur * 2), 0.7, 3.5, 1.2);
       else if (inst === 'pluck') this.inst.pluck(t, midi, 0.24, rand(this.rng, -0.2, 0.2), 0.35, 0.5);
       else this.inst.lead(t, midi, dur * 0.92, this.kind === 'menu' ? 0.15 : 0.12, rand(this.rng, -0.15, 0.15), 0.65);

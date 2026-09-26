@@ -12,8 +12,8 @@ interface Key {
 }
 
 const SKY_KEYS: Key[] = [
-  { e: -1.0, zenith: 0x02040b, horizon: 0x070c1a, glow: 0x000000 },
-  { e: -0.3, zenith: 0x030713, horizon: 0x0a1226, glow: 0x000000 },
+  { e: -1.0, zenith: 0x040916, horizon: 0x101a33, glow: 0x000000 },
+  { e: -0.3, zenith: 0x060c1e, horizon: 0x15213f, glow: 0x000000 },
   { e: -0.14, zenith: 0x0a1633, horizon: 0x252b4e, glow: 0x2a1c40 },
   { e: -0.05, zenith: 0x1a2c5a, horizon: 0x7a4c5c, glow: 0xb2442a },
   { e: 0.02, zenith: 0x33548f, horizon: 0xe8905a, glow: 0xff7a30 },
@@ -171,13 +171,13 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   a.fogSun.copy(a.sunGlow).multiplyScalar(0.55 * smoothstep(-0.2, 0.05, e) * (1 - smoothstep(0.35, 0.9, e) * 0.6));
 
   keyColor(SUN_KEYS, (k: { c: number }) => k.c, e, a.sunDisk);
-  const sunI = smoothstep(-0.03, 0.22, e) * 2.9 * (1 - oc * 0.82) * dark;
+  const sunI = smoothstep(-0.03, 0.22, e) * 2.25 * (1 - oc * 0.82) * dark;
   const sunCol = tmpA.copy(a.sunDisk).multiplyScalar(sunI);
   a.sunDisk.multiplyScalar(1 - oc * 0.92);
 
   // ---- lights -------------------------------------------------------------------------------
   const moonE = a.moonDir.y;
-  const moonI = smoothstep(-0.02, 0.2, moonE) * 0.3 * a.moonBright * (1 - oc * 0.7) * dark;
+  const moonI = smoothstep(-0.02, 0.2, moonE) * 0.42 * a.moonBright * (1 - oc * 0.7) * dark;
   const moonCol = tmpB.setRGB(0.55, 0.68, 1.0).multiplyScalar(moonI);
   if (e > -0.035) {
     a.lightIsSun = true;
@@ -196,15 +196,15 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   // ambient: sky dome irradiance
   const dayF = smoothstep(-0.18, 0.3, e);
   a.daylight = clamp(smoothstep(-0.12, 0.25, e) * (1 - 0.45 * oc) * dark, 0, 1);
-  const skyDay = new THREE.Color(0x9cc4f2).multiplyScalar(0.75);
-  const skyNight = new THREE.Color(0x3a4c7c).multiplyScalar(0.16 + 0.1 * a.moonBright);
+  const skyDay = new THREE.Color(0x9cc4f2).multiplyScalar(1.1);
+  const skyNight = new THREE.Color(0x3a4c7c).multiplyScalar(0.22 + 0.14 * a.moonBright);
   a.skyAmbient.copy(skyNight).lerp(skyDay, dayF);
   // warm the ambient during golden hour
   const golden = smoothstep(-0.08, 0.05, e) * (1 - smoothstep(0.08, 0.3, e));
   a.skyAmbient.lerp(new THREE.Color(0xd8a080).multiplyScalar(0.6), golden * 0.35);
   desaturate(a.skyAmbient, oc * 0.6);
   a.skyAmbient.multiplyScalar(lerp(1, 1.12, oc * dayF) * dark);
-  const gDay = new THREE.Color(0x7a6a52).multiplyScalar(0.42);
+  const gDay = new THREE.Color(0x8a7a62).multiplyScalar(0.62);
   const gNight = new THREE.Color(0x141a28).multiplyScalar(0.5);
   a.groundAmbient.copy(gNight).lerp(gDay, dayF).multiplyScalar(dark);
 
@@ -226,7 +226,7 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   // ---- fog -------------------------------------------------------------------------------------
   let far = viewDistance * 0.96;
   let near = viewDistance * 0.5;
-  let density = 0.0022 + oc * 0.003;
+  let density = 0.0011 + oc * 0.003;
   if (kind === 'fog') {
     far = Math.min(far, lerp(140, 40, inten));
     near = 2;

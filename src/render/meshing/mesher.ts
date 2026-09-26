@@ -51,7 +51,7 @@ for (const f of FACES) {
   }
 }
 
-const AO_LEVEL = [95, 150, 205, 255];
+const AO_LEVEL = [112, 158, 206, 255];
 
 /** Reusable per-worker state. */
 export class Mesher {

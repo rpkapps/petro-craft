@@ -222,7 +222,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       const g = gmin(x, z, ra);
       const gc = terrain.ground[idx(x, z)];
       if (gc > 92 || g < 63) continue;
-      const amp = rr(6, 7.5);
+      const amp = rr(8.5, 10);
       const units = rng() < 0.5 ? [U.MID_SAND, U.UPPER_SAND] : [U.UPPER_SAND, U.MID_SAND];
       const u = units.find((k) => hostOk(k, x, z, amp, g, 16));
       if (u === undefined) continue;
@@ -230,8 +230,8 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       addDome(x, z, ra, rb, ang2, amp);
       occ.push({ x, z, r: ra * 1.3 });
       plan.traps.push(newTrap({
-        kind: 'anticline', unit: u, shape: SHAPE.ELLIPSE, cx: x, cz: z, ra: ra * 1.08, rb: rb * 1.08, cos: Math.cos(ang2), sin: Math.sin(ang2),
-        name: unitLetterName(u), charged: true, desiredColumn: rr(5, 6.5), fluidHint: 'oil', quality: 0.6, starter: true,
+        kind: 'anticline', unit: u, shape: SHAPE.ELLIPSE, cx: x, cz: z, ra: ra * 1.3, rb: rb * 1.3, cos: Math.cos(ang2), sin: Math.sin(ang2),
+        name: unitLetterName(u), charged: true, desiredColumn: rr(6, 7.5), fluidHint: 'oil', quality: 0.6, starter: true,
       }));
       break;
     }
@@ -250,7 +250,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
         if (waterDepth(P.x, P.z) > 26) continue;
         const ra = rr(14, 19) * (off ? 1.25 : 1);
         const rb = rr(9, 12.5) * (off ? 1.2 : 1);
-        const amp = rr(5.5, 8) * (off ? 1.15 : 1);
+        const amp = rr(8, 11) * (off ? 1.1 : 1);
         const g = gmin(P.x, P.z, ra);
         const u = shuffled(rng, [U.MID_SAND, U.DEEP_SAND, U.DEEP_SAND, U.UPPER_SAND, U.BASAL_SAND]).find((k) => hostOk(k, P.x, P.z, amp, g));
         if (u === undefined) continue;
@@ -265,8 +265,8 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
         occ.push({ x: cx, z: cz, r: ra * 1.3 });
         const name = off ? uniqueName(`${offNames[offNameIdx++ % offNames.length]} ${offQualifier(u)}`) : unitLetterName(u);
         plan.traps.push(newTrap({
-          kind: 'fault', unit: u, shape: SHAPE.ELLIPSE, cx, cz, ra: ra * 1.1, rb: rb * 1.1, cos: Math.cos(ang), sin: Math.sin(ang), name,
-          desiredColumn: rr(4, 8) * (off ? 1.3 : 1), offshore: off, charged: true, quality: off ? 0.3 : 0,
+          kind: 'fault', unit: u, shape: SHAPE.ELLIPSE, cx, cz, ra: ra * 1.3, rb: rb * 1.3, cos: Math.cos(ang), sin: Math.sin(ang), name,
+          desiredColumn: rr(5, 9) * (off ? 1.3 : 1), offshore: off, charged: true, quality: off ? 0.3 : 0,
         }));
         made++;
         break;
@@ -293,7 +293,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       if (topY < saltTop + 14) continue;
       const d: Diapir = {
         name: domeNames[made % domeNames.length], cx: x, cz: z, r0, rTop: r0 * rr(1.3, 1.6), topY, bulbH: rr(4, 6.5), cap: rng() < 0.5 ? 1 : 2,
-        dragA: rr(5, 7.5), dragW, archA: rr(2.5, 4), phase: rng() * Math.PI * 2, influence: 0,
+        dragA: rr(6.5, 10), dragW, archA: rr(2.5, 4), phase: rng() * Math.PI * 2, influence: 0,
       };
       d.influence = Math.max(d.rTop * 2.3 * 1.9, r0 + 6.5 * dragW);
       const di = plan.diapirs.push(d) - 1;
@@ -313,7 +313,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
         const dirName = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'][Math.round(deg / 45) % 8];
         plan.traps.push(newTrap({
           kind: 'salt_dome', unit: u, shape: SHAPE.SECTOR, cx: x, cz: z, ra: r0 + 4.2 * dragW, wl: 1.2, secMid: Math.atan2(Math.sin(mid), Math.cos(mid)),
-          secHalf: rr(0.95, 1.35), bodyIdx: di, name: uniqueName(`${d.name} ${dirName} Flank`), desiredColumn: rr(4, 8),
+          secHalf: rr(0.95, 1.35), bodyIdx: di, name: uniqueName(`${d.name} ${dirName} Flank`), desiredColumn: rr(5, 9),
           offshore: isOcean(x, z), quality: 0.2, charged: rng() < 0.92,
         }));
       }
@@ -339,7 +339,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       occ.push({ x, z, r: r * 1.4 });
       made++;
       plan.traps.push(newTrap({
-        kind: 'reef', unit: U.LOWER_SHALE, body: BODY.REEF, bodyIdx: ri, shape: SHAPE.CIRCLE, cx: x, cz: z, ra: r * 1.22, brine: false, wl: 1,
+        kind: 'reef', unit: U.LOWER_SHALE, body: BODY.REEF, bodyIdx: ri, shape: SHAPE.CIRCLE, cx: x, cz: z, ra: r * 1.45, brine: false, wl: 1,
         name: uniqueName(rf.name), desiredColumn: rr(3.5, h + 0.5), offshore: off, fluidHint: 'oil', quality: 0.3, charged: rng() < 0.9,
       }));
     }
@@ -393,7 +393,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       const ra = rr(12, 19) * big * (size >= 768 ? 1.08 : 1);
       const rb = ra * rr(0.5, 0.85);
       if (!inside(x, z, ra * 0.9) || !free(x, z, ra * 1.3)) continue;
-      const amp = rr(5, 8.5) * (off ? 1.2 : 1);
+      const amp = rr(8, 12.5) * (off ? 1.15 : 1);
       const g = gmin(x, z, ra);
       const order = shuffled(rng, [U.UPPER_SAND, U.MID_SAND, U.MID_SAND, U.DEEP_SAND, U.DEEP_SAND, U.BASAL_SAND, U.PLATFORM]);
       const u = order.find((k) => hostOk(k, x, z, amp, g, off ? 9 : 11));
@@ -406,9 +406,9 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       const fieldName = off ? offNames[offNameIdx++ % offNames.length] : '';
       const mk = (unit: number, charged: boolean) =>
         newTrap({
-          kind: 'anticline', unit, shape: SHAPE.ELLIPSE, cx: x, cz: z, ra: ra * 1.08, rb: rb * 1.08, cos: Math.cos(ang), sin: Math.sin(ang),
+          kind: 'anticline', unit, shape: SHAPE.ELLIPSE, cx: x, cz: z, ra: ra * 1.3, rb: rb * 1.3, cos: Math.cos(ang), sin: Math.sin(ang),
           brine: unit !== U.PLATFORM, name: off ? uniqueName(`${fieldName} ${offQualifier(unit)}`) : unitLetterName(unit),
-          desiredColumn: rr(3, 8) * (off ? 1.45 : 1), offshore: off, charged, quality: off ? 0.35 : randSym(rng) * 0.4,
+          desiredColumn: rr(4, 9) * (off ? 1.4 : 1), offshore: off, charged, quality: off ? 0.35 : randSym(rng) * 0.4,
         });
       plan.traps.push(mk(u, rng() < 0.84));
       // stacked pay: a deeper reservoir in the same structure

@@ -30,7 +30,7 @@ function syllable(r: Rend, dest: AudioNode, t: number, f0: number, f1: number, d
   o2.connect(g2).connect(dest);
 }
 
-const bird = (dur: number, build: (r: Rend, t: number) => void, variants = 4) => ({ dur, variants, priority: 4, peakDb: -14, build });
+const bird = (dur: number, build: (r: Rend, t: number) => void, variants = 3) => ({ dur, variants, priority: 4, peakDb: -14, build });
 
 export const NATURE_RECIPES: RecipeMap = {
   bird_song: bird(2.2, (r, t) => {

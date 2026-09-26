@@ -71,7 +71,7 @@ export class RenderEngine implements Renderer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO));
-    this.renderer.info.autoReset = true;
+    this.renderer.info.autoReset = false;
 
     const s = ctx.settings;
     this.camera = new THREE.PerspectiveCamera(s.fov, 1, 0.08, 1000);
@@ -211,6 +211,7 @@ export class RenderEngine implements Renderer {
   render() {
     if (this.disposed) return;
     const s = this.ctx.settings;
+    this.renderer.info.reset();
     this.shakeFx.apply(this.camera);
     const pu = this.post.uniforms;
     pu.uTime.value = this.time;
@@ -337,8 +338,8 @@ export class RenderEngine implements Renderer {
     u.uEmissive.value = 2.4 + nightGlow * 1.6;
     u.uCaveAmbient.value.setRGB(0.012, 0.014, 0.02);
     // water tint follows the sky a little (overcast → greyer)
-    u.uWaterShallow.value.setRGB(0.08, 0.36, 0.4).lerp(new THREE.Color(0.2, 0.26, 0.28), a.overcast * 0.6);
-    u.uWaterDeep.value.setRGB(0.015, 0.08, 0.16).lerp(new THREE.Color(0.05, 0.07, 0.09), a.overcast * 0.5);
+    u.uWaterShallow.value.setRGB(0.04, 0.26, 0.32).lerp(new THREE.Color(0.2, 0.26, 0.28), a.overcast * 0.6);
+    u.uWaterDeep.value.setRGB(0.008, 0.05, 0.12).lerp(new THREE.Color(0.05, 0.07, 0.09), a.overcast * 0.5);
 
     const sk = this.sky.uniforms;
     sk.uSunGlow.value.copy(a.sunGlow);

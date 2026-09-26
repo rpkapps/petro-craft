@@ -3,7 +3,7 @@
 import { SoundBank } from '../../src/audio/bank';
 import { RECIPES } from '../../src/audio/recipes';
 import { gainToDb, makeImpulse, peakOf, rmsOf } from '../../src/audio/dsp';
-import { Performer, type Mood, type PerformerKind } from '../../src/audio/music/composer';
+import { Performer, type Mood, type NoteTrace, type PerformerKind } from '../../src/audio/music/composer';
 import { GAME_LEVEL, MENU_LEVEL } from '../../src/audio/music/director';
 
 export interface SoundStat {
@@ -64,7 +64,7 @@ export async function analyzeBank(onProgress?: (p: number) => void): Promise<{ b
   return { bank, stats, totalMs: performance.now() - t0 };
 }
 
-export async function renderMusic(bank: SoundBank, kind: PerformerKind, mood: Mood, tension: number, seconds: number, seed = 7): Promise<{ buffer: AudioBuffer; stat: MusicStat }> {
+export async function renderMusic(bank: SoundBank, kind: PerformerKind, mood: Mood, tension: number, seconds: number, seed = 7, trace?: (e: NoteTrace) => void): Promise<{ buffer: AudioBuffer; stat: MusicStat }> {
   const t0 = performance.now();
   const off = new OfflineAudioContext(2, Math.floor(SR * seconds), SR);
   const conv = off.createConvolver();
@@ -81,6 +81,7 @@ export async function renderMusic(bank: SoundBank, kind: PerformerKind, mood: Mo
   wet.connect(conv);
   const p = new Performer(off, kind, { dry, wet }, (n) => bank.get(n), seed, 0, kind === 'menu' ? MENU_LEVEL : GAME_LEVEL);
   p.setMood(mood, tension);
+  p.trace = trace ?? null;
   p.fade(1, 0.05, 0);
   // Mimic the realtime scheduler: suspend every 0.5 s and schedule 1.4 s ahead, so automation
   // timelines stay short exactly like in the live engine (and render time ≈ realtime CPU cost).
@@ -218,4 +219,36 @@ export function drawSpectrogram(g: CanvasRenderingContext2D, buf: AudioBuffer, x
     }
   }
   g.putImageData(img, x, y);
+}
+
+const TRACE_COLORS: Record<NoteTrace['inst'], string> = { pad: '#3b4f6b', sub: '#6b3b5a', pluck: '#ffb454', bell: '#7bd88f', lead: '#ff6ac1', hit: '#888' };
+
+/** Piano roll of traced notes (MIDI 28..100). */
+export function drawPianoRoll(g: CanvasRenderingContext2D, notes: NoteTrace[], seconds: number, x: number, y: number, w: number, h: number) {
+  const lo = 28, hi = 100;
+  const ny = (m: number) => y + h - ((m - lo) / (hi - lo)) * h;
+  g.fillStyle = '#0d1116';
+  g.fillRect(x, y, w, h);
+  for (let m = lo; m <= hi; m += 12) {
+    g.fillStyle = 'rgba(255,255,255,0.06)';
+    g.fillRect(x, ny(m), w, 1);
+  }
+  const sx = w / seconds;
+  const order: NoteTrace['inst'][] = ['pad', 'sub', 'pluck', 'bell', 'lead'];
+  for (const inst of order) {
+    for (const n of notes) {
+      if (n.inst !== inst) continue;
+      g.fillStyle = TRACE_COLORS[inst];
+      for (const m of n.midi) g.fillRect(x + n.t * sx, ny(m) - 1.5, Math.max(2, n.dur * sx - 1), 3);
+    }
+  }
+  g.fillStyle = '#9aa';
+  g.font = '9px monospace';
+  let last = '';
+  for (const n of notes) {
+    if (n.inst === 'pad' && n.chord && n.chord !== last) {
+      g.fillText(n.chord.replace(/:(triad)$/, ''), x + n.t * sx + 2, y + 9);
+      last = n.chord;
+    }
+  }
 }

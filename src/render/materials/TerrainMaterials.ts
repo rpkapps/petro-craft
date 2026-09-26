@@ -96,9 +96,9 @@ void main() {
     vec3 ambient = mix(uGroundAmbient, uSkyAmbient, 0.85) * skyL + uCaveAmbient;
     vec3 lightC = ambient + uSunColor * max(uSunDir.y, 0.0) * shadow * 0.55 + uBlockLightColor * pow(vBlock, 2.2) * 1.5;
     if (kind == 1.0) {
-      float dd = 1.0 - exp(-depth * 0.3);
-      vec3 body = mix(uWaterShallow, uWaterDeep, dd) * lightC;
-      float alpha = mix(0.3, 0.84, dd);
+      float dd = 1.0 - exp(-depth * 0.35);
+      vec3 body = mix(uWaterShallow, uWaterDeep, dd) * lightC * 0.85;
+      float alpha = mix(0.5, 0.9, dd);
       if (top && gl_FrontFacing) {
         float foamN = vnoise(vWorldPos.xz * 2.3 + vec2(uTime * 0.35, -uTime * 0.2)) + 0.3 * sin(uTime * 1.4 + depth * 2.5 + vWorldPos.x);
         float shore = 1.0 - smoothstep(0.0, 1.4, depth - 1.0);

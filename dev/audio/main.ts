@@ -6,7 +6,8 @@ import type { BiomeId, WeatherKind, Vec3 } from '../../src/core/types';
 import type { GameEvents } from '../../src/core/EventBus';
 import { SEA_LEVEL } from '../../src/core/constants';
 import { createFakeGame } from './fakeGame';
-import { analyzeBank, drawSpectrogram, drawSpectrum, drawWave, renderMusic } from './analysis';
+import { analyzeBank, drawPianoRoll, drawSpectrogram, drawSpectrum, drawWave, renderMusic } from './analysis';
+import type { NoteTrace } from '../../src/audio/music/composer';
 import { SoundBank } from '../../src/audio/bank';
 import type { Mood } from '../../src/audio/music/composer';
 
@@ -136,11 +137,14 @@ slider(r1, 'master', 0, 1, 0.01, vols.m, (v) => { vols.m = v; engine.setVolumes(
 slider(r1, 'music', 0, 1, 0.01, vols.mu, (v) => { vols.mu = v; engine.setVolumes(vols.m, vols.mu, vols.s); });
 slider(r1, 'sfx', 0, 1, 0.01, vols.s, (v) => { vols.s = v; engine.setVolumes(vols.m, vols.mu, vols.s); });
 
-function attach() {
-  if (attached) return;
+/** Attach the fake game; returns true if newly attached (world sounds arm ~0.5 s after 'game:started'). */
+function attach(): boolean {
+  if (attached) return false;
   attached = true;
   engine.menuMusic(false);
   engine.attach(game, host);
+  game.bus.emit('game:started', { isNew: true });
+  return true;
 }
 function detach() {
   if (!attached) return;
@@ -245,7 +249,7 @@ const evRow = group(evSec);
 const evs = eventList();
 for (const k of Object.keys(evs) as (keyof GameEvents)[]) {
   button(evRow, k, async () => {
-    attach();
+    if (attach()) await sleep(700);
     for (const p of eventList()[k] ?? []) {
       game.bus.emit(k, p as never);
       await sleep(k === 'player:footstep' ? 330 : 700);
@@ -419,6 +423,29 @@ async function inspect(names: string[]) {
   return names.length;
 }
 
+/** Offline-render the score and draw piano rolls (pads blue, sub purple, plucks amber, bell green, lead pink). */
+async function pianoRoll(seconds = 90, moods: [string, 'menu' | 'game', Mood, number][] = [['menu', 'menu', 'dusk', 0], ['day', 'game', 'day', 0], ['night', 'game', 'night', 0], ['tension', 'game', 'dusk', 1]]) {
+  const bank = new SoundBank(44100);
+  await bank.prerenderAll((n) => n.startsWith('m_'));
+  const g = canvas.getContext('2d')!;
+  const rowH = 170;
+  canvas.height = moods.length * rowH;
+  g.fillStyle = '#0a0d10';
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  const out = [];
+  for (let i = 0; i < moods.length; i++) {
+    const [label, kind, mood, tension] = moods[i];
+    const notes: NoteTrace[] = [];
+    const { stat } = await renderMusic(bank, kind, mood, tension, seconds, 11 + i, (e) => notes.push(e));
+    drawPianoRoll(g, notes, seconds, 0, i * rowH + 14, canvas.width, rowH - 18);
+    g.fillStyle = '#fff';
+    g.font = '11px monospace';
+    g.fillText(`${label}: ${notes.length} notes, rms ${stat.rmsDb.toFixed(1)} dB`, 4, i * rowH + 11);
+    out.push({ label, notes: notes.length, chords: notes.filter((n) => n.inst === 'pad').map((n) => n.chord).join(' ') });
+  }
+  return out;
+}
+
 // ---- automated run (used by scripts/shot.mjs) ----------------------------------------------------------
 async function waitFor(fn: () => boolean, ms: number) {
   const t0 = performance.now();
@@ -434,7 +461,11 @@ async function runAll() {
     await sleep(30);
   }
   engine.menuMusic(true);
-  await waitFor(() => (engine.bank?.progress ?? 0) >= 1, 20000);
+  let idleFor = 0;
+  await waitFor(() => {
+    idleFor = engine.bank?.idle ? idleFor + 50 : 0;
+    return idleFor >= 400;
+  }, 20000);
   const renderedMs = engine.bank?.stats.reduce((a, s) => a + s.ms, 0) ?? 0;
   for (const n of ONE_SHOT_NAMES) {
     engine.playNamed(n, n.startsWith('sting') ? undefined : near(), 0.3);
@@ -442,6 +473,7 @@ async function runAll() {
   }
   await sleep(600);
   attach();
+  await sleep(700);
   const evsAll = eventList();
   for (const k of Object.keys(evsAll) as (keyof GameEvents)[]) for (const p of evsAll[k] ?? []) game.bus.emit(k, p as never);
   for (let i = 0; i < 6; i++) {
@@ -495,7 +527,7 @@ async function runAll() {
   };
 }
 
-(window as unknown as Record<string, unknown>).audioHarness = { engine, fake, runAll, analyze, inspect, errors };
+(window as unknown as Record<string, unknown>).audioHarness = { engine, fake, runAll, analyze, inspect, pianoRoll, errors };
 if (location.search.includes('analyze')) document.body.classList.add('analyze');
 
 // ---- loop ------------------------------------------------------------------------------------------------

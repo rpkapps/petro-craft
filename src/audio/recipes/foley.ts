@@ -3,7 +3,7 @@ import { creak, vocal } from './common';
 import type { Recipe, RecipeMap } from './types';
 import type { Rend } from '../synth';
 
-const step = (build: (r: Rend, t: number) => void, dur = 0.26): Recipe => ({ dur, variants: 4, priority: 1, peakDb: -20, build });
+const step = (build: (r: Rend, t: number) => void, dur = 0.26): Recipe => ({ dur, variants: 4, priority: 1, peakDb: -20, fullRate: true, build });
 
 const FOOTSTEPS: RecipeMap = {
   footstep_grass: step((r, t) => {

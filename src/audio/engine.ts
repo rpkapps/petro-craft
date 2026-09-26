@@ -82,9 +82,13 @@ export class AudioEngineImpl implements SoundActions {
     this.music = new MusicDirector(this.core, this.bank);
     this.spatial = new SpatialLoops(this.core, this.bank);
     this.env = new EnvironmentAmbience(this.core, this.bank, this.sfx, this.listener);
-    // UI sounds first (they're tiny), then everything else in the background.
+    // UI sounds first (they're tiny), then everything that must play instantly (foley, events, stings,
+    // score hits). Loops & wildlife (priority ≥ 3) render lazily on first use — they fade in anyway —
+    // so memory scales with what a session actually hears.
     const bank = this.bank;
-    void bank.prerenderAll((n) => UI_SOUND_NAMES.includes(n)).then(() => setTimeout(() => void bank.prerenderAll(), 30));
+    void bank
+      .prerenderAll((n) => UI_SOUND_NAMES.includes(n))
+      .then(() => setTimeout(() => void bank.prerenderAll((n) => (bank.recipes[n].priority ?? 2) <= 2), 30));
     this.music.setMode(this.game ? 'game' : this.wantMenu ? 'menu' : 'off');
   }
 

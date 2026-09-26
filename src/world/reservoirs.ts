@@ -14,8 +14,12 @@ const M3_PER_VOXEL = 40 * 40 * 40;
 const BBL_PER_M3 = 6.2898;
 const SCF_PER_M3 = 35.3147;
 /** Gameplay volume scaling applied on top of the volumetric estimate. */
-const VOL_SCALE = 1.0;
-const PLAY_SCALE = 0.8;
+const VOL_SCALE = 1.3;
+/** Offshore reservoirs are richer (thicker, cleaner turbidite/deltaic sands). */
+const OFFSHORE_SCALE = 1.5;
+const PLAY_SCALE = 0.7;
+/** Compartments smaller than this (voxels) are left uncharged (no sliver reservoirs). */
+const MIN_VOXELS = 40;
 const NM = 16;
 
 interface Stats {
@@ -119,8 +123,10 @@ export function finalizeReservoirs(geo: Geology): void {
       let o: number;
       if (isPlay) o = minY[m];
       else {
+        if (crest[m] < 8) continue;
         o = crest[m] - Math.max(2, Math.round(t.desiredColumn)) + 1;
         if (spill[m] >= 0) o = Math.max(o, spill[m] + 1);
+        o = Math.max(o, minY[m]);
         if (crest[m] - o + 1 < 2) continue;
       }
       owc[m] = o;
@@ -168,7 +174,7 @@ export function finalizeReservoirs(geo: Geology): void {
 
     // ---------- reservoirs per compartment ----------
     const made: { m: number; s: Stats }[] = [];
-    for (const m of charged) if (hc[m].count >= 8) made.push({ m, s: hc[m] });
+    for (const m of charged) if (hc[m].count >= MIN_VOXELS) made.push({ m, s: hc[m] });
     if (!made.length) continue;
     let mx = 0;
     let mz = 0;
@@ -287,7 +293,7 @@ function buildReservoir(geo: Geology, rng: () => number, t: TrapModel, a: BuildA
   const tF = temperature * 1.8 + 32;
   const bg = (0.02827 * 0.9 * (tF + 460)) / Math.max(500, initialPressure + 14.7); // rcf/scf
   const bo = 1.03 + 0.00048 * gor;
-  const scale = VOL_SCALE * (a.isPlay ? PLAY_SCALE : 1);
+  const scale = VOL_SCALE * (a.isPlay ? PLAY_SCALE : 1) * (offshore ? OFFSHORE_SCALE : 1);
   const vGas = s.gas * M3_PER_VOXEL;
   const vOil = (s.count - s.gas) * M3_PER_VOXEL;
   let oilInPlace: number;

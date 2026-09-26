@@ -55,6 +55,12 @@ export class FakeGeology implements IGeology {
         initialPressure: 5100, temperature: 105, bubblePoint: 2600, apiGravity: 42, gasOilRatio: 900, h2s: 0, co2: 0,
         oilInPlace: 900_000_000, gasInPlace: 810_000_000, waterDrive: 0.05, gasCap: false, owcY: 19,
       },
+      {
+        id: 'r_marlin', name: 'Marlin Sand', fluid: 'oil', trap: 'anticline', lithology: 'sandstone', center: { x: 240, y: 32, z: 128 }, radiusX: 12, radiusZ: 20,
+        topY: 34, bottomY: 30, compartment: 3, offshore: true, porosity: 0.24, permeability: 300, netToGross: 0.8, waterSaturation: 0.22,
+        initialPressure: 2050, temperature: 65, bubblePoint: 1800, apiGravity: 33, gasOilRatio: 450, h2s: 0, co2: 0,
+        oilInPlace: 2_500_000, gasInPlace: 1_100_000, waterDrive: 0.05, gasCap: false, owcY: 30,
+      },
     ];
     this.aquifers = [
       { id: 'aq1', center: { x: 128, y: 72, z: 128 }, radiusX: 140, radiusZ: 140, topY: 74, bottomY: 70, salinity: 500, fresh: true },
@@ -62,7 +68,7 @@ export class FakeGeology implements IGeology {
   }
 
   surfaceHeight(x: number, z: number): number {
-    if (this.isOffshore(x, z)) return 48;
+    if (this.isOffshore(x, z)) return 52;
     return 80 + Math.round(Math.sin(x * 0.05) * 1.2 + Math.cos(z * 0.04) * 1.2);
   }
   waterDepth(x: number, z: number): number {
@@ -100,9 +106,10 @@ export class FakeGeology implements IGeology {
     if (y < 20) return 'granite';
     if (y <= 24) return 'shale';
     if (y <= 29) return 'mudstone';
-    if (y <= 36) return y >= 32 && y <= 35 && Math.hypot(x - 170, z - 64) < 26 ? 'sandstone' : 'shale';
+    if (y <= 36) return (y >= 32 && y <= 35 && Math.hypot(x - 170, z - 64) < 26) || (y >= 30 && y <= 34 && x >= 224) ? 'sandstone' : 'shale';
     if (y <= 39) return 'shale';
     if (y <= 45) return 'sandstone';
+    if (x >= 224 && y >= 46 && y <= 51) return 'clay';
     if (y <= 49) return 'caprock';
     if (y <= 54) return 'limestone';
     if (y <= 69) return 'shale';

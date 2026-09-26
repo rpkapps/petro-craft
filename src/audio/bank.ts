@@ -5,7 +5,8 @@ import { RECIPES, type Recipe } from './recipes';
 import { dbToGain, fadeEdges, hashString, makeBuffer, makeSeamless, mulberry32, peakOf, rmsOf } from './dsp';
 import { Rend } from './synth';
 
-const LOW_RATE = 24000;
+const LOW_RATE = 22050;
+const DEFAULT_RATE = 32000;
 const CONCURRENCY = 3;
 
 export interface RenderStats {
@@ -94,6 +95,11 @@ export class SoundBank {
     });
   }
 
+  /** True when no background rendering is queued or running. */
+  get idle(): boolean {
+    return this.queue.length === 0 && this.active === 0 && this.pending.size === 0;
+  }
+
   get progress(): number {
     const total = Object.keys(this.recipes).length;
     return total ? this.buffers.size / total : 1;
@@ -114,7 +120,7 @@ export class SoundBank {
 
   private async renderOne(name: string, recipe: Recipe, variant: number): Promise<AudioBuffer> {
     const t0 = performance.now();
-    const sr = recipe.lowRate ? Math.min(LOW_RATE, this.sampleRate) : this.sampleRate;
+    const sr = Math.min(this.sampleRate, recipe.lowRate ? LOW_RATE : recipe.fullRate ? this.sampleRate : DEFAULT_RATE);
     const channels = recipe.channels ?? 1;
     const length = Math.max(1, Math.ceil(recipe.dur * sr));
     const off = new OfflineAudioContext(channels, length, sr);

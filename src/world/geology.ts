@@ -103,7 +103,7 @@ export class Geology implements IGeology {
     this.sumThrow = this.faultModels.reduce((s, f) => s + f.throw, 0);
     this.dikes = planDikes(this.seed, size);
 
-    const baseGrid = buildHorizonGrid(this.seed, this.terrain, this.salt, { domes: [], reefs: [], wedges: [], plays: [], opZones: [] });
+    const baseGrid = buildHorizonGrid(this.seed, this.terrain, this.salt, { domes: [], reefs: [], wedges: [], plays: [], opZones: [] }, this.faultModels);
     const plan = planFeatures(this.seed, this.terrain, baseGrid, this.salt, this.faultModels, this.unitNames);
     this.diapirs = plan.diapirs;
     this.domes = plan.domes;
@@ -115,7 +115,7 @@ export class Geology implements IGeology {
     this.aqModels = plan.aquifers;
     const t2 = performance.now();
 
-    this.grid = buildHorizonGrid(this.seed, this.terrain, this.salt, plan);
+    this.grid = buildHorizonGrid(this.seed, this.terrain, this.salt, plan, this.faultModels);
     const t3 = performance.now();
 
     // spatial index
@@ -328,7 +328,7 @@ export class Geology implements IGeology {
     switch (t.shape) {
       case SHAPE.ELLIPSE: {
         const q = ellipseQ(t.cx, t.cz, t.ra, t.rb, t.cos, t.sin, fx, fz);
-        if (q <= 1) return RC.HC | RC.WATER_LEG | (q >= 0.74 ? RC.RING : 0);
+        if (q <= 1) return RC.HC | RC.WATER_LEG | (q >= 0.64 ? RC.RING : 0);
         return q <= t.wl * t.wl ? RC.WATER_LEG : 0;
       }
       case SHAPE.SECTOR: {
@@ -351,7 +351,7 @@ export class Geology implements IGeology {
         const dz = fz - t.cz;
         const r = Math.sqrt(dx * dx + dz * dz);
         if (r > t.ra) return 0;
-        return RC.HC | (r >= 0.8 * t.ra ? RC.RING : 0);
+        return RC.HC | (r >= 0.85 * t.ra ? RC.RING : 0);
       }
     }
   }

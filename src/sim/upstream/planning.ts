@@ -114,6 +114,26 @@ export function sectionMudWeight(profile: PressurePoint[], topY: number, bottomY
   return Math.ceil(clamp(m, MUD_MIN_PPG, MUD_MAX_PPG) * 10 - 1e-6) / 10;
 }
 
+/** Mud program: per casing section (top y = shoe above it) the planned mud weight. The last section uses plan.mudWeight. */
+export function mudProgram(profile: PressurePoint[], surfaceY: number, plan: WellPlan): { y: number; ppg: number }[] {
+  const tops = [surfaceY, ...plan.casingPoints.filter((c) => c > plan.targetY && c < surfaceY)];
+  const out: { y: number; ppg: number }[] = [];
+  for (let i = 0; i < tops.length; i++) {
+    const top = tops[i];
+    const bottom = i + 1 < tops.length ? tops[i + 1] : plan.targetY;
+    const last = i === tops.length - 1;
+    out.push({ y: top, ppg: last ? plan.mudWeight : Math.min(plan.mudWeight, sectionMudWeight(profile, top, bottom)) });
+  }
+  return out;
+}
+
+/** Mud weight of the program at depth y. */
+export function mudAt(program: { y: number; ppg: number }[], y: number, fallback: number): number {
+  let ppg = fallback;
+  for (const s of program) if (y <= s.y) ppg = s.ppg;
+  return ppg;
+}
+
 /** Default plan: surface casing below the deepest fresh aquifer, intermediate above overpressure, production at TD. */
 export function suggestPlan(ctx: GameContext, rt: UpstreamRuntime, x: number, z: number, targetY: number, kind: WellPlan['kind']): WellPlan {
   const surfaceY = wellSurfaceY(ctx, x, z);
@@ -236,7 +256,7 @@ export function quoteWell(ctx: GameContext, rt: UpstreamRuntime, x: number, z: n
   const byY = new Map(profile.map((p) => [p.y, p]));
   let overWarned = false;
   let lossWarned = false;
-  const shoes = [surfaceY, ...plan.casingPoints];
+  const program = mudProgram(profile, surfaceY, plan);
   for (let i = 0; i < pts.length - 1; i++) {
     const p = pts[i + 1];
     const bx = Math.floor(p.x);
@@ -244,26 +264,25 @@ export function quoteWell(ctx: GameContext, rt: UpstreamRuntime, x: number, z: n
     const bz = Math.floor(p.z);
     const pr = ctx.geology.properties(bx, by, bz);
     const h = Math.max(0.3, pr.hardness);
+    const mw = mudAt(program, by, plan.mudWeight);
     hours += 1 / ((spec.rop * speed) / Math.pow(h, 0.8));
-    wear += (100 / (bitLife / Math.pow(h, 1.2)));
+    wear += 100 / (bitLife / Math.pow(h, 1.2));
     if (wear > 90) {
       bits++;
       wear = 0;
-      hours += 1 + (surfaceY - by) * spec.tripHoursPerBlock;
+      hours += 1 + (surfaceY - by) * spec.tripHoursPerBlock * 2;
     }
     pipe += PIPE_WEAR_PER_BLOCK * h;
-    barite += Math.max(0, plan.mudWeight - 9.5) * BARITE_PER_BLOCK_PER_PPG;
+    barite += Math.max(0, mw - 9.5) * BARITE_PER_BLOCK_PER_PPG;
     const pp = byY.get(by);
-    if (pp && !overWarned && pp.pore > plan.mudWeight) {
+    if (!pp || surfaceY - by < 4) continue;
+    if (!overWarned && pp.pore > mw - 0.1) {
       overWarned = true;
-      warnings.push(`Predicted pore pressure ${pp.pore.toFixed(1)} ppg at ${depthM(surfaceY, by)} m exceeds the ${plan.mudWeight.toFixed(1)} ppg mud — kick risk.`);
+      warnings.push(`Predicted pore pressure ${pp.pore.toFixed(1)} ppg at ${depthM(surfaceY, by)} m vs ${mw.toFixed(1)} ppg mud — kick risk.`);
     }
-    if (pp && !lossWarned && pp.frac < plan.mudWeight) {
-      const shoe = shoes.filter((s) => s >= by).reduce((a, b) => Math.min(a, b), surfaceY);
-      if (shoe > by) {
-        lossWarned = true;
-        warnings.push(`Mud weight exceeds the fracture gradient (${pp.frac.toFixed(1)} ppg) at ${depthM(surfaceY, by)} m — lost circulation risk. Add intermediate casing.`);
-      }
+    if (!lossWarned && pp.frac < mw) {
+      lossWarned = true;
+      warnings.push(`Mud (${mw.toFixed(1)} ppg) exceeds the fracture gradient (${pp.frac.toFixed(1)} ppg) at ${depthM(surfaceY, by)} m — lost circulation risk. Set casing above it.`);
     }
   }
   if (pressureConfidence(ctx, x, z, plan.targetY) < 0.99) warnings.push('Pore-pressure prediction is uncertain here (no seismic or offset wells) — add a safety margin to the mud weight or shoot seismic first.');
@@ -273,11 +292,14 @@ export function quoteWell(ctx: GameContext, rt: UpstreamRuntime, x: number, z: n
   }
   // Casing
   let casingBlocks = 0;
+  let prev = surfaceY;
   for (const cp of plan.casingPoints) {
-    casingBlocks += surfaceY - cp;
-    hours += CASING_HOURS_BASE + CASING_HOURS_PER_BLOCK * (surfaceY - cp);
+    const len = prev === surfaceY ? surfaceY - cp : prev - cp + 1;
+    casingBlocks += len;
+    hours += CASING_HOURS_BASE + CASING_HOURS_PER_BLOCK * len;
+    prev = cp;
   }
-  if (plan.kind === 'horizontal') casingBlocks += design.lateral;
+  if (plan.kind !== 'vertical' && plan.casingPoints.length) casingBlocks += design.lateral + design.curve * 0.3;
   const casingCost = estimateSupplyCost(ctx, 'casing', casingBlocks * CASING_JOINTS_PER_BLOCK) + estimateSupplyCost(ctx, 'cement', casingBlocks * CEMENT_SACKS_PER_BLOCK * 0.5);
   const mudBbl = MUD_INITIAL + length * MUD_PER_BLOCK + hours * MUD_PER_HOUR;
   const consumables =

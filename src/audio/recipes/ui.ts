@@ -5,7 +5,7 @@ import type { RecipeMap } from './types';
 
 export const UI_RECIPES: RecipeMap = {
   click: {
-    dur: 0.12, priority: 0, peakDb: -22, variants: 2,
+    dur: 0.12, priority: 0, fullRate: true, peakDb: -22, variants: 2,
     build(r, t) {
       const o = r.out;
       r.partial(o, t, r.r(1750, 1900), 0.5, 0.035, { drop: 0.72, dropTime: 0.03 });
@@ -15,7 +15,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   hover: {
-    dur: 0.07, priority: 0, peakDb: -36,
+    dur: 0.07, priority: 0, fullRate: true, peakDb: -36,
     build(r, t) {
       const o = r.out;
       r.partial(o, t, 2640, 0.4, 0.028, { attack: 0.004 });
@@ -23,7 +23,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   open: {
-    dur: 0.5, priority: 0, peakDb: -21,
+    dur: 0.5, priority: 0, fullRate: true, peakDb: -21,
     build(r, t) {
       const o = r.out;
       r.burst(o, t, 0.16, 0.35, { color: 'pink', type: 'bandpass', freq: 500, sweepTo: 3200, q: 1.1, attack: 0.06 });
@@ -38,7 +38,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   close: {
-    dur: 0.45, priority: 0, peakDb: -22,
+    dur: 0.45, priority: 0, fullRate: true, peakDb: -22,
     build(r, t) {
       const o = r.out;
       r.burst(o, t, 0.14, 0.3, { color: 'pink', type: 'bandpass', freq: 2600, sweepTo: 450, q: 1.1, attack: 0.03 });
@@ -53,7 +53,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   error: {
-    dur: 0.5, priority: 0, peakDb: -18,
+    dur: 0.5, priority: 0, fullRate: true, peakDb: -18,
     build(r, t) {
       const o = r.out;
       const lp = r.filter('lowpass', 1300, 0.8);
@@ -68,7 +68,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   success: {
-    dur: 1.3, priority: 0, peakDb: -16, channels: 2,
+    dur: 1.3, priority: 0, fullRate: true, peakDb: -16, channels: 2,
     build(r, t) {
       const notes = [84, 88, 91];
       notes.forEach((m, i) => {
@@ -82,7 +82,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   cash: {
-    dur: 1.7, priority: 0, peakDb: -13, channels: 2,
+    dur: 1.7, priority: 0, fullRate: true, peakDb: -13, channels: 2,
     build(r, t) {
       const o = r.out;
       // "cha": drawer slam & mechanism
@@ -105,7 +105,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   notify: {
-    dur: 1.9, priority: 0, peakDb: -17, channels: 2,
+    dur: 1.9, priority: 0, fullRate: true, peakDb: -17, channels: 2,
     build(r, t) {
       const a = r.pan(-0.2);
       const b = r.pan(0.2);
@@ -116,7 +116,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   warn: {
-    dur: 1.2, priority: 0, peakDb: -16, channels: 2,
+    dur: 1.2, priority: 0, fullRate: true, peakDb: -16, channels: 2,
     build(r, t) {
       const lp = r.filter('lowpass', 2600, 0.7);
       lp.connect(r.out);
@@ -130,7 +130,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   danger: {
-    dur: 1.1, priority: 0, peakDb: -14, channels: 2,
+    dur: 1.1, priority: 0, fullRate: true, peakDb: -14, channels: 2,
     build(r, t) {
       const lp = r.filter('lowpass', 3000, 0.8);
       lp.connect(r.out);
@@ -150,7 +150,7 @@ export const UI_RECIPES: RecipeMap = {
   },
   alarm: {
     // Industrial klaxon: two buzzy blasts with a formant horn body.
-    dur: 1.35, priority: 0, peakDb: -12,
+    dur: 1.35, priority: 0, fullRate: true, peakDb: -12,
     build(r, t) {
       const o = r.out;
       for (const tb of [0, 0.62]) {
@@ -175,7 +175,7 @@ export const UI_RECIPES: RecipeMap = {
     },
   },
   saved: {
-    dur: 0.6, priority: 0, peakDb: -26,
+    dur: 0.6, priority: 0, fullRate: true, peakDb: -26,
     build(r, t) {
       const o = r.out;
       r.partial(o, t, mtof(76), 0.3, 0.25, { attack: 0.01 });

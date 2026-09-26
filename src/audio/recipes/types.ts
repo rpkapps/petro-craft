@@ -17,8 +17,10 @@ export interface Recipe {
   loop?: number;
   /** Target RMS for loops (dBFS). Default −20. */
   rmsDb?: number;
-  /** Render at a reduced rate (24 kHz) for low-frequency material — halves memory & render cost. */
+  /** Render at 22.05 kHz for low-frequency material (rumbles, engines, beds). */
   lowRate?: boolean;
+  /** Render at the context rate (crisp UI / foley transients). Default is 32 kHz, which keeps memory low. */
+  fullRate?: boolean;
   /** Render order: lower first. UI 0, foley 1, events 2, music 2, loops 3, nature 4. */
   priority?: number;
   build(r: Rend, t: number, variant: number): void;

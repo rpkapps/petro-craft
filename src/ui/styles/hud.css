@@ -249,8 +249,8 @@
 .pc-root .ms-xray .ic { color: var(--teal); }
 
 /* ---- scanner card ------------------------------------------------------------------------------ */
-.pc-root .pc-scan { position: absolute; left: 0.6rem; bottom: 1rem; width: 17.5rem; padding: 0.6rem 0.75rem; border-radius: var(--r-lg); opacity: 0; transform: translateX(-1rem); transition: opacity 0.25s, transform 0.25s var(--ease-out); overflow: hidden; border-color: rgba(42, 208, 224, 0.5); }
-.pc-root .pc-scan.show { opacity: 1; transform: none; }
+.pc-root .pc-scan { position: absolute; left: 0.6rem; bottom: 1rem; width: 17.5rem; padding: 0.6rem 0.75rem; border-radius: var(--r-lg); opacity: 0; visibility: hidden; transform: translateX(-1rem); transition: opacity 0.25s, transform 0.25s var(--ease-out), visibility 0.25s; overflow: hidden; border-color: rgba(42, 208, 224, 0.5); }
+.pc-root .pc-scan.show { opacity: 1; transform: none; visibility: visible; }
 .pc-root .pc-scan.warning { border-color: rgba(255, 194, 51, 0.6); }
 .pc-root .pc-scan.danger { border-color: rgba(255, 77, 79, 0.7); box-shadow: 0 0 1.5rem rgba(255, 77, 79, 0.3); }
 .pc-root .sc-head { display: flex; align-items: center; gap: 0.45rem; font-family: var(--f-head); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.9rem; color: var(--teal); }

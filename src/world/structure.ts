@@ -313,7 +313,22 @@ export class HorizonGrid {
 }
 
 /** Builds the horizon grid for the given structural features (domes/reefs/wedges/plays/OP zones). */
-export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin, feats: StructuralFeatures): HorizonGrid {
+/**
+ * Regional compensation for down-to-basin fault displacement: far from a fault the hanging-wall block is
+ * raised back by the throw (growth-fault thickening), so the stack stays within the world's vertical range
+ * while the local offset AT each fault remains the full throw.
+ */
+export function faultCompensation(faults: readonly FaultModel[], x: number, z: number): number {
+  let comp = 0;
+  for (const f of faults) {
+    const s = f.nx * (x - f.px) + f.nz * (z - f.pz);
+    const sPlane = (f.dipSign * (REF_Y - 32)) / f.tanDip;
+    comp += f.throw * smoothstep(-70, 70, f.dipSign * (s - sPlane));
+  }
+  return comp;
+}
+
+export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin, feats: StructuralFeatures, faults: readonly FaultModel[]): HorizonGrid {
   const size = terrain.size;
   const grid = new HorizonGrid(size);
   const nB = noise2(seed, 310);
@@ -334,7 +349,7 @@ export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin
       terrain.coast(x, z, cs);
       const o = cs.o;
       const shelfT = smoothstep(-24, bandW * 0.9, o);
-      const base = lerp(9.6, 4.4, shelfT) + 1.4 * nB(x / 130, z / 130);
+      const base = lerp(9.0, 4.6, shelfT) + 1.4 * nB(x / 130, z / 130);
       const seabed = o > 0 ? SEA_LEVEL + 0.5 - Terrain.profileDepth(o, cs.frac) : 200;
       const ow = clamp(1 + o / (size * 0.55), 0, 1);
       const c = o > 0 ? clamp((seabed + 8 - base) / STACK_NOMINAL, 0.36, 1.06) : lerp(1.0, 1.05, ow);
@@ -352,7 +367,9 @@ export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin
         if (rho < 1.4) reefDrape = Math.max(reefDrape, reefMound(rf, x, z) + 1.2 * smoothstep(1.35, 0.95, rho));
       }
 
-      let cum = base + fold + domes;
+      let datum = base + fold + faultCompensation(faults, x, z);
+      if (datum < 4.5) datum = 4.5 - (4.5 - datum) * 0.25; // keep the stack off the bedrock floor
+      let cum = datum + domes;
       const hb = node * H;
       grid.hz[hb] = cum;
       for (let u = 1; u < H; u++) {

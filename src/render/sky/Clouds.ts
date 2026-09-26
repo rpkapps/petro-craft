@@ -126,7 +126,7 @@ export class Clouds {
     this.threshold += (target - this.threshold) * Math.min(1, dt * 0.5);
     this.shared.uCloudThreshold.value = this.threshold;
     this.shared.uCloudShadow.value = enabled ? 0.55 : 0;
-    this.group.visible = enabled;
+    this.group.visible = enabled && this.shared.uXray.value < 0.5;
     if (!enabled) return;
     this.group.position.set(this.drift.x, HEIGHT, this.drift.y);
     const cx = Math.floor((camera.position.x - this.drift.x) / CELL);

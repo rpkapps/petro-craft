@@ -6,11 +6,11 @@ import { crewFactor, isOperational } from '../../core/buildingUtil';
 import type { BuildingState, CasingString, GameContext, Reservoir, RockProperties, Vec3, WellLogSample, WellState } from '../../core/types';
 import type { UpstreamRuntime } from './runtime';
 import { inclinationAt, pathLength, posAtMd } from './trajectory';
-import { currentPorePsi, pressureProfile, sectionMudWeight } from './planning';
+import { currentPorePsi, mudProgram, pressureProfile } from './planning';
 import {
   BARITE_PER_BLOCK_PER_PPG, BIT_LIFE_BLOCKS, BIT_TRIP_THRESHOLD, CASING_HOURS_BASE, CASING_HOURS_PER_BLOCK, CASING_JOINTS_PER_BLOCK,
   CEMENT_SACKS_PER_BLOCK, LOST_CIRC_MUD_PER_HOUR, MUD_MAX_PPG, MUD_MIN_PPG, MUD_PER_BLOCK, MUD_PER_HOUR, PIPE_WEAR_PER_BLOCK, RIG_SPECS,
-  STANDBY_SPREAD, AQUIFER_FINE,
+  STANDBY_SPREAD, AQUIFER_FINE, LATERAL_WEIGHT_CONV, LATERAL_WEIGHT_TIGHT,
 } from './tuning';
 import { accrue, setWellStatus, ux, type WellExt, rx, wellPos } from './wellData';
 import { clamp, consumeSupply, depthM, fmtMoney, fmtVol, hazardsEnabled, psiToPpg, setUpstreamBuildingStatus, severeWeather, tvdFt } from './util';
@@ -37,17 +37,7 @@ export function rigEfficiency(ctx: GameContext, rig: BuildingState | undefined):
 
 /** Build the mud program (per casing section) at spud from the player's pressure knowledge. */
 export function buildMudProgram(ctx: GameContext, w: WellState): { y: number; ppg: number }[] {
-  const profile = pressureProfile(ctx, w.x, w.z);
-  const tops = [w.surfaceY, ...w.plan.casingPoints.filter((c) => c > w.plan.targetY)];
-  const out: { y: number; ppg: number }[] = [];
-  for (let i = 0; i < tops.length; i++) {
-    const top = tops[i];
-    const bottom = i + 1 < tops.length ? tops[i + 1] : w.plan.targetY;
-    const last = i === tops.length - 1;
-    const need = sectionMudWeight(profile, top, bottom);
-    out.push({ y: top, ppg: last ? w.plan.mudWeight : Math.min(w.plan.mudWeight, need) });
-  }
-  return out;
+  return mudProgram(pressureProfile(ctx, w.x, w.z), w.surfaceY, w.plan);
 }
 
 function sectionPpg(e: WellExt, y: number, fallback: number): number {
@@ -72,13 +62,16 @@ export function startCasing(ctx: GameContext, rt: UpstreamRuntime, w: WellState,
   const e = ux(w);
   const hasSurface = w.casing.some((c) => c.name === 'surface');
   const name: CasingString['name'] = atTD ? 'production' : !hasSurface ? 'surface' : 'intermediate';
-  const length = w.measuredDepth; // string runs from surface to the shoe
-  const newHole = Math.max(1, w.measuredDepth - mdAtY(rt, w, shoeY(w)));
+  // The surface string runs to surface; deeper strings are liners hung just inside the previous shoe.
+  const prevShoe = shoeY(w);
+  const newHole = Math.max(1, w.measuredDepth - mdAtY(rt, w, prevShoe));
+  const length = hasSurface ? newHole + 1 : w.measuredDepth;
+  const topY = hasSurface ? Math.min(w.surfaceY - 1, prevShoe + 1) : w.surfaceY - 1;
   consumeSupply(ctx, 'casing', length * CASING_JOINTS_PER_BLOCK, w);
   consumeSupply(ctx, 'cement', (newHole + 1) * CEMENT_SACKS_PER_BLOCK, w);
   const hours = CASING_HOURS_BASE + CASING_HOURS_PER_BLOCK * length;
   const label = `Running & cementing ${name} casing`;
-  e.op = { kind: 'casing', label, hoursLeft: hours, hoursTotal: hours, casingName: name, casingY: y, casingTopY: w.surfaceY - 1 };
+  e.op = { kind: 'casing', label, hoursLeft: hours, hoursTotal: hours, casingName: name, casingY: y, casingTopY: topY };
   setWellStatus(ctx, w, 'casing');
 }
 
@@ -300,7 +293,7 @@ function processBlocks(ctx: GameContext, rt: UpstreamRuntime, w: WellState, pts:
           c.hc++;
           const dv = Math.abs(a.y - b.y);
           const dh = Math.hypot(a.x - b.x, a.z - b.z);
-          c.hEff += dv + 0.3 * dh;
+          c.hEff += dv + (R.trap === 'shale_play' || R.permeability < 1 ? LATERAL_WEIGHT_TIGHT : LATERAL_WEIGHT_CONV) * dh;
           c.minY = Math.min(c.minY, my);
           c.maxY = Math.max(c.maxY, my);
           if (!w.penetrated.includes(R.id)) penetrate(ctx, w, R, my);
@@ -336,7 +329,7 @@ function penetrate(ctx: GameContext, w: WellState, R: Reservoir, y: number): voi
     const thick = Math.max(1, R.topY - R.bottomY) * 40 * R.netToGross;
     const sour = R.h2s > 0.01 ? ' Warning: sour gas (H₂S) — production needs chemicals.' : '';
     const tight = R.permeability < 1 ? ' Tight rock: plan horizontal wells and hydraulic fracturing.' : '';
-    ctx.notify('success', `Discovery! ${w.name} hit ${R.name}`, `${R.fluid === 'oil' ? 'Oil' : R.fluid === 'gas' ? 'Gas' : 'Gas-condensate'} shows at ${depthM(w.surfaceY, y)} m. Estimated ${vol}, gross interval ~${Math.round(thick)} m net.${tight}${sour}`, wellPos(w));
+    ctx.notify('success', `Discovery! ${w.name} hit ${R.name}`, `${R.fluid === 'oil' ? 'Oil' : R.fluid === 'gas' ? 'Gas' : 'Gas-condensate'} shows at ${depthM(w.surfaceY, y)} m. Estimated ${vol}, ~${Math.round(thick)} m of net reservoir.${tight}${sour}`, wellPos(w));
   } else {
     ctx.notify('info', `${w.name} entered ${R.name}`, `${R.fluid === 'oil' ? 'Oil' : 'Gas'} pay at ${depthM(w.surfaceY, y)} m.`, wellPos(w));
   }
@@ -360,7 +353,8 @@ function checkAquifers(ctx: GameContext, rt: UpstreamRuntime, w: WellState): voi
   const e = ux(w);
   if (e.contaminated || !hazardsEnabled(ctx)) return;
   for (const a of rt.freshAquifersAt(w.x, w.z)) {
-    if (w.currentY < a.bottomY - 2 && !casingCovers(w, a.bottomY)) {
+    // Exposure becomes contamination once the hole is well below the aquifer (or into pressured pay) uncased.
+    if ((w.currentY < a.bottomY - 10 || w.penetrated.length > 0) && w.currentY < a.bottomY && !casingCovers(w, a.bottomY)) {
       e.contaminated = true;
       const env = ctx.state.environment;
       env.score = Math.max(0, env.score - 10);

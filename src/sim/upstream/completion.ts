@@ -51,7 +51,10 @@ function finishComplete(ctx: GameContext, rt: UpstreamRuntime, w: WellState, op:
   for (const id of ids) {
     const c = e.res[id];
     const s = ctx.state.reservoirs[id];
-    if (c && s) c.pL = s.pressure;
+    if (c && s) {
+      c.pL = s.pressure;
+      c.srvDay = ctx.state.time.day;
+    }
   }
   if (op.casingY !== undefined) w.casing.push({ name: 'liner', topY: shoeY(w) + 1, bottomY: op.casingY, cemented: true });
   // Completion quality (skin) varies a little from job to job.
@@ -166,7 +169,10 @@ function finishFrac(ctx: GameContext, rt: UpstreamRuntime, w: WellState, op: Wel
   for (const id of w.completedReservoirs) {
     const c = e.res[id];
     const s = ctx.state.reservoirs[id];
-    if (c && s) c.pL += 0.6 * (s.pressure - c.pL);
+    if (c && s) {
+      c.pL += 0.6 * (s.pressure - c.pL);
+      c.srvDay = ctx.state.time.day;
+    }
   }
   const spread = op.spreadId ? ctx.state.buildings[op.spreadId] : undefined;
   if (spread) {

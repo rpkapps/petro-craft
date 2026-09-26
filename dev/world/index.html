@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PetroCraft · World Viewer</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; background: #14161a; color: #d8dce2; font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      header { display: flex; gap: 10px; align-items: center; padding: 6px 10px; background: #1d2026; border-bottom: 1px solid #2c3038; }
+      header b { color: #ff8a1f; letter-spacing: .04em; }
+      header input, header select, header button { background: #262a31; color: inherit; border: 1px solid #3a3f48; border-radius: 3px; padding: 2px 6px; font: inherit; }
+      header button { cursor: pointer; }
+      #stats { margin-left: auto; color: #9aa3ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      main { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 8px; padding: 8px; }
+      canvas { image-rendering: pixelated; background: #0b0c0e; display: block; }
+      .panel { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+      .cap { color: #8a929c; }
+      #list { max-height: 250px; max-width: 100%; overflow: auto; border-top: 1px solid #2c3038; padding-top: 4px; }
+      #list div { white-space: nowrap; }
+      .oil { color: #d8a45c; } .gas { color: #9fd0e6; } .condensate { color: #c8e090; }
+      .legend span { display: inline-block; margin-right: 10px; }
+      .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 3px; vertical-align: -1px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <b>PETROCRAFT WORLD VIEWER</b>
+      seed <input id="seed" size="8" />
+      <select id="size"><option>small</option><option selected>medium</option><option>large</option></select>
+      <button id="go">Generate</button>
+      <span class="cap">click map twice to set section line</span>
+      <span id="stats"></span>
+    </header>
+    <main>
+      <div class="panel">
+        <canvas id="map"></canvas>
+        <div class="legend" id="legend"></div>
+        <div id="list"></div>
+      </div>
+      <div class="panel">
+        <div class="cap" id="secCap"></div>
+        <canvas id="section"></canvas>
+        <div class="cap">Synthetic seismic (reflectivity ⊛ Ricker) from geology.properties().impedance — gas sands should show as bright troughs</div>
+        <canvas id="seis"></canvas>
+      </div>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

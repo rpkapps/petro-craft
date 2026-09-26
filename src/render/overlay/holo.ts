@@ -53,7 +53,7 @@ void main() {
     a += s * s * s * uScan;
   }
   a *= uOpacity * uFade;
-  gl_FragColor = vec4(base * a * 1.6, 1.0);
+  gl_FragColor = vec4(base * a, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -132,9 +132,9 @@ export function createLabel(lines: string[], accent: string, scale = 1): THREE.S
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, sizeAttenuation: false });
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, sizeAttenuation: false, fog: false, toneMapped: false });
   const s = new THREE.Sprite(mat);
-  s.scale.set(0.22 * scale, 0.055 * scale, 1);
+  s.scale.set(0.26 * scale, 0.065 * scale, 1);
   s.center.set(0, 0.5);
   s.renderOrder = 50;
   return s;

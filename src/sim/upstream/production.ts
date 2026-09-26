@@ -11,7 +11,7 @@ import {
   updateReservoir,
 } from './reservoir';
 import {
-  CONV_DECLINE, FT_PER_BLOCK, GAS_LIFT_GAS_PER_BBL, GAS_N, K_G, K_J, LIFT_POWER_MW, MCF_PER_TONNE_CO2, TIGHT_DECLINE, TUBING_CAP_GAS,
+  CONV_DECLINE, FT_PER_BLOCK, SRV_AGE_DAYS, GAS_LIFT_GAS_PER_BBL, GAS_N, K_G, K_J, LIFT_POWER_MW, MCF_PER_TONNE_CO2, TIGHT_DECLINE, TUBING_CAP_GAS,
   TUBING_CAP_OIL, WELLHEAD_PRESSURE_GAS, WELLHEAD_PRESSURE_OIL,
 } from './tuning';
 import { clamp, consumeSupply, distTo, fmtInt, setUpstreamBuildingStatus, severeWeather } from './util';
@@ -105,10 +105,15 @@ export function liftParams(ctx: GameContext, w: WellState, tvd: number, wc: numb
   }
 }
 
-/** Near-well drainage parameters: decline constant D0 (1/day) and recharge ratio r. */
-function drainage(ctx: GameContext, R: Reservoir): { d0: number; r: number } {
+/** Near-well drainage parameters: decline constant D0 (1/day) and recharge ratio r (fading with SRV age in tight rock). */
+function drainage(ctx: GameContext, R: Reservoir, c: ResContact): { d0: number; r: number } {
   const tight = derived(R).tight;
-  return { d0: (tight ? TIGHT_DECLINE : CONV_DECLINE) * ctx.modifier('decline_rate'), r: rechargeRatio(R.permeability) };
+  let r = rechargeRatio(R.permeability);
+  if (tight && c.srvDay !== undefined) {
+    const age = Math.max(0, ctx.state.time.day + ctx.state.time.minuteOfDay / 1440 - c.srvDay);
+    r /= 1 + age / SRV_AGE_DAYS;
+  }
+  return { d0: (tight ? TIGHT_DECLINE : CONV_DECLINE) * ctx.modifier('decline_rate'), r };
 }
 
 /** Implicit near-well pressure update: dpL/dt = D0·[r(P − pL) − s(pL − pwf)]. */
@@ -205,7 +210,7 @@ function idleWell(ctx: GameContext, rt: UpstreamRuntime, w: WellState, dt: numbe
     const s = ctx.state.reservoirs[rid];
     if (!R || !s) continue;
     const c = contactFor(ctx, w, R);
-    const { d0, r } = drainage(ctx, R);
+    const { d0, r } = drainage(ctx, R, c);
     relaxLocal(c, s.pressure, 0, 0, d0, r, dt);
     P = Math.max(P, c.pL);
   }
@@ -242,7 +247,7 @@ function produceWell(ctx: GameContext, rt: UpstreamRuntime, w: WellState, dt: nu
     const c = contactFor(ctx, w, R);
     const urf = ultimateRecovery(ctx, R, s);
     const tvd = compTvd(w, c);
-    const { d0, r } = drainage(ctx, R);
+    const { d0, r } = drainage(ctx, R, c);
     if (c.pL > s.pressure * 1.5 || !(c.pL > 0)) c.pL = s.pressure;
     if (R.fluid === 'oil') {
       const wc = oilWaterCut(ctx, R, s, c, urf, prevLiq);

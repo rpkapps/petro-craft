@@ -329,3 +329,46 @@ export class SortableTable<T> {
     return this.list.size;
   }
 }
+
+// ---- header tab bar -----------------------------------------------------------------------------------
+export interface TabItem<T extends string> { value: T; label: string; icon?: IconName }
+export interface TabsCtl<T extends string> { el: HTMLElement; set(v: T): void; readonly value: T; setBadge(v: T, text: string): void }
+export function tabs<T extends string>(items: TabItem<T>[], value: T, onChange: (v: T) => void): TabsCtl<T> {
+  let cur = value;
+  const el = h('div.tabbar');
+  const btns = new Map<T, { b: HTMLButtonElement; badge: HTMLElement }>();
+  for (const it of items) {
+    const badge = h('span.badge');
+    const b = h<HTMLButtonElement>('button.tab', { type: 'button' }, it.icon ? icon(it.icon) : null, h('span', it.label), badge);
+    b.addEventListener('click', () => {
+      if (cur === it.value) return;
+      cur = it.value;
+      paint();
+      onChange(it.value);
+    });
+    btns.set(it.value, { b, badge });
+    el.appendChild(b);
+  }
+  const paint = () => { for (const [v, x] of btns) toggleClass(x.b, 'on', v === cur); };
+  paint();
+  return {
+    el,
+    set(v: T) { if (v !== cur) { cur = v; paint(); } },
+    get value() { return cur; },
+    setBadge(v: T, text: string) { setText(btns.get(v)?.badge, text); },
+  };
+}
+
+/** Numeric input with min/max clamping. */
+export function numberInput(value: number, opts: { min?: number; max?: number; step?: number; onChange: (v: number) => void; cls?: string }): HTMLInputElement {
+  const el = h<HTMLInputElement>(`input.input${opts.cls ? '.' + opts.cls : ''}`, { type: 'number', value, min: opts.min, max: opts.max, step: opts.step ?? 1 });
+  el.addEventListener('change', () => {
+    let v = Number(el.value);
+    if (!Number.isFinite(v)) v = value;
+    if (opts.min !== undefined) v = Math.max(opts.min, v);
+    if (opts.max !== undefined) v = Math.min(opts.max, v);
+    el.value = String(v);
+    opts.onChange(v);
+  });
+  return el;
+}

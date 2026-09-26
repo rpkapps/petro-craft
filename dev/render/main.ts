@@ -10,6 +10,7 @@ import { DEFAULT_SETTINGS } from '../../src/core/settings';
 import type { IGeology, IWorld, Vec3, WeatherKind, WellState, WellStatus, Settings } from '../../src/core/types';
 import type { MapOverlay } from '../../src/core/EventBus';
 import { B } from '../../src/core/blocks';
+import { SEA_LEVEL } from '../../src/core/constants';
 import { createRenderer } from '../../src/render';
 import { DevGeology, DevWorld } from './devWorld';
 
@@ -23,21 +24,34 @@ interface Preset {
   overlay?: MapOverlay;
   cam: [number, number, number, number, number];
 }
+// Camera offsets are relative to the focus point (spawn, at ground level).
 const PRESETS: Record<string, Preset> = {
-  day: { time: '10:30', cam: [104, 84, 158, -0.72, -0.28] },
-  sunset: { time: '18:05', cam: [104, 82, 150, -1.35, -0.14] },
-  dawn: { time: '05:55', cam: [150, 80, 110, 1.9, -0.12] },
-  night: { time: '23:10', cam: [112, 76, 142, -0.6, -0.22] },
-  xray: { time: '14:00', overlay: 'xray', cam: [96, 92, 170, -0.55, -0.42] },
-  pressure: { time: '14:00', overlay: 'pressure', cam: [96, 92, 170, -0.55, -0.42] },
-  underwater: { time: '12:00', cam: [52, 56, 206, -0.9, 0.12] },
-  storm: { time: '15:00', weather: 'storm', cover: 1, cam: [104, 84, 158, -0.72, -0.2] },
-  fog: { time: '08:00', weather: 'fog', cover: 0.6, cam: [104, 84, 158, -0.72, -0.2] },
-  pipes: { time: '13:00', overlay: 'pipes', cam: [118, 76, 146, -0.4, -0.5] },
-  leases: { time: '13:00', overlay: 'leases', cam: [100, 110, 170, -0.6, -0.6] },
-  pad: { time: '11:00', cam: [116, 73, 140, -0.55, -0.35] },
+  day: { time: '10:30', cam: [-24, 17, 30, -0.72, -0.28] },
+  sunset: { time: '17:48', cam: [20, 15, 10, 1.45, -0.1] },
+  dawn: { time: '05:55', cam: [22, 13, -18, 1.9, -0.12] },
+  night: { time: '23:10', cam: [-16, 9, 14, -0.6, -0.22] },
+  xray: { time: '14:00', overlay: 'xray', cam: [-32, 25, 42, -0.55, -0.42] },
+  pressure: { time: '14:00', overlay: 'pressure', cam: [-32, 25, 42, -0.55, -0.42] },
+  underwater: { time: '12:00', cam: [0, 0, 0, -0.9, 0.12] },
+  storm: { time: '15:00', weather: 'storm', cover: 1, cam: [-24, 17, 30, -0.72, -0.2] },
+  fog: { time: '08:00', weather: 'fog', cover: 0.6, cam: [-24, 17, 30, -0.72, -0.2] },
+  pipes: { time: '13:00', overlay: 'pipes', cam: [-10, 9, 18, -0.4, -0.5] },
+  leases: { time: '13:00', overlay: 'leases', cam: [-28, 43, 42, -0.6, -0.6] },
+  pad: { time: '11:00', cam: [-12, 6, 12, -0.55, -0.35] },
 };
 const preset = PRESETS[scene] ?? PRESETS.day;
+
+/** Nearest column with deep-ish water (spiral search) for the underwater preset. */
+function findWater(g: IGeology, x0: number, z0: number) {
+  for (let r = 0; r < 200; r += 4)
+    for (let a = 0; a < Math.PI * 2; a += 0.2) {
+      const x = Math.round(x0 + Math.cos(a) * r);
+      const z = Math.round(z0 + Math.sin(a) * r);
+      if (x < 2 || z < 2 || x >= g.sizeX - 2 || z >= g.sizeZ - 2) continue;
+      if (g.waterDepth(x, z) >= 7) return { x, z };
+    }
+  return { x: x0, z: z0 };
+}
 
 function parseTime(t: string) {
   const [h, m] = t.split(':').map(Number);
@@ -46,6 +60,7 @@ function parseTime(t: string) {
 
 async function loadWorld(bus: EventBus, seed: number): Promise<{ geology: IGeology; world: IWorld; source: string }> {
   try {
+    if (params.get('world') === 'dev') throw new Error('dev world requested');
     const mod = await import('../../src/world');
     const geology = mod.createGeology(seed, 'small');
     const world = mod.createWorld(geology, bus);
@@ -147,15 +162,30 @@ async function main() {
   const r = createRenderer(canvas, ctx);
   r.resize(window.innerWidth, window.innerHeight);
   window.addEventListener('resize', () => r.resize(window.innerWidth, window.innerHeight));
-  const [x, y, z, yaw, pitch] = (params.get('cam')?.split(',').map(Number) as Preset['cam']) ?? preset.cam;
-  r.camera.position.set(x, y, z);
+  let focus = { x: 128, y: 67, z: 128 };
+  if (!(world instanceof DevWorld)) {
+    try {
+      const mod = await import('../../src/world');
+      const sp = mod.findSpawn(geology);
+      focus = { x: sp.x, y: sp.y, z: sp.z };
+    } catch {
+      /* keep centre */
+    }
+  }
+  const explicit = params.get('cam')?.split(',').map(Number) as Preset['cam'] | undefined;
+  const [ox, oy, oz, yaw, pitch] = explicit ?? preset.cam;
+  if (explicit) r.camera.position.set(ox, oy, oz);
+  else if (scene === 'underwater') {
+    const w = findWater(geology, focus.x, focus.z);
+    r.camera.position.set(w.x + 0.5, SEA_LEVEL - 3.5, w.z + 0.5);
+  } else r.camera.position.set(focus.x + ox, focus.y + oy, focus.z + oz);
   r.camera.rotation.order = 'YXZ';
   r.camera.rotation.set(pitch, yaw, 0);
   const ov = (params.get('overlay') as MapOverlay | null) ?? preset.overlay ?? null;
   r.overlay = ov === 'none' ? null : ov;
   if (params.get('highlight') !== '0') {
-    r.setBlockHighlight({ x: 126, y: 67, z: 132 }, 0.6);
-    r.setSelectionBox({ x: 131, y: 67, z: 138 }, { x: 133, y: 68, z: 139 });
+    r.setBlockHighlight({ x: focus.x - 2, y: focus.y - 1, z: focus.z + 4 }, 0.6);
+    r.setSelectionBox({ x: focus.x + 3, y: focus.y, z: focus.z + 10 }, { x: focus.x + 5, y: focus.y + 1, z: focus.z + 11 });
   }
   const speed = Number(params.get('speed') ?? 0);
   (window as unknown as Record<string, unknown>).__r = r;
@@ -176,8 +206,11 @@ async function main() {
     // exercise the edit path once terrain is in: dig a small pit & place a lamp
     if (demoEdit === 0 && r.loadProgress >= 1 && params.get('edit') === '1') {
       demoEdit = 1;
-      for (let dx = 0; dx < 3; dx++) for (let dz = 0; dz < 3; dz++) world.setBlock(120 + dx, 66, 150 + dz, B.AIR, 'player');
-      world.setBlock(121, 65, 151, B.LAMP, 'player');
+      const ex = Math.floor(focus.x) - 8;
+      const ez = Math.floor(focus.z) + 20;
+      const ey = world.getSurfaceY(ex, ez) - 1;
+      for (let dx = 0; dx < 3; dx++) for (let dz = 0; dz < 3; dz++) world.setBlock(ex + dx, ey, ez + dz, B.AIR, 'player');
+      world.setBlock(ex + 1, ey - 1, ez + 1, B.LAMP, 'player');
     }
     if (acc > 0.5) {
       acc = 0;

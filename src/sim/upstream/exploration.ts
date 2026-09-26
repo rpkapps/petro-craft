@@ -142,7 +142,7 @@ export function completeSurvey(ctx: GameContext, s: SurveyState): void {
     if (s.kind === '2d') {
       const c = lineCrossing(r, s);
       if (c > 0) {
-        gain = 0.32 * c * qf;
+        gain = 0.45 * c * qf;
         cap = 0.55;
       }
     } else {

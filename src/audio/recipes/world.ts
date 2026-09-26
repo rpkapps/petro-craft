@@ -72,7 +72,7 @@ export const WORLD_RECIPES: RecipeMap = {
     },
   },
   explosion_near: {
-    dur: 4.5, variants: 3, priority: 2, peakDb: -2,
+    dur: 4.2, variants: 2, priority: 2, peakDb: -2,
     build(r, t) {
       const glue = r.shaper(1.6);
       glue.connect(r.out);
@@ -96,7 +96,7 @@ export const WORLD_RECIPES: RecipeMap = {
     },
   },
   thunder_near: {
-    dur: 7, variants: 3, channels: 2, priority: 2, peakDb: -3,
+    dur: 6.5, variants: 2, priority: 2, peakDb: -3,
     build(r, t) {
       const o = r.out;
       const c = r.pan(r.r(-0.3, 0.3));
@@ -114,7 +114,7 @@ export const WORLD_RECIPES: RecipeMap = {
     },
   },
   thunder_far: {
-    dur: 8, variants: 3, channels: 2, priority: 3, peakDb: -5, lowRate: true,
+    dur: 7.5, variants: 2, priority: 3, peakDb: -5, lowRate: true,
     build(r, t) {
       const o = r.out;
       const rolls = 4 + Math.floor(r.rng() * 4);

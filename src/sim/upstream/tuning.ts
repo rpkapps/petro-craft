@@ -46,7 +46,7 @@ export const MUD_INITIAL = 700; // bbl to fill the pits at spud
 export const LOST_CIRC_MUD_PER_HOUR = 70;
 export const BARITE_PER_BLOCK_PER_PPG = 1.2; // t barite per block per ppg above 9.5
 export const PIPE_WEAR_PER_BLOCK = 0.22; // drill-pipe joints per block × hardness
-export const CASING_JOINTS_PER_BLOCK = 3.3; // 40 m / 12 m joints
+export const CASING_JOINTS_PER_BLOCK = 2; // game-scale joints per block of string
 export const CEMENT_SACKS_PER_BLOCK = 110;
 export const CASING_HOURS_BASE = 2;
 export const CASING_HOURS_PER_BLOCK = 0.1;
@@ -75,9 +75,9 @@ export const COMPLETION_HOURS_PER_CONTACT = 0.15;
 export const LINER_COST_PER_BLOCK = 9_000;
 export const FRAC_RANGE = 10;
 export const FRAC_HOURS_PER_STAGE = 1.5;
-export const FRAC_COST_PER_STAGE = 38_000;
-export const FRAC_PROPPANT_PER_STAGE = 150; // t
-export const FRAC_WATER_PER_STAGE = 2_500; // bbl
+export const FRAC_COST_PER_STAGE = 25_000;
+export const FRAC_PROPPANT_PER_STAGE = 100; // t
+export const FRAC_WATER_PER_STAGE = 2_000; // bbl
 export const WATER_TRUCKING_PER_BBL = 3;
 export const MAX_FRAC_STAGES = 60;
 export const LIFT_SPECS = {
@@ -98,20 +98,25 @@ export const SKID_RIGUP_PROGRESS = 0.7;
 
 // ---- Reservoir & deliverability ------------------------------------------------------------------
 /** Oil productivity constant: J [bbl/d/psi] = K_J · k·h[mD·ft] · productivity / (μ·Bo). */
-export const K_J = 1 / 12000;
+export const K_J = 1 / 8000;
 /** Gas deliverability constant: q [mcf/d] = K_G · k·h · productivity · (Pr² − Pwf²)^n. */
 export const K_G = 1.5e-6;
 export const GAS_N = 0.85;
 /** Permeability below which rock counts as "tight" and uses a compressed effective permeability. */
 export const K_TIGHT = 10;
 export const UNDERSAT_COMPRESSIBILITY = 1.4e-5; // 1/psi (effective ce above the bubble point)
-export const SAT_COMPRESSIBILITY = 7e-5; // 1/psi (solution-gas drive)
+export const SAT_COMPRESSIBILITY = 2e-4; // 1/psi (solution-gas drive: gas liberation dominates)
 export const GAS_CAP_RATIO = 0.25; // m
 export const AQUIFER_TAU_DAYS = 14;
 export const MIN_RESERVOIR_PSI = 60;
 /** Local (near-well) drainage: decline constant (1/day) for tight rock and conventional rock. */
+/** Horizontal-section weight in effective pay thickness (tight rock benefits more from long laterals). */
+export const LATERAL_WEIGHT_CONV = 0.3;
+export const LATERAL_WEIGHT_TIGHT = 0.5;
 export const TIGHT_DECLINE = 0.055;
-export const CONV_DECLINE = 1.0;
+export const CONV_DECLINE = 0.04;
+/** Tight rock: matrix recharge of the stimulated volume fades as r / (1 + age / SRV_AGE_DAYS). */
+export const SRV_AGE_DAYS = 120;
 export const TUBING_CAP_OIL = 6_000; // bbl/d liquid through tubing on natural flow
 export const TUBING_CAP_GAS = 40_000; // mcf/d
 export const WELLHEAD_PRESSURE_OIL = 120; // psi flowline

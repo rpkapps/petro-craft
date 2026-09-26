@@ -66,7 +66,7 @@ class Volume {
     this.nz = Math.ceil((res.radiusZ * 2 + s * 2) / s) + 1;
     this.ny = Math.ceil(Math.abs(res.topY - res.bottomY)) + 3;
     this.mask = new Uint8Array(this.nx * this.ny * this.nz);
-    this.material = createHoloMaterial(shared, { vertexColors: true, fill: 0.14, rim: 0.75, grid: 0.35, gridScale: new THREE.Vector3(s, 1, s), scan: 0.08 });
+    this.material = createHoloMaterial(shared, { vertexColors: true, fill: 0.07, rim: 0.55, grid: 0.22, gridScale: new THREE.Vector3(s, 1, s), scan: 0.06, side: THREE.FrontSide });
     this.group.name = `reservoir-${res.id}`;
   }
 

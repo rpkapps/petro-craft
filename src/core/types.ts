@@ -437,6 +437,8 @@ export interface WellState {
   completedDay?: number;
   cost: number; // total spent
   owner: string;
+  /** Upstream-module extra data (plain JSON): op {kind,label,hoursLeft,hoursTotal}, limit (string), potential, lostCirc, kickHours, res… */
+  up?: Record<string, any>;
 }
 
 export interface ReservoirState {
@@ -451,6 +453,8 @@ export interface ReservoirState {
   remainingOil: number;
   remainingGas: number;
   waterFrontY: number; // rising OWC as water sweeps
+  /** Upstream-module extra data (plain JSON), e.g. urf (current ultimate recovery factor). */
+  up?: Record<string, any>;
 }
 
 // ---- Exploration ----------------------------------------------------------------------------

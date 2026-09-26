@@ -89,7 +89,7 @@ export const LOOP_RECIPES: RecipeMap = {
     // chain rattle
     r.grains(o, t + r.r(0.5, 1.5), 0.4, 18, 0.1, 2000, 6000, 0.01, 2);
     r.grains(o, t + r.r(2.3, 3.2), 0.4, 18, 0.1, 2000, 6000, 0.01, 2);
-  }),
+  }, { lowRate: true }),
 
   loop_tripping: loopRecipe(6, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -106,7 +106,7 @@ export const LOOP_RECIPES: RecipeMap = {
     r.metal(o, t + 2.8, 240, 0.35, 0.7, [1, 2.4, 3.9, 6.2]);
     r.metal(o, t + 5.8, 300, 0.3, 0.6, [1, 2.4, 3.9, 6.2]);
     r.grains(o, t + 0.5, 1.2, 25, 0.08, 2000, 6000, 0.01, 2);
-  }),
+  }, { lowRate: true }),
 
   loop_pumpjack: loopRecipe(5, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -134,7 +134,7 @@ export const LOOP_RECIPES: RecipeMap = {
     const bbp = r.filter('bandpass', 900, 2);
     belt.connect(bbp);
     am(r, bbp, 0.035, 0.015, qf(0.2, L), t, end).connect(o);
-  }),
+  }, { lowRate: true }),
 
   loop_compressor: loopRecipe(2, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -201,7 +201,7 @@ export const LOOP_RECIPES: RecipeMap = {
     r.burst(o, t + r.r(0.5, 1.5), 1.6, 0.22, { type: 'highpass', freq: 2500, q: 0.7, attack: 0.3 });
     r.burst(o, t + r.r(3.5, 4.5), 1.4, 0.18, { type: 'highpass', freq: 2800, q: 0.7, attack: 0.3 });
     for (let i = 0; i < 3; i++) r.metal(o, t + r.r(0.3, L), r.r(300, 700), 0.04, 0.5, [1, 2.4, 3.9]);
-  }),
+  }, { lowRate: true }),
 
   loop_flare: loopRecipe(4, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -218,7 +218,7 @@ export const LOOP_RECIPES: RecipeMap = {
     const hhp = r.filter('highpass', 2500, 0.7);
     const hg = r.gain(0.08);
     r.chain(h, hhp, hg, o);
-  }),
+  }, { lowRate: true }),
 
   loop_turbine: loopRecipe(2, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -240,7 +240,7 @@ export const LOOP_RECIPES: RecipeMap = {
     const hp = r.filter('highpass', 6000, 0.7);
     const hg = r.gain(0.04);
     r.chain(hiss, hp, hg, o);
-  }),
+  }, { lowRate: true }),
 
   loop_windturbine: loopRecipe(4, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -292,7 +292,7 @@ export const LOOP_RECIPES: RecipeMap = {
     const glp = r.filter('lowpass', 150, 1);
     const gg = r.gain(0.12);
     r.chain(gen, glp, gg, o);
-  }),
+  }, { lowRate: true }),
 
   loop_wellflow: loopRecipe(3, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -309,7 +309,7 @@ export const LOOP_RECIPES: RecipeMap = {
     const gbp = r.filter('bandpass', 350, 5);
     const gg = r.gain(0.25);
     r.chain(b, gbp, gg, o);
-  }),
+  }, { lowRate: true }),
 
   loop_hiss: loopRecipe(2, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -322,7 +322,7 @@ export const LOOP_RECIPES: RecipeMap = {
     const bp = r.filter('bandpass', 4200, 0.8);
     const g = r.gain(0.25);
     r.chain(n2, bp, g, o);
-  }),
+  }, { priority: 2 }),
 
   // --------------------------------------------------------------------------------- hazards
   loop_fire: loopRecipe(5, (r, t, L) => {
@@ -418,7 +418,7 @@ export const LOOP_RECIPES: RecipeMap = {
       r.ramp(fg.gain, tt, [[1.6, 0], [1.9, 0.12], [3.8, 0]]);
       r.chain(foam, ff, fg, pan);
     }
-  }, { channels: 2, priority: 3 }),
+  }, { channels: 2, priority: 3, lowRate: true }),
 
   loop_crickets: loopRecipe(6, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -451,7 +451,7 @@ export const LOOP_RECIPES: RecipeMap = {
         }
       }
     }
-  }, { channels: 2, priority: 4 }),
+  }, { channels: 2, priority: 4, lowRate: true }),
 
   loop_cicadas: loopRecipe(8, (r, t, L) => {
     const end = t + L + XF + 0.1;
@@ -471,7 +471,7 @@ export const LOOP_RECIPES: RecipeMap = {
     const hbp = r.filter('bandpass', 3000, 1);
     const hg = r.gain(0.05);
     r.chain(hum, hbp, hg, r.out);
-  }, { channels: 2, priority: 4 }),
+  }, { channels: 2, priority: 4, lowRate: true }),
 
   loop_snow: loopRecipe(4, (r, t, L) => {
     const end = t + L + XF + 0.1;

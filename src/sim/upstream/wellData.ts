@@ -41,6 +41,8 @@ export interface ResContact {
   pL: number;
   /** Fracture pressure at the completion (psi) — injection limit. */
   fracPsi: number;
+  /** Day the stimulated rock volume was created (completion / last frac) — tight-rock recharge fades with age. */
+  srvDay?: number;
 }
 
 export interface WellExt {

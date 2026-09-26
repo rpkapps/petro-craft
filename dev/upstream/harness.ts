@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS } from '../../src/core/settings';
 import { addBuilding, createBuildingState } from '../../src/core/buildingUtil';
 import { BUILDINGS } from '../../src/content/buildings';
 import { PARCEL_SIZE } from '../../src/core/constants';
-import type { BuildingState, GameContext, IWorld, Rotation, WellState, Worker, WorkerRole } from '../../src/core/types';
+import type { BuildingState, GameContext, GameState, IWorld, Rotation, WellState, Worker, WorkerRole } from '../../src/core/types';
 import type { Command, CommandResult, CommandType } from '../../src/core/commands';
 import { createUpstreamSystems } from '../../src/sim/upstream';
 import { FakeGeology, FakeWorld } from './fakeGeo';
@@ -32,9 +32,9 @@ export const OIL_PRICE = 70;
 export const GAS_PRICE = 2.6;
 export const ROYALTY = 0.125;
 
-export function newHarness(opts: { money?: number; hazards?: boolean; techs?: string[] } = {}): Harness {
+export function newHarness(opts: { money?: number; hazards?: boolean; techs?: string[]; state?: GameState } = {}): Harness {
   const geo = new FakeGeology(7);
-  const state = createInitialState(
+  const state = opts.state ?? createInitialState(
     { saveName: 'upstream-test', companyName: 'Lone Star Petroleum', seed: 7, worldSize: 'small', difficulty: 'normal', tutorial: false, hazards: opts.hazards ?? true, creative: false },
     'p1',
     { x: 64, y: 82, z: 64 },

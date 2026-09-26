@@ -31,7 +31,8 @@ export function compact(v: number, digits = 0): string {
   if (a >= 1e4) return formatNumber(v, digits);
   if (a >= 100) return int(v);
   if (a >= 10) return v.toFixed(Math.min(digits, 1));
-  return v.toFixed(a === 0 ? 0 : Math.max(digits, a < 1 ? 2 : 1));
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(Math.max(digits, a < 1 ? 2 : 1));
 }
 
 export function money(v: number, digits = 1): string {

@@ -146,7 +146,7 @@ export class WellPaths {
     const alarm = w.status === 'blowout' || w.status === 'kick';
     const drilled = w.trajectory ?? [];
     if (drilled.length >= 2) {
-      const t = this.tube(drilled, (len) => this.material(color, len, false, flow, alarm), 0.32);
+      const t = this.tube(drilled, (len) => this.material(color, len, false, flow, alarm), 0.5);
       if (t) {
         group.add(t.mesh);
         materials.push(t.material);
@@ -170,7 +170,7 @@ export class WellPaths {
           });
           rest = plan.slice(best);
         }
-        const t = this.tube(rest, (len) => this.material(0xbfe8ff, len, true, 0, false), 0.22);
+        const t = this.tube(rest, (len) => this.material(0xbfe8ff, len, true, 0, false), 0.32);
         if (t) {
           group.add(t.mesh);
           materials.push(t.material);

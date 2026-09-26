@@ -169,21 +169,70 @@ export class Terrain {
     const tcx = Math.cos(ta);
     const tcz = Math.sin(ta);
     const cs: CoastSample = { o: 0, frac: 0 };
-    const ground = this.ground;
-    const hseed = subSeed(seed, 140);
     const invS = 1 / size;
 
-    for (let z = 0; z < size; z++) {
-      for (let x = 0; x < size; x++) {
-        const i = x + z * size;
+    // ---- low-frequency fields on a coarse grid (bilinear per column) ----
+    const S = 4;
+    const gn = Math.floor((size - 1) / S) + 2;
+    const NF = 18;
+    const F = new Float32Array(gn * gn * NF);
+    for (let j = 0; j < gn; j++) {
+      for (let i = 0; i < gn; i++) {
+        const x = i * S;
+        const z = j * S;
+        const b = (i + j * gn) * NF;
         this.coast(x, z, cs);
-        const o = cs.o;
         const wx = x + 38 * nWx(x / 190, z / 190);
         const wz = z + 38 * nWz(x / 190 + 17.3, z / 190 - 9.1);
-        const inland = -o;
+        const cont = nCont(wx / 420, wz / 420);
+        F[b] = cs.o;
+        F[b + 1] = cs.frac;
+        F[b + 2] = 0.5 + 0.62 * ((x * invS - 0.5) * tcx + (z * invS - 0.5) * tcz) + 0.25 * nT(wx / 330, wz / 330) + 0.06 * nT2(x / 70, z / 70);
+        F[b + 3] = 0.5 + 0.36 * nH(wx / 290, wz / 290) + 0.07 * nH2(x / 64, z / 64);
+        F[b + 4] = cont;
+        F[b + 5] = 0.5 + 0.5 * nEro(wx / 260, wz / 260);
+        F[b + 6] = 0.5 + 0.5 * nMnt(wx / 360, wz / 360) + 0.1 * cont;
+        F[b + 7] = fbm(nHill, wx / 115, wz / 115, 3);
+        F[b + 8] = nBad(wx / 210, wz / 210);
+        F[b + 9] = 0.5 + 0.5 * nMesa(wx / 85, wz / 85);
+        F[b + 10] = nRiv(wx / 300, wz / 300);
+        F[b + 11] = 0.5 + 0.5 * nLake(x / 150, z / 150);
+        F[b + 12] = nCliff(x / 110, z / 110);
+        F[b + 13] = nCanyon(wx / 210, wz / 210);
+        F[b + 14] = nShoal(x / 90, z / 90);
+        F[b + 15] = nBirch(x / 120, z / 120);
+        F[b + 16] = ridged(nRidge, wx / 150, wz / 150, 4);
+        F[b + 17] = 0.5 + 0.5 * nPatch(x / 40, z / 40);
+      }
+    }
+    const v = new Float32Array(NF);
 
-        let T = 0.5 + 0.62 * ((x * invS - 0.5) * tcx + (z * invS - 0.5) * tcz) + 0.25 * nT(wx / 330, wz / 330) + 0.06 * nT2(x / 70, z / 70);
-        let H = 0.5 + 0.36 * nH(wx / 290, wz / 290) + 0.07 * nH2(x / 64, z / 64) + 0.1 * (1 - smoothstep(0, 80, inland));
+    const ground = this.ground;
+    const hseed = subSeed(seed, 140);
+    for (let z = 0; z < size; z++) {
+      const gz = z / S;
+      const j0 = Math.min(Math.floor(gz), gn - 2);
+      const fz = gz - j0;
+      for (let x = 0; x < size; x++) {
+        const i = x + z * size;
+        const gx = x / S;
+        const i0 = Math.min(Math.floor(gx), gn - 2);
+        const fx = gx - i0;
+        const w00 = (1 - fx) * (1 - fz);
+        const w10 = fx * (1 - fz);
+        const w01 = (1 - fx) * fz;
+        const w11 = fx * fz;
+        const b00 = (i0 + j0 * gn) * NF;
+        const b10 = b00 + NF;
+        const b01 = b00 + gn * NF;
+        const b11 = b01 + NF;
+        for (let k = 0; k < NF; k++) v[k] = F[b00 + k] * w00 + F[b10 + k] * w10 + F[b01 + k] * w01 + F[b11 + k] * w11;
+
+        const o = v[0];
+        const frac = v[1];
+        const inland = -o;
+        let T = v[2];
+        let H = v[3] + 0.1 * (1 - smoothstep(0, 80, inland));
         const detail = fbm(nDet, x / 26, z / 26, 2);
         const jitter = (hash4(hseed, x, z) / 4294967296 - 0.5) * 0.035;
 
@@ -194,22 +243,19 @@ export class Terrain {
         let badW = 0;
         let swampW = 0;
         let riverCh = 0;
-        let lakeW = 0;
-        let cliff = 0;
         let valley = 0;
 
         if (o > 0) {
           // ---------------- ocean floor ----------------
-          const frac = cs.frac;
           let d = Terrain.profileDepth(o, frac);
           const shelfness = 1 - smoothstep(SHELF_END - 0.08, SHELF_END + 0.02, frac);
           // sand ridges & megaripples on the shelf
           d += shelfness * (1.3 * nSea(x / 38, z / 38) + 0.5 * detail) * smoothstep(3, 14, o);
           // submarine canyons cutting the outer shelf & slope
-          const can = 1 - smoothstep(0.015, 0.075, Math.abs(nCanyon(wx / 210, wz / 210)));
+          const can = 1 - smoothstep(0.015, 0.075, Math.abs(v[13]));
           d += can * 9 * smoothstep(0.35, 0.75, frac);
           // shoals / sandbars on the inner shelf
-          const sh = smoothstep(0.72, 0.92, nShoal(x / 90, z / 90));
+          const sh = smoothstep(0.72, 0.92, v[14]);
           d -= sh * 7 * (1 - smoothstep(0.2, 0.5, frac));
           // abyssal hills
           d += (1 - shelfness) * 1.6 * detail;
@@ -219,53 +265,53 @@ export class Terrain {
           H = Math.max(H, 0.5);
         } else {
           // ---------------- land ----------------
-          const cont = nCont(wx / 420, wz / 420);
-          const erosion = 0.5 + 0.5 * nEro(wx / 260, wz / 260);
-          mountain = smoothstep(0.62, 0.86, 0.5 + 0.5 * nMnt(wx / 360, wz / 360) + 0.1 * cont) * smoothstep(40, 120, inland);
-          const hills = fbm(nHill, wx / 115, wz / 115, 3);
+          const cont = v[4];
+          const erosion = v[5];
+          mountain = smoothstep(0.62, 0.86, v[6]) * smoothstep(40, 120, inland);
+          const hills = v[7];
           desertW = smoothstep(0.6, 0.7, T) * smoothstep(0.47, 0.37, H);
-          badW = desertW * smoothstep(0.05, 0.3, nBad(wx / 210, wz / 210)) * smoothstep(0.64, 0.74, T);
+          badW = desertW * smoothstep(0.05, 0.3, v[8]) * smoothstep(0.64, 0.74, T);
           swampW = smoothstep(0.6, 0.7, H) * smoothstep(0.42, 0.52, T) * (1 - mountain) * smoothstep(0.4, 0.62, erosion);
 
           const base = 65.8 + 6 * smoothstep(0, 90, inland) + 3.5 * cont;
           const hillAmp = lerp(3, 14, smoothstep(0.2, 0.85, 1 - erosion));
           h = base + hills * hillAmp + detail * 1.4;
           // desert dunes
-          h += desertW * (1 - badW) * 3.4 * ridged(nDune, x / 30, z / 30, 2);
+          if (desertW > 0) h += desertW * (1 - badW) * 3.4 * ridged(nDune, x / 30, z / 30, 2);
           h = Math.max(h, 63.3 + 0.4 * detail);
           // swamps: flat, waterlogged lowland
           h = lerp(h, 62.75 + detail * 1.3 + hills * 0.6, swampW * 0.92);
           // badlands mesas
-          const mesaN = 0.5 + 0.5 * nMesa(wx / 85, wz / 85);
-          let mesa = 67 + 24 * smoothstep(0.46, 0.6, mesaN) + 9 * smoothstep(0.74, 0.84, mesaN) + detail * 1.4;
-          mesa = terrace(mesa, 4);
-          h = lerp(h, Math.max(h, mesa), badW);
+          if (badW > 0) {
+            const mesaN = v[9];
+            let mesa = 67 + 24 * smoothstep(0.46, 0.6, mesaN) + 9 * smoothstep(0.74, 0.84, mesaN) + detail * 1.4;
+            mesa = terrace(mesa, 4);
+            h = lerp(h, Math.max(h, mesa), badW);
+          }
           // mountains
           if (mountain > 0) {
-            const r = ridged(nRidge, wx / 150, wz / 150, 4);
-            const peak = 82 + 64 * Math.pow(r, 1.45) + detail * 3 + hills * 6;
+            const peak = 82 + 64 * Math.pow(v[16], 1.45) + detail * 3 + hills * 6;
             h = lerp(h, Math.max(h, peak), mountain);
           }
           // rivers
-          const ar = Math.abs(nRiv(wx / 300, wz / 300));
+          const ar = Math.abs(v[10]);
           const fade = smoothstep(-4, 10, inland) * (1 - smoothstep(0.2, 0.5, mountain)) * (1 - smoothstep(86, 98, h)) * (1 - badW * 0.6);
           valley = (1 - smoothstep(0.03, 0.12, ar)) * fade;
           riverCh = (1 - smoothstep(0.011, 0.029, ar)) * fade;
           h = lerp(h, Math.min(h, 64.2 + (h - 64.2) * 0.3), valley);
           h = lerp(h, 58.4 + detail * 0.8, riverCh);
-          // lakes
-          lakeW = smoothstep(0.6, 0.76, 0.5 + 0.5 * nLake(x / 140, z / 140)) * smoothstep(12, 40, inland) * (1 - mountain) * (1 - desertW * 0.85);
-          h = lerp(h, 56.3 + detail * 1.2, lakeW);
+          // lakes (sparse)
+          const lakeW = smoothstep(0.72, 0.85, v[11]) * smoothstep(12, 40, inland) * (1 - mountain) * (1 - desertW * 0.85);
+          if (lakeW > 0) h = lerp(h, 56.3 + detail * 1.2, lakeW);
           // coastal ramp (beaches) or cliffs
-          cliff = smoothstep(0.38, 0.62, nCliff(x / 110, z / 110)) * (1 - swampW);
+          const cliff = smoothstep(0.38, 0.62, v[12]) * (1 - swampW);
           const rampW = lerp(24, 4.5, cliff);
           h = lerp(Math.min(62.35 + 0.3 * detail, h), h, smoothstep(0, rampW, inland));
           if (cliff > 0.5 && inland < 8) fl |= TF.CLIFF;
         }
 
         h = clamp(h, 3, WORLD_HEIGHT - 8);
-        const top = Math.floor(h);
-        const g = top + 1;
+        const g = Math.floor(h) + 1;
         ground[i] = g;
         if (g <= SEA_LEVEL) {
           fl |= TF.WATER;
@@ -278,7 +324,7 @@ export class Terrain {
         H = clamp(H, 0, 1);
         this.temp[i] = Math.round(T * 255);
         this.humid[i] = Math.round(H * 255);
-        this.patch[i] = Math.round((0.5 + 0.5 * nPatch(x / 40, z / 40)) * 255);
+        this.patch[i] = Math.round(clamp(v[17], 0, 1) * 255);
 
         // ---------------- biome ----------------
         let b: number;
@@ -292,7 +338,7 @@ export class Terrain {
         else if (Tj < 0.34) b = BI.TAIGA;
         else if (desertW + jitter > 0.5) b = badW + jitter > 0.5 ? BI.BADLANDS : BI.DESERT;
         else if (swampW + jitter > 0.5) b = BI.SWAMP;
-        else if (Hj > 0.52) b = nBirch(x / 120, z / 120) > 0.35 ? BI.BIRCH : BI.FOREST;
+        else if (Hj > 0.52) b = v[15] > 0.35 ? BI.BIRCH : BI.FOREST;
         else b = BI.PLAINS;
         this.biome[i] = b;
         if (b === BI.BEACH || (valley > 0.35 && g <= 65 && !(fl & TF.WATER) && b !== BI.MOUNTAINS)) fl |= TF.BEACH;

@@ -38,6 +38,13 @@ export function wireEvents(bus: EventBus, a: SoundActions): () => void {
   const major = () => (lastMajor = a.now());
   const sinceMajor = () => a.now() - lastMajor;
   let lastFootMat = 0;
+  // World/sim sounds are muted while a session is being built (initial buildings, loaded state) and
+  // armed once the game has started (or after a grace period if 'game:started' never arrives).
+  let armedAt = a.now() + 6;
+  const armed = () => a.now() >= armedAt;
+  offs.push(bus.on('game:started', () => {
+    armedAt = a.now() + 0.5;
+  }));
 
   const buildingPos = (id: string): Vec3 | undefined => {
     const b = a.game?.state.buildings[id];
@@ -125,11 +132,13 @@ export function wireEvents(bus: EventBus, a: SoundActions): () => void {
 
   // ---- buildings ---------------------------------------------------------------------------------
   offs.push(bus.on('building:placed', (e) => {
+    if (!armed()) return;
     const p = buildingPos(e.id);
     if (p) a.playAt('construct', p, { volume: 0.9, ref: 8, maxDist: 220, reverb: 0.25 });
     else a.play('construct', { volume: 0.7 });
   }));
   offs.push(bus.on('building:completed', (e) => {
+    if (!armed()) return;
     const b = a.game?.state.buildings[e.id];
     if (b?.type === 'wellhead') return; // auto-spawned; well completion is covered elsewhere
     if (!gate('completed', 1.5)) return;
@@ -137,9 +146,11 @@ export function wireEvents(bus: EventBus, a: SoundActions): () => void {
     a.sting('sting_complete', 0.75, -6);
   }));
   offs.push(bus.on('building:removed', (e) => {
+    if (!armed()) return;
     a.playAt('demolish', { x: e.x + 1, y: e.y + 1, z: e.z + 1 }, { volume: 0.9, ref: 8, maxDist: 220, reverb: 0.3 });
   }));
   offs.push(bus.on('building:statusChanged', (e) => {
+    if (!armed()) return;
     if (e.status !== 'broken' || e.prev === 'broken') return;
     const p = buildingPos(e.id);
     if (p) a.playAt('breakdown', p, { volume: 0.9, ref: 8, maxDist: 200, reverb: 0.2 });
@@ -147,12 +158,14 @@ export function wireEvents(bus: EventBus, a: SoundActions): () => void {
 
   // ---- economy & progress ------------------------------------------------------------------------
   offs.push(bus.on('money:changed', (e) => {
+    if (!armed()) return;
     if (!(e.amount >= 25_000) || e.category === 'loan') return;
     if (!gate('cash', 3)) return;
     const v = clamp(0.35 + Math.log10(e.amount / 25_000) * 0.2, 0.35, 0.8);
     a.uiSound('cash', v);
   }));
   offs.push(bus.on('notify', (n) => {
+    if (!armed()) return;
     // a major sting/alarm already covers the moment
     if (sinceMajor() < 1.5) return;
     const name = n.level === 'success' ? 'success' : n.level === 'warning' ? 'warn' : n.level === 'danger' ? 'danger' : 'notify';
@@ -160,28 +173,34 @@ export function wireEvents(bus: EventBus, a: SoundActions): () => void {
     a.uiSound(name, n.level === 'info' ? 0.7 : 0.85);
   }));
   offs.push(bus.on('research:completed', () => {
+    if (!armed()) return;
     if (!gate('research', 1)) return;
     major();
     a.sting('sting_research', 0.75, -6);
   }));
   offs.push(bus.on('contract:completed', () => {
+    if (!armed()) return;
     major();
     a.sting('sting_contract', 0.75, -6);
     a.uiSound('cash', 0.55);
   }));
   offs.push(bus.on('contract:failed', () => {
+    if (!armed()) return;
     major();
     a.sting('sting_fail', 0.7, -5);
   }));
   offs.push(bus.on('objective:completed', () => {
+    if (!armed()) return;
     if (sinceMajor() < 1) return;
     major();
     a.sting('sting_relief', 0.65, -4);
   }));
   offs.push(bus.on('lease:acquired', () => {
+    if (!armed()) return;
     a.uiSound('stamp', 0.8);
   }));
   offs.push(bus.on('survey:completed', () => {
+    if (!armed()) return;
     a.play('sonar', { volume: 0.6, reverb: 0.3, reverbKind: 'hall' });
   }));
   offs.push(bus.on('game:saved', () => {
@@ -190,20 +209,24 @@ export function wireEvents(bus: EventBus, a: SoundActions): () => void {
 
   // ---- wells -------------------------------------------------------------------------------------
   offs.push(bus.on('well:spud', (e) => {
+    if (!armed()) return;
     const p = wellPos(e.id);
     if (p) a.playAt('spud', p, { volume: 0.9, ref: 8, maxDist: 220, reverb: 0.2 });
   }));
   offs.push(bus.on('well:discovery', (e) => {
+    if (!armed()) return;
     major();
     a.sting('sting_discovery', 0.85, -9);
     const p = wellPos(e.id);
     if (p) a.playAt('blowout_roar', p, { volume: 0.35, ref: 10, maxDist: 250, rate: 1.3, reverb: 0.3 });
   }));
   offs.push(bus.on('well:dryHole', () => {
+    if (!armed()) return;
     major();
     a.sting('sting_dry', 0.75, -5);
   }));
   offs.push(bus.on('well:kick', (e) => {
+    if (!armed()) return;
     major();
     a.play('kick_alarm', { volume: 0.75, priority: 3, maxVoices: 1 });
     a.duck(-6, 2);
@@ -211,6 +234,7 @@ export function wireEvents(bus: EventBus, a: SoundActions): () => void {
     if (p) a.playAt('hiss', p, { volume: 0.8, ref: 6, maxDist: 200, reverb: 0.2 });
   }));
   offs.push(bus.on('well:blowout', (e) => {
+    if (!armed()) return;
     major();
     const p = wellPos(e.id);
     if (p) a.playAt('blowout_roar', p, { volume: 1, ref: 20, maxDist: 600, reverb: 0.5, priority: 3 });
@@ -219,28 +243,35 @@ export function wireEvents(bus: EventBus, a: SoundActions): () => void {
     a.duck(-10, 4);
   }));
   offs.push(bus.on('well:blowoutControlled', () => {
+    if (!armed()) return;
     major();
     a.sting('sting_relief', 0.8, -5);
   }));
 
   // ---- hazards & weather -------------------------------------------------------------------------
   offs.push(bus.on('hazard:fireStarted', (e) => {
+    if (!armed()) return;
     a.playAt('fire_ignite', blockCenter(e), { volume: 0.95, ref: 8, maxDist: 250, reverb: 0.3 });
   }));
   offs.push(bus.on('hazard:fireOut', (e) => {
+    if (!armed()) return;
     const p = a.firePosition(e.id);
     if (p) a.playAt('fire_out', p, { volume: 0.8, ref: 6, maxDist: 150, reverb: 0.2 });
   }));
   offs.push(bus.on('hazard:explosion', (e) => {
+    if (!armed()) return;
     a.explosion(blockCenter(e), e.power);
   }));
   offs.push(bus.on('hazard:spill', (e) => {
+    if (!armed()) return;
     a.playAt('spill', blockCenter(e), { volume: 0.8, ref: 5, maxDist: 140 });
   }));
   offs.push(bus.on('network:leak', (e) => {
+    if (!armed()) return;
     a.playAt('leak_hiss', blockCenter(e), { volume: 0.8, ref: 5, maxDist: 150, reverb: 0.15 });
   }));
   offs.push(bus.on('weather:lightning', (e) => {
+    if (!armed()) return;
     a.thunder(e.x, e.z);
   }));
 

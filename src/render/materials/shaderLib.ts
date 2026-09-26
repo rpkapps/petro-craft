@@ -164,7 +164,7 @@ float sunShadow() {
 
 vec3 shadeSurface(vec3 albedo, vec3 N, vec4 props, float ao, float sky, float blk, out float directOut) {
   float kind = floor(props.b * 255.0 + 0.5);
-  float aoF = ao * ao;
+  float aoF = ao;
   float skyVis = smoothstep(0.3, 0.8, sky);
   float NdotL = dot(N, uSunDir);
   if (kind == 8.0) NdotL = NdotL * 0.6 + 0.4; // foliage: light wraps through leaves
