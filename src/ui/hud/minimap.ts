@@ -34,7 +34,7 @@ export class Minimap {
   private terrain: TerrainMap;
   private t = 0;
 
-  constructor(private ui: UIHost, private ctx: GameContext) {
+  constructor(ui: UIHost, private ctx: GameContext) {
     this.terrain = terrainFor(ctx.geology);
     this.canvas = h<HTMLCanvasElement>('canvas.mm-canvas');
     this.coords = h('div.mm-coords.mono');

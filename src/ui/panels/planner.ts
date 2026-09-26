@@ -530,7 +530,6 @@ export class PlannerPanel extends Panel {
 
   private drawPlan() {
     const { w, h: hh, ctx: g } = fitCanvas(this.planCanvas);
-    const geo = this.ui.game.geology;
     g.fillStyle = '#070a0e';
     g.fillRect(0, 0, w, hh);
     const span = Math.max(40, ...this.traj.map((p) => Math.max(Math.abs(p.x - this.cx), Math.abs(p.z - this.cz)) * 2.4));
@@ -579,7 +578,6 @@ export class PlannerPanel extends Panel {
     g.fillText('N↑', 6, 6);
     g.textAlign = 'right';
     g.fillText(lengthBlocks(step, this.ui.units), w - 6, hh - 16);
-    void geo;
   }
 
   private renderQuote() {

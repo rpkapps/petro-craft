@@ -1,5 +1,5 @@
 // Finance (F): cash & net worth, daily revenue/expense stacked chart, P&L by category, loans, ledger.
-import { h, clear, setText, KeyedList } from '../dom';
+import { h, clear, KeyedList } from '../dom';
 import { icon } from '../icons';
 import { Panel } from '../core/panel';
 import type { PanelArgs, UIHost } from '../core/host';

@@ -80,7 +80,6 @@ export class BuildPanel extends Panel {
     this.body.appendChild(h('div.bd-layout', nav, main));
     this.paintNav();
     this.renderGrid();
-    window.setTimeout(() => this.search.focus({ preventScroll: true }), 50);
   }
 
   private paintNav() {

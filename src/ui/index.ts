@@ -336,6 +336,7 @@ class Controller implements UIController {
   }
 
   private onPanelsChanged() {
+    this.toasts.el.classList.toggle('over-panel', this.panels.depth > 0 && !this.menuVisible);
     if (this.panels.depth > 0) {
       this.app.exitPointerLock();
       if (this.session && this.app.uiCapturing === false) this.app.uiCapturing = true;

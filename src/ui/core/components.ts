@@ -246,7 +246,7 @@ export class SortableTable<T> {
 
   constructor(
     private columns: Column<T>[],
-    private keyOf: (row: T) => string,
+    keyOf: (row: T) => string,
     opts: { sortKey?: string; sortDir?: 1 | -1; onRowClick?: (row: T) => void; rowClass?: (row: T) => string } = {},
   ) {
     this.sortKey = opts.sortKey ?? null;

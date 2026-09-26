@@ -53,7 +53,6 @@ export class InspectorPanel extends Panel {
       this.body.appendChild(emptyState('building', 'This building no longer exists'));
       return;
     }
-    const ctx = this.ui.game;
     const def = BUILDINGS[b.type];
     this.setIcon(buildingIcon(b.type));
     this.iconEl.style.setProperty('color', CATEGORY_COLOR[def?.category ?? 'support'] ?? '');
@@ -199,7 +198,6 @@ export class InspectorPanel extends Panel {
       list.sync(io);
       toggleClass(empty, 'hidden', io.length > 0);
     });
-    void b;
     return h('div.card', h('div.section-title', icon('refresh'), 'Live flows'), box, empty);
   }
 
@@ -387,7 +385,6 @@ export class InspectorPanel extends Panel {
   private researchCard(b: BuildingState): HTMLElement {
     const t = h('b.mono');
     this.patchers.push(() => setText(t, `${this.ui.game.state.research.pointsPerDay.toFixed(1)} pts/day company-wide`));
-    void b;
     return h('div.card', h('div.section-title', icon('flask'), 'Research'), t, button('Research tree', { icon: 'flask', size: 'xs', onClick: () => this.ui.open('research', {}, { stack: true }) }));
   }
 
@@ -400,7 +397,6 @@ export class InspectorPanel extends Panel {
       setText(v, gasRate(Number(d.ventRate ?? 0), this.ui.units));
       v.className = `mono ${Number(d.ventRate ?? 0) > 0 ? 'danger' : ''}`;
     });
-    void b;
     return h('div.card', h('div.section-title', icon('flare'), 'Flaring'), h('div.kv', h('span', 'Flared'), f, h('span', 'Vented'), v));
   }
 

@@ -28,6 +28,8 @@ const PRESETS: Record<string, Preset> = {
   sunset: { time: '17:48', cam: [20, 15, 10, 1.45, -0.1] },
   dawn: { time: '05:55', cam: [22, 13, -18, -1.5, -0.1] },
   moon: { time: '23:40', cam: [-16, 9, 14, -0.6, 1.25] },
+  shore: { time: '17:35', cam: [0, 0, 0, 1.57, -0.12] },
+  shorenoon: { time: '12:30', cam: [0, 0, 0, 0.6, -0.25] },
   night: { time: '23:10', cam: [-16, 9, 14, -0.6, -0.22] },
   xray: { time: '14:00', overlay: 'xray', cam: [-32, 25, 42, -0.55, -0.42] },
   pressure: { time: '14:00', overlay: 'pressure', cam: [-32, 25, 42, -0.55, -0.42] },
@@ -179,6 +181,9 @@ async function main() {
   else if (scene === 'underwater') {
     const w = findWater(geology, focus.x, focus.z);
     r.camera.position.set(w.x + 0.5, SEA_LEVEL - 3.5, w.z + 0.5);
+  } else if (scene.startsWith('shore')) {
+    const w = findWater(geology, focus.x, focus.z);
+    r.camera.position.set(w.x + 0.5, SEA_LEVEL + 9, w.z + 0.5);
   } else r.camera.position.set(focus.x + ox, focus.y + oy, focus.z + oz);
   r.camera.rotation.order = 'YXZ';
   r.camera.rotation.set(pitch, yaw, 0);

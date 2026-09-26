@@ -226,7 +226,10 @@
   z-index: 50;
   pointer-events: none;
 }
-.pc-root .pc-root-menu .pc-toasts, .pc-root .pc-toasts.menu { top: 1rem; }
+.pc-root .pc-toasts.menu { top: 1rem; }
+.pc-root .pc-toasts.over-panel { top: auto; bottom: 0.8rem; right: 50%; transform: translateX(50%); width: 24rem; flex-direction: column-reverse; }
+.pc-root .pc-toasts.over-panel .pc-toast { padding: 0.45rem 0.65rem 0.5rem; box-shadow: 0 0.6rem 2rem rgba(0, 0, 0, 0.7), inset 3px 0 0 var(--tc); }
+.pc-root .pc-toasts.over-panel .t-text { display: none; }
 .pc-root .pc-toast {
   --tc: var(--info);
   position: relative;

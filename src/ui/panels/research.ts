@@ -173,17 +173,24 @@ export class ResearchPanel extends Panel {
   }
 
   private enablePan(vp: HTMLElement) {
-    let sx = 0, sy = 0, sl = 0, stp = 0, down = false, moved = false;
+    let sx = 0;
+    let sy = 0;
+    let sl = 0;
+    let stp = 0;
+    let down = false;
     vp.addEventListener('mousedown', (e) => {
       if ((e.target as HTMLElement).closest('.rs-node') || e.button !== 0) return;
-      down = true; moved = false; sx = e.clientX; sy = e.clientY; sl = vp.scrollLeft; stp = vp.scrollTop;
+      down = true;
+      sx = e.clientX;
+      sy = e.clientY;
+      sl = vp.scrollLeft;
+      stp = vp.scrollTop;
       vp.classList.add('panning');
     });
     const move = (e: MouseEvent) => {
       if (!down) return;
       const dx = e.clientX - sx;
       const dy = e.clientY - sy;
-      if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
       vp.scrollLeft = sl - dx;
       vp.scrollTop = stp - dy;
     };
@@ -197,7 +204,6 @@ export class ResearchPanel extends Panel {
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
     });
-    void moved;
   }
 
   destroy() {
