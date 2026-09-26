@@ -148,6 +148,7 @@ function sections(ui: UIHost): Section[] {
       'Auto quality lowers render scale and effects when the frame rate drops below 60 fps and restores them when there is headroom.',
       'Anti-aliasing smooths jagged edges; brightness (60–160%) adjusts scene exposure for dark screens or bright rooms.',
       'Turn on the performance overlay to see FPS, frame time, the effective render scale and renderer statistics under the minimap.',
+      'Texture quality switches between Classic pixel-art blocks, Realistic (64 px photoreal materials with normal maps) and Ultra realistic (256 px PBR materials with parallax depth and reflective metals on buildings). Textures are generated on your machine the first time and cached.',
     ], tips: ['Render distance and shadows cost the most on slower GPUs; SSAO is the most expensive single effect.'] },
     { id: 'offshore', title: 'Offshore', icon: 'platform', lead: 'The biggest fields lie beneath the sea.', body: [
       'Jack-up rigs drill in shallow water; semi-submersibles go deeper. Offshore wells flow to a production platform (within 24 blocks) or FPSO (within 40 blocks).',

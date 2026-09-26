@@ -27,6 +27,12 @@ export const PRESETS: { id: PresetId; label: string; sub: string; icon: IconName
 ];
 
 /** The preset whose values all match the settings, or null ("Custom"). */
+const TEXTURE_HINTS: Record<Settings['textureQuality'], string> = {
+  classic: 'Crisp 16×16 pixel-art blocks',
+  high: '64 px photoreal materials with normal maps — similar cost to Classic',
+  ultra: '256 px PBR materials, parallax depth & reflective metals — for fast GPUs',
+};
+
 export function matchPreset(s: Settings): PresetId | null {
   for (const p of PRESETS) {
     let ok = true;
@@ -152,6 +158,13 @@ export class SettingsPanel extends Panel {
         this.row('Brightness', slider({ min: 0.6, max: 1.6, step: 0.05, value: s.brightness, format: pctFmt, onInput: (v) => this.apply({ brightness: v }) }).el, 'Exposure of the 3D scene'),
         this.row('Anti-aliasing', toggle(null, s.antialias, (v) => this.apply({ antialias: v })).el, 'Smooths jagged edges'),
         this.row('Performance overlay', toggle(null, s.showFps, (v) => this.apply({ showFps: v })).el, 'FPS, frame time and renderer statistics'),
+        h('div.section-title', 'Textures'),
+        this.row('Texture quality', segmented([
+          { value: 'classic', label: 'Classic' },
+          { value: 'high', label: 'Realistic' },
+          { value: 'ultra', label: 'Ultra realistic' },
+        ], s.textureQuality ?? 'classic', (v) => { this.apply({ textureQuality: v as Settings['textureQuality'] }); this.renderTab(); }).el,
+          TEXTURE_HINTS[s.textureQuality ?? 'classic']),
         h('div.section-title', 'Lighting & effects'),
         this.row('Shadows', toggle(null, s.shadows, (v) => this.apply({ shadows: v })).el),
         this.row('Shadow quality', segmented([{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }], s.shadowQuality, (v) => this.apply({ shadowQuality: v })).el),
@@ -159,7 +172,7 @@ export class SettingsPanel extends Panel {
         this.row('Ambient occlusion (SSAO)', toggle(null, s.ssao, (v) => this.apply({ ssao: v })).el, 'Soft contact shadows — expensive'),
         this.row('Volumetric clouds', toggle(null, s.clouds, (v) => this.apply({ clouds: v })).el),
         this.row('Particles', segmented([{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }], s.particles, (v) => this.apply({ particles: v })).el),
-        this.resetRow(['renderDistance', 'renderScale', 'autoQuality', 'fov', 'brightness', 'antialias', 'showFps', 'shadows', 'shadowQuality', 'bloom', 'ssao', 'clouds', 'particles']));
+        this.resetRow(['renderDistance', 'renderScale', 'autoQuality', 'fov', 'brightness', 'antialias', 'showFps', 'textureQuality', 'shadows', 'shadowQuality', 'bloom', 'ssao', 'clouds', 'particles']));
       this.paintPreset();
       this.update();
     } else if (this.tab === 'audio') {
