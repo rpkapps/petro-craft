@@ -29,6 +29,7 @@ export class PowerSystem {
   /** Scratch lists reused every step. */
   private turbines: BuildingState[] = [];
   private diesels: BuildingState[] = [];
+  private dieselOut = 0;
   constructor(private readonly rt: FacilityRuntime) {}
 
   tick(step: SimStep): void {
@@ -75,6 +76,7 @@ export class PowerSystem {
     }
 
     let supply = renew;
+    this.dieselOut = 0;
     let need = Math.max(0, demand - supply);
     let exportable = Math.max(0, renewSellable - Math.max(0, demand - (renew - renewSellable)));
 
@@ -104,55 +106,18 @@ export class PowerSystem {
     }
 
     // ---- diesel gensets: base-load ones before grid import, backup ones after
-    const runDiesel = (backup: boolean) => {
-      for (const b of this.diesels) {
-        const isBackup = b.config.priority === 'backup';
-        if (isBackup !== backup) continue;
-        const rated = -BUILDINGS[b.type].power;
-        const avail = rated * rt.conditionFactor(b) * Math.max(0, Math.min(1, b.throttle));
-        const out = Math.min(avail, need);
-        let fuel = out * BBL_DIESEL_PER_MWH * hours / effMod;
-        const fromTank = takeStorage(b, 'diesel', fuel);
-        fuel -= fromTank;
-        if (fromTank > 0) rt.io(b, 'diesel', -fromTank);
-        let produced = out;
-        if (fuel > 0 && b.config.useWarehouse !== false) {
-          const wh = st.company.warehouse;
-          const t = Math.min(wh.diesel ?? 0, fuel);
-          if (t > 0) {
-            wh.diesel = (wh.diesel ?? 0) - t;
-            if (wh.diesel <= 1e-6) delete wh.diesel;
-            fuel -= t;
-            rt.io(b, 'diesel', -t);
-          }
-        }
-        if (fuel > 0) {
-          if (b.config.truckDiesel !== false) {
-            const price = (st.market.prices.diesel ?? ITEMS.diesel.basePrice) * TRUCKED_DIESEL_PREMIUM;
-            rt.pending.truckedDiesel += fuel * price;
-            rt.io(b, 'diesel', -fuel);
-          } else {
-            // Out of fuel: only what was burnt is produced.
-            const perMw = (BBL_DIESEL_PER_MWH * hours) / effMod;
-            produced = perMw > 0 ? Math.max(0, out - fuel / perMw) : 0;
-          }
-        }
-        need -= produced;
-        supply += produced;
-        this.setOutput(b, produced, rated);
-      }
-    };
-    runDiesel(false);
+    need = this.runDiesel(false, need, hours, effMod);
 
     // ---- utility import
     const imp = Math.min(GRID_IMPORT_MAX, need);
     need -= imp;
     rt.pending.gridImport += imp * hours * GRID_IMPORT_PRICE;
-    runDiesel(true);
+    need = this.runDiesel(true, need, hours, effMod);
 
     // ---- surplus export
     rt.pending.gridExport += exportable * hours * GRID_EXPORT_PRICE;
 
+    supply += this.dieselOut;
     const served = Math.max(0, demand - need);
     const satisfaction = demand > 1e-6 ? Math.min(1, served / demand) : 1;
     st.power.generation = Math.round(supply * 100) / 100;
@@ -160,6 +125,49 @@ export class PowerSystem {
     st.power.gridImport = Math.round(imp * 100) / 100;
     st.power.satisfaction = satisfaction;
     rt.powerFactor = satisfaction;
+  }
+
+  /** Dispatch diesel gensets of one priority class; returns the remaining unmet demand (MW). */
+  private runDiesel(backup: boolean, need: number, hours: number, effMod: number): number {
+    const rt = this.rt;
+    const st = rt.ctx.state;
+    for (const b of this.diesels) {
+      const isBackup = b.config.priority === 'backup';
+      if (isBackup !== backup) continue;
+      const rated = -BUILDINGS[b.type].power;
+      const avail = rated * rt.conditionFactor(b) * Math.max(0, Math.min(1, b.throttle));
+      const out = Math.min(avail, need);
+      let fuel = out * BBL_DIESEL_PER_MWH * hours / effMod;
+      const fromTank = takeStorage(b, 'diesel', fuel);
+      fuel -= fromTank;
+      if (fromTank > 0) rt.io(b, 'diesel', -fromTank);
+      let produced = out;
+      if (fuel > 0 && b.config.useWarehouse !== false) {
+        const wh = st.company.warehouse;
+        const t = Math.min(wh.diesel ?? 0, fuel);
+        if (t > 0) {
+          wh.diesel = (wh.diesel ?? 0) - t;
+          if (wh.diesel <= 1e-6) delete wh.diesel;
+          fuel -= t;
+          rt.io(b, 'diesel', -t);
+        }
+      }
+      if (fuel > 0) {
+        if (b.config.truckDiesel !== false) {
+          const price = (st.market.prices.diesel ?? ITEMS.diesel.basePrice) * TRUCKED_DIESEL_PREMIUM;
+          rt.pending.truckedDiesel += fuel * price;
+          rt.io(b, 'diesel', -fuel);
+        } else {
+          // Out of fuel: only what was burnt is produced.
+          const perMw = (BBL_DIESEL_PER_MWH * hours) / effMod;
+          produced = perMw > 0 ? Math.max(0, out - fuel / perMw) : 0;
+        }
+      }
+      need -= produced;
+      this.dieselOut += produced;
+      this.setOutput(b, produced, rated);
+    }
+    return need;
   }
 
   private setOutput(b: BuildingState, mw: number, rated: number) {

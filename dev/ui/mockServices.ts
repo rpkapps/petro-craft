@@ -2,17 +2,8 @@
 import type { GameState, IGeology, IWorld, SeismicImage, Services, SurveyState, Vec2, Vec3, WellPlan } from '../../src/core/types';
 import { B } from '../../src/core/blocks';
 import { rotatedSize } from '../../src/core/buildingUtil';
-import { RECIPES } from '../../src/content/recipes';
 import { SEA_LEVEL, WORLD_HEIGHT } from '../../src/core/constants';
 import { trajectory } from './mockState';
-
-export function installMockRecipes() {
-  const r = (id: string, name: string, building: string, inputs: Record<string, number>, outputs: Record<string, number>, description: string) => (RECIPES[id] = { id, name, building, inputs, outputs, description });
-  r('gas_plant_std', 'Cryogenic NGL recovery', 'gas_plant', { natural_gas: 20000 }, { dry_gas: 16000, ngl: 900, condensate: 180, sulfur: 14 }, 'Standard turbo-expander train.');
-  r('gas_plant_lean', 'Dew-point control only', 'gas_plant', { natural_gas: 24000 }, { dry_gas: 21500, condensate: 220 }, 'Higher throughput, fewer liquids.');
-  r('cdu_std', 'Atmospheric distillation', 'refinery', { crude_oil: 10000 }, { gasoline: 3800, diesel: 2900, jet_fuel: 900, lpg: 500, asphalt: 180 }, 'Balanced fuels slate.');
-  r('cdu_diesel', 'Max distillate', 'refinery', { crude_oil: 10000 }, { gasoline: 2900, diesel: 3900, jet_fuel: 1200, asphalt: 200 }, 'Diesel & jet focused cut points.');
-}
 
 // ---- seismic synthetic ---------------------------------------------------------------------------
 function ricker(t: number) {

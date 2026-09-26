@@ -55,7 +55,7 @@ export function createMockState(geo: IGeology): GameState {
   const sphere = mk('gas_sphere', 256, 214, 'active', { storage: { natural_gas: 22_400, dry_gas: 8_100 } });
   const truck = mk('truck_terminal', 236, 206, 'active', { storage: { crude_oil: 1180 }, data: { soldToday: 2240, revenueToday: 161_000 } });
   const meter = mk('gas_sales_meter', 262, 206, 'active', { storage: { dry_gas: 5200 }, data: { soldToday: 31_000 } });
-  const gasPlant = mk('gas_plant', 270, 226, 'active', { recipeId: 'gas_plant_std', storage: { natural_gas: 6400, dry_gas: 2100, ngl: 1300, condensate: 340 }, throttle: 0.85, io: { natural_gas: -18_000, dry_gas: 14_600, ngl: 820, condensate: 160, sulfur: 12 } });
+  const gasPlant = mk('gas_plant', 270, 226, 'active', { recipeId: 'gas_cryo', storage: { natural_gas: 6400, dry_gas: 2100, ngl: 1300, condensate: 340 }, throttle: 0.85, io: { natural_gas: -18_000, dry_gas: 14_600, ngl: 820, condensate: 160, sulfur: 12 } });
   const refinery = mk('refinery', 282, 240, 'constructing');
   const flare = mk('flare_stack', 222, 228, 'active', { config: {} });
   const pit = mk('water_pit', 214, 260, 'active', { storage: { produced_water: 3900 } });
