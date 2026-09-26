@@ -1,8 +1,8 @@
 // Chunk streaming: generates terrain around the camera under a per-frame time budget, dispatches
 // meshing jobs to the worker pool (prioritised by distance & view direction), applies results under an
-// upload budget (unchanged sections are skipped by content hash), re-meshes on block edits (batched,
+// upload budget (unchanged passes are skipped by content hash), re-meshes on block edits (batched,
 // light-radius aware), unloads far chunks, hides cave sections that cannot be seen from the camera
-// (section visibility graph) and drops plant geometry in the distance.
+// (section visibility graph → narrowed draw ranges) and drops plant geometry in the distance.
 import * as THREE from 'three';
 import { CHUNK_SIZE } from '../../core/constants';
 import type { IWorld } from '../../core/types';
@@ -10,7 +10,7 @@ import type { EventBus } from '../../core/EventBus';
 import { MesherPool } from '../meshing/MesherPool';
 import { LPAD, LW, EMIT_RANGE, SECTION, type MeshJob, type MeshResult } from '../meshing/protocol';
 import { EMIT, SKY_BLOCKER, LIGHT_CLASS } from '../meshing/blockTables';
-import { ChunkMeshes, resultBytes, type TerrainMode } from './ChunkMeshes';
+import { ChunkMeshes, type TerrainMode } from './ChunkMeshes';
 import type { TerrainMaterialSet } from '../materials/TerrainMaterials';
 
 const CS = CHUNK_SIZE;
@@ -94,6 +94,7 @@ export class ChunkManager {
   private genFailures = 0;
   private offBus: () => void;
   private sortCursor = 0;
+  private sortPending = true;
   readonly stats: ChunkStats = { loaded: 0, meshed: 0, meshing: 0, pendingGen: 0, lastMeshMs: 0, culledSections: 0, uploadBytes: 0 };
   private readonly height: number;
   private readonly sectionCount: number;
@@ -141,7 +142,7 @@ export class ChunkManager {
     this.cullDirty = true;
   }
 
-  /** Plants fade out towards `far` (blocks) and are neither drawn nor meshed well beyond it. */
+  /** Plants fade out towards `far` (blocks, shader) and are not meshed well beyond it. */
   setPlantLod(far: number) {
     if (Math.abs(far - this.plantFar) < 0.5) return;
     this.plantFar = far;
@@ -245,7 +246,6 @@ export class ChunkManager {
     list.length = 0;
     const r2 = (rd + 0.5) * (rd + 0.5);
     const plantIn = this.plantFar + 16;
-    const plantShow = this.plantFar + 12;
     for (let dz = -rd; dz <= rd; dz++)
       for (let dx = -rd; dx <= rd; dx++) {
         if (dx * dx + dz * dz > r2) continue;
@@ -268,7 +268,6 @@ export class ChunkManager {
         e.dist = Math.sqrt(d2) * CS;
         // plant LOD: re-mesh with plants when a chunk that was meshed without them comes closer
         if (e.plantsSkipped && e.meshedVersion >= 0 && e.dist < plantIn && e.meshedVersion >= e.version) e.version++;
-        e.meshes?.setPlantsVisible(e.dist < plantShow);
         list.push(e);
       }
     list.sort((a, b) => a.distSq - b.distSq);
@@ -285,6 +284,7 @@ export class ChunkManager {
       this.entries.delete(k);
       this.cullDirty = true;
     }
+    this.countMeshed();
     // column caches (heights/emitters) are cheap to keep around, but not forever
     const far = (rd + 6) * (rd + 6);
     for (const k of this.columns.keys()) {
@@ -370,7 +370,7 @@ export class ChunkManager {
     let i = 0;
     for (; i < res.length; i++) {
       const r = res[i];
-      const size = resultBytes(r);
+      const size = ChunkMeshes.resultBytes(r);
       if (applied > 0 && (bytes + size > budgetBytes || performance.now() - t0 > 4)) break;
       const job = this.jobs.get(r.id);
       this.jobs.delete(r.id);
@@ -379,8 +379,7 @@ export class ChunkManager {
       if (e.inflight !== r.id || this.entries.get(key(e.cx, e.cz)) !== e) continue;
       e.inflight = 0;
       if (!e.meshes) e.meshes = new ChunkMeshes(e.cx, e.cz, this.group, this.mats, this.sectionCount, this.mode);
-      if (e.meshes.apply(r) > 0) bytes += size;
-      e.meshes.setPlantsVisible(e.dist < this.plantFar + 12);
+      bytes += e.meshes.apply(r);
       e.meshedVersion = job.version;
       e.plantsSkipped = r.skipPlants;
       this.stats.lastMeshMs = r.ms;
@@ -389,6 +388,10 @@ export class ChunkManager {
     }
     res.splice(0, i);
     this.stats.uploadBytes = bytes;
+    this.countMeshed();
+  }
+
+  private countMeshed() {
     let meshed = 0;
     for (const e of this.entries.values()) if (e.meshes) meshed++;
     this.stats.meshed = meshed;
@@ -411,26 +414,31 @@ export class ChunkManager {
   }
 
   private sortTranslucent(cam: THREE.Vector3) {
-    // Only when the camera moved meaningfully; then a few nearby chunks per frame (round-robin).
-    const moved = this.lastSortCam.distanceToSquared(cam) > 0.25 * 0.25;
-    if (!moved && this.sortCursor === 0) return;
-    if (moved) this.lastSortCam.copy(cam);
+    // Only after the camera moved meaningfully: re-sort a few nearby chunks per frame (round-robin) until a
+    // full pass finds nothing left to sort (each chunk also skips itself below its own movement threshold).
+    if (this.lastSortCam.distanceToSquared(cam) > 0.25 * 0.25) {
+      this.lastSortCam.copy(cam);
+      this.sortPending = true;
+    }
+    if (!this.sortPending) return;
     let near = 0;
     for (const e of this.wanted) {
       if (e.distSq > 9) break;
       near++;
     }
-    if (!near) return;
+    if (!near) {
+      this.sortPending = false;
+      return;
+    }
     let sorted = 0;
     let visited = 0;
     for (let i = 0; i < near && sorted < 3; i++) {
       const e = this.wanted[(this.sortCursor + i) % near];
       visited++;
-      const m = e.meshes;
-      if (!m) continue;
-      for (const s of m.sections) if (s.sortTranslucent(cam)) sorted++;
+      if (e.meshes?.sortTranslucent(cam)) sorted++;
     }
     this.sortCursor = (this.sortCursor + visited) % near;
+    if (sorted === 0 && visited === near) this.sortPending = false;
   }
 
   // ---- cave-occlusion culling -------------------------------------------------------------------------
@@ -453,7 +461,7 @@ export class ChunkManager {
     this.cullCam.sy = csy;
     let culled = 0;
     if (!active) {
-      for (const e of this.entries.values()) if (e.meshes) for (let s = 0; s < this.sectionCount; s++) e.meshes.setCulled(s, false);
+      for (const e of this.entries.values()) e.meshes?.setCulled(0);
       this.stats.culledSections = 0;
       return;
     }
@@ -480,7 +488,7 @@ export class ChunkManager {
       const lx = e.cx - ccx + R;
       const lz = e.cz - ccz + R;
       if (lx < 0 || lz < 0 || lx >= G || lz >= G || !e.meshes) continue;
-      for (let s = 0; s < NS; s++) visArr[lx + lz * G + s * G * G] = e.meshes.sections[s].vis;
+      for (let s = 0; s < NS; s++) visArr[lx + lz * G + s * G * G] = e.meshes.vis[s];
     }
     let qh = 0;
     let qt = 0;
@@ -519,11 +527,10 @@ export class ChunkManager {
       const lx = e.cx - ccx + R;
       const lz = e.cz - ccz + R;
       const inGrid = lx >= 0 && lz >= 0 && lx < G && lz < G;
-      for (let s = 0; s < NS; s++) {
-        const hide = inGrid && !visited[lx + lz * G + s * G * G];
-        e.meshes.setCulled(s, hide);
-        if (hide && !e.meshes.sections[s].empty) culled++;
-      }
+      let mask = 0;
+      if (inGrid) for (let s = 0; s < NS; s++) if (!visited[lx + lz * G + s * G * G]) mask |= 1 << s;
+      e.meshes.setCulled(mask);
+      if (mask) culled += e.meshes.culledCount();
     }
     this.stats.culledSections = culled;
   }

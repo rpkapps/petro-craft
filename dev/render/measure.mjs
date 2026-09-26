@@ -63,6 +63,7 @@ const r = await page.evaluate(() => {
     b.tris += n;
     if (m.visible) { visible++; b.visibleMeshes++; b.visibleTris += n; }
   });
+  const full = { calls: host.renderer.info.render.calls, triangles: host.renderer.info.render.triangles };
   // main view only (no shadow map, no post): one plain render
   const sh = host.renderer.shadowMap.enabled;
   host.renderer.shadowMap.enabled = false;
@@ -72,13 +73,45 @@ const r = await page.evaluate(() => {
   host.renderer.shadowMap.enabled = sh;
   return {
     cam: host.camera.position.toArray().map((v) => +v.toFixed(1)),
-    calls: info.render.calls, triangles: info.render.triangles, programs: info.programs?.length,
+    full, programs: info.programs?.length,
     geometries: info.memory.geometries, textures: info.memory.textures,
     chunkEntries: host.chunks.entries.size, terrainMeshes: meshes, terrainTrianglesLoaded: tris, visibleMeshes: visible, byPass, mainOnly,
     updateMs: t.map((x) => +x[0].toFixed(2)), renderMs: t.map((x) => +x[1].toFixed(1)),
     stats: host.stats ?? null,
     culledSections: host.chunks.stats?.culledSections,
   };
+});
+// streaming while moving: camera flies 1.5 blocks per frame across the map (worker meshing runs in parallel);
+// records the main-thread cost of the chunk manager and of the whole renderer update per frame
+r.walk = await page.evaluate(async () => {
+  const host = window.petrocraft.host;
+  const cm = host.chunks;
+  const orig = cm.update.bind(cm);
+  const times = [];
+  cm.update = (...args) => {
+    const t = performance.now();
+    orig(...args);
+    times.push(performance.now() - t);
+  };
+  const upd = [];
+  const cam = host.camera;
+  const frame = () => new Promise((res) => requestAnimationFrame(res));
+  for (let i = 0; i < 120; i++) {
+    cam.position.x = 40 + i * 1.5;
+    cam.position.z = 60 + i * 0.8;
+    cam.updateMatrixWorld();
+    const t = performance.now();
+    host.update(1 / 60);
+    upd.push(performance.now() - t);
+    host.render();
+    await frame();
+  }
+  cm.update = orig;
+  const stat = (a) => {
+    const s = [...a].sort((x, y) => x - y);
+    return { avg: +(a.reduce((p, c) => p + c, 0) / a.length).toFixed(2), p50: +s[Math.floor(s.length / 2)].toFixed(2), p95: +s[Math.floor(s.length * 0.95)].toFixed(2), max: +s[s.length - 1].toFixed(2) };
+  };
+  return { chunkUpdateMs: stat(times), rendererUpdateMs: stat(upd) };
 });
 console.log(JSON.stringify(r, null, 1));
 if (out) await page.screenshot({ path: out });

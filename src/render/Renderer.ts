@@ -499,5 +499,12 @@ export class RenderEngine implements Renderer {
     fog.near = u.uFogNear.value;
     fog.far = u.uFogFar.value;
     this.renderer.setClearColor(u.uFogColor.value, 1);
+
+    // brightness: tone-mapping exposure multiplier (applies to the direct and the composer path). Nights
+    // respond less to darkening (never unreadable) and a little more to brightening.
+    const b = Number.isFinite(this.ctx.settings.brightness) ? Math.min(1.6, Math.max(0.6, this.ctx.settings.brightness)) : 1;
+    const night = 1 - a.daylight;
+    const mult = b >= 1 ? b + (b - 1) * 0.5 * night : b + (1 - b) * 0.6 * night;
+    this.renderer.toneMappingExposure = BASE_EXPOSURE * mult;
   }
 }

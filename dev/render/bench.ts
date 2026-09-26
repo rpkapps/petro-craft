@@ -1,11 +1,13 @@
 // Mesher/lighting micro-benchmark on real generated terrain (no browser):
-//   node --experimental-transform-types --no-warnings --import ./dev/world/register.mjs dev/render/bench.ts [seed] [chunks]
-import { createGeology, createWorld } from '../../src/world/index.ts';
-import { EventBus } from '../../src/core/EventBus.ts';
-import { CHUNK_SIZE } from '../../src/core/constants.ts';
-import { Mesher } from '../../src/render/meshing/mesher.ts';
-import { computeSkyLight } from '../../src/render/meshing/lighting.ts';
-import { LPAD, LW, type MeshJob } from '../../src/render/meshing/protocol.ts';
+//   node --experimental-strip-types --no-warnings --import ./dev/world/register.mjs dev/render/bench.ts [seed] [chunks]
+import { createGeology, createWorld } from '../../src/world';
+import { EventBus } from '../../src/core/EventBus';
+import { CHUNK_SIZE } from '../../src/core/constants';
+import { Mesher } from '../../src/render/meshing/mesher';
+import { computeSkyLight } from '../../src/render/meshing/lighting';
+import { LPAD, LW, type MeshJob } from '../../src/render/meshing/protocol';
+
+declare const process: { argv: string[] };
 
 const seed = Number(process.argv[2] ?? 424242);
 const count = Number(process.argv[3] ?? 24);
@@ -38,20 +40,13 @@ const m = new Mesher();
 for (const j of jobs.slice(0, 3)) m.mesh(j);
 let tSky = 0;
 for (const j of jobs) { const t = performance.now(); computeSkyLight(j.blocks, H); tSky += performance.now() - t; }
-let tMesh = 0, tris = { opaque: 0, cutout: 0, plants: 0, translucent: 0 }, sections = 0, nonEmpty = 0;
+let tMesh = 0;
+const tris = { opaque: 0, cutout: 0, translucent: 0 };
 for (const j of jobs) {
   const t = performance.now();
   const r = m.mesh(j);
   tMesh += performance.now() - t;
-  for (const s of r.sections) {
-    sections++;
-    let any = false;
-    for (const p of ['opaque', 'cutout', 'plants', 'translucent'] as const) {
-      const d = s[p];
-      if (d) { tris[p] += d.indices.length / 3; any = true; }
-    }
-    if (any) nonEmpty++;
-  }
+  for (const p of ['opaque', 'cutout', 'translucent'] as const) tris[p] += (r[p]?.indices.length ?? 0) / 3;
 }
-console.log(`chunks ${jobs.length}: sky ${(tSky / jobs.length).toFixed(2)} ms/chunk, full mesh ${(tMesh / jobs.length).toFixed(2)} ms/chunk`);
-console.log('triangles', tris, `sections ${sections} (non-empty ${nonEmpty})`);
+console.log(`chunks ${jobs.length}: sky light ${(tSky / jobs.length).toFixed(2)} ms/chunk, full mesh ${(tMesh / jobs.length).toFixed(2)} ms/chunk`);
+console.log('triangles', tris);

@@ -1,17 +1,19 @@
-// Chunk mesher: LW-padded voxel column → per-section vertex streams (opaque, alpha-tested cut-out, plants,
-// translucent). Features: hidden-face culling, per-vertex AO with anisotropy-free quad flipping, smooth
-// sky/block light, greedy merging of uniformly lit opaque faces, directional liquids with depth attribute,
-// cross plants with jitter, slabs and pipes, per-section cave-culling visibility and content hashes.
+// Chunk mesher: LW-padded voxel column → three vertex streams (opaque, alpha-tested cut-out, translucent)
+// whose opaque/cut-out indices are grouped by vertical section. Features: hidden-face culling, per-vertex AO
+// with anisotropy-free quad flipping, smooth sky/block light, greedy merging of uniformly lit opaque faces,
+// leaf interiors culled beyond one layer, directional liquids with depth attribute, cross plants with jitter
+// (flagged for the distance fade, omitted for far chunks), slabs and pipes, per-section cave-culling
+// visibility and per-pass content hashes.
 import { B } from '../../core/blocks';
 import { CHUNK_SIZE } from '../../core/constants';
 import {
-  SHAPE, PASS, FACE_LAYER, OPAQUE, SWAY, PIPE_CAT, WATERLOGGED, LIQUID_TOP, FULLBRIGHT, PLANT,
+  SHAPE, PASS, FACE_LAYER, OPAQUE, SWAY, PIPE_CAT, WATERLOGGED, LIQUID_TOP, FULLBRIGHT, PLANT, PLANT_LAYER_FLAG,
   SHAPE_CUBE, SHAPE_CROSS, SHAPE_LIQUID, SHAPE_PIPE, SHAPE_SLAB, PASS_OPAQUE, PASS_CUTOUT, PASS_TRANSLUCENT, PIPE_CASING, PIPE_NONE,
 } from './blockTables';
 import { MeshBuffer } from './MeshBuffer';
 import { emitPipe } from './pipeGeometry';
 import { computeBlockLight, computeSkyLight } from './lighting';
-import { PW, PAD, LW, LPAD, SECTION, type MeshJob, type MeshResult, type PassData, type SectionData } from './protocol';
+import { PW, PAD, LW, LPAD, SECTION, type MeshJob, type MeshResult, type PassData } from './protocol';
 import { hash3 } from '../util/noise';
 
 const CS = CHUNK_SIZE;
@@ -106,7 +108,6 @@ function hashPass(h: number, p: PassData | null, salt: number): number {
 export class Mesher {
   private opaque = new MeshBuffer();
   private cutout = new MeshBuffer();
-  private plants = new MeshBuffer();
   private translucent = new MeshBuffer(true);
 
   // per-job volumes (PW × PW × (H+2), one solid layer below and one air layer above)
@@ -117,6 +118,9 @@ export class Mesher {
   private minY = 1e9;
   private maxY = -1e9;
   private skipPlants = false;
+  /** The job's LW-padded block volume (wider context than `ext`). */
+  private lw: Uint8Array = new Uint8Array(0);
+  private height = 0;
 
   // greedy merging: per direction, key of each mergeable face in the current section (0 = none)
   private greedy: Float64Array[] = DIRS.map(() => new Float64Array(CS * CS * SECTION));
@@ -135,6 +139,8 @@ export class Mesher {
     const t0 = performance.now();
     const H = job.height;
     this.skipPlants = job.skipPlants;
+    this.lw = job.blocks;
+    this.height = H;
     const n = PL * (H + 2);
     if (this.ext.length !== n) {
       this.ext = new Uint8Array(n);
@@ -181,15 +187,20 @@ export class Mesher {
 
     const wx0 = job.cx * CS;
     const wz0 = job.cz * CS;
-    const sections: SectionData[] = [];
     const nSec = Math.ceil(H / SECTION);
+    const opaqueRanges = new Uint32Array(nSec + 1);
+    const cutoutRanges = new Uint32Array(nSec + 1);
+    const sectionMinY = new Float32Array(nSec);
+    const sectionMaxY = new Float32Array(nSec);
+    const vis = new Uint16Array(nSec);
+    this.opaque.reset();
+    this.cutout.reset();
+    this.translucent.reset();
     for (let s = 0; s < nSec; s++) {
       const y0 = s * SECTION;
       const y1 = Math.min(H, y0 + SECTION);
-      this.opaque.reset();
-      this.cutout.reset();
-      this.plants.reset();
-      this.translucent.reset();
+      opaqueRanges[s] = this.opaque.ic;
+      cutoutRanges[s] = this.cutout.ic;
       this.minY = 1e9;
       this.maxY = -1e9;
       for (let ey = y0 + 1, yEnd = Math.min(y1, top); ey <= yEnd; ey++) {
@@ -221,32 +232,39 @@ export class Mesher {
           }
       }
       this.flushGreedy(y0, y1);
-      const quadCenters = this.translucent.centers && this.translucent.centers.length ? new Float32Array(this.translucent.centers) : null;
-      const opaque = this.opaque.finish();
-      const cutout = this.cutout.finish();
-      const plants = this.plants.finish();
-      const translucent = this.translucent.finish();
-      let hash = 2166136261;
-      hash = hashPass(hash, opaque, 1);
-      hash = hashPass(hash, cutout, 2);
-      hash = hashPass(hash, plants, 3);
-      hash = hashPass(hash, translucent, 4);
-      const empty = this.minY > this.maxY;
-      sections.push({
-        sy: s,
-        opaque,
-        cutout,
-        plants,
-        translucent,
-        quadCenters,
-        minY: empty ? 0 : this.minY,
-        maxY: empty ? 0 : this.maxY,
-        vis: this.visibility(y0, y1),
-        hash: (hash ^ (empty ? 0 : (this.minY * 131 + this.maxY) | 0)) >>> 0,
-      });
+      sectionMinY[s] = this.minY;
+      sectionMaxY[s] = this.maxY;
+      vis[s] = this.visibility(y0, y1);
     }
+    opaqueRanges[nSec] = this.opaque.ic;
+    cutoutRanges[nSec] = this.cutout.ic;
 
-    return { type: 'mesh', id: job.id, cx: job.cx, cz: job.cz, sections, skipPlants: job.skipPlants, ms: performance.now() - t0 };
+    const quadCenters = this.translucent.centers && this.translucent.centers.length ? new Float32Array(this.translucent.centers) : null;
+    const opaque = this.opaque.finish();
+    const cutout = this.cutout.finish();
+    const translucent = this.translucent.finish();
+    const hashes = new Uint32Array(3);
+    hashes[0] = hashPass(fnv(2166136261, opaqueRanges), opaque, 1);
+    hashes[1] = hashPass(fnv(2166136261, cutoutRanges), cutout, 2);
+    hashes[2] = hashPass(2166136261, translucent, 3);
+    return {
+      type: 'mesh',
+      id: job.id,
+      cx: job.cx,
+      cz: job.cz,
+      opaque,
+      cutout,
+      translucent,
+      quadCenters,
+      opaqueRanges,
+      cutoutRanges,
+      sectionMinY,
+      sectionMaxY,
+      vis,
+      hashes,
+      skipPlants: job.skipPlants,
+      ms: performance.now() - t0,
+    };
   }
 
   private bufFor(id: number): MeshBuffer {
@@ -331,6 +349,14 @@ export class Mesher {
         if (!(hy < 1 && d === 2)) continue; // slab tops are always visible
       }
       if (pass !== 0 && nb === id && !isLeaves) continue; // glass/ice/grate: cull same-type seams
+      // leaves: faces towards another leaf are only kept one layer deep (seen through that leaf's holes)
+      if (isLeaves && SWAY[nb] === 1 && SHAPE[nb] === SHAPE_CUBE) {
+        const by = y + DIRS[d][1] * 2;
+        if (by >= 0 && by < this.height) {
+          const beyond = this.lw[x + DIRS[d][0] * 2 + LPAD + (z + DIRS[d][2] * 2 + LPAD) * LW + by * LW * LW];
+          if (OPAQUE[beyond] || (SWAY[beyond] === 1 && SHAPE[beyond] === SHAPE_CUBE)) continue;
+        }
+      }
       if (d === 2 && hy === 1 && SHAPE[nb] === SHAPE_SLAB) continue;
       if (hy < 1 && d === 2) {
         // Slab top sits inside its own cell: light it from the cell itself.
@@ -475,8 +501,8 @@ export class Mesher {
   private cross(i: number, id: number, x: number, y: number, z: number, wx: number, wz: number) {
     const plant = PLANT[id] === 1;
     if (plant && this.skipPlants) return;
-    const buf = plant ? this.plants : this.cutout;
-    const layer = FACE_LAYER[id * 3 + 1];
+    const buf = this.cutout;
+    const layer = FACE_LAYER[id * 3 + 1] + (plant ? PLANT_LAYER_FLAG : 0);
     const jx = (hash3(wx, wz, 11) - 0.5) * 0.3;
     const jz = (hash3(wx, wz, 23) - 0.5) * 0.3;
     const tall = id === B.TALL_GRASS || id === B.SEAGRASS ? 0.72 + hash3(wx, wz, 37) * 0.36 : id === B.FIRE ? 1.15 : 1;

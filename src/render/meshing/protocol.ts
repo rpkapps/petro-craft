@@ -13,7 +13,7 @@ export const LPAD = 8;
 export const LW = CHUNK_SIZE + LPAD * 2; // 32
 /** Block light reaches this far (Manhattan steps from a level-15 emitter). */
 export const EMIT_RANGE = 14;
-/** Vertical sub-chunk height: meshes, culling and uploads are per 16×SECTION×16 section. */
+/** Vertical sub-chunk height: cave-occlusion culling works per 16×SECTION×16 section. */
 export const SECTION = 32;
 
 export interface MeshJob {
@@ -35,41 +35,40 @@ export interface PassData {
   /** xyz normal + sway weight (int8 normalized). */
   normals: Int8Array;
   uvs: Float32Array;
-  /** layer, ao (or liquid depth), sky light, block light — uint8. */
+  /** layer (+128 for distance-faded plants), ao (or liquid depth), sky light, block light — uint8. */
   info: Uint8Array;
   indices: Uint16Array | Uint32Array;
 }
 
-/** Geometry of one vertical section. Coordinates are chunk-local (x/z 0..16, absolute y). */
-export interface SectionData {
-  /** Section index (y / SECTION). */
-  sy: number;
-  opaque: PassData | null;
-  /** Alpha-tested cubes (leaves, grates) and non-plant crosses (fire). */
-  cutout: PassData | null;
-  /** Swaying cross plants (grass, flowers, sea grass) — distance-faded and dropped for far chunks. */
-  plants: PassData | null;
-  translucent: PassData | null;
-  /** Centre of every translucent quad (for back-to-front sorting). */
-  quadCenters: Float32Array | null;
-  /** Tight vertical extent of the section's geometry (0,0 when empty). */
-  minY: number;
-  maxY: number;
-  /**
-   * Face-to-face visibility through non-opaque cells (cave culling): bit (a*6+b) is set when faces
-   * a and b (0 +X, 1 -X, 2 +Y, 3 -Y, 4 +Z, 5 -Z) are connected by open space inside the section.
-   */
-  vis: number;
-  /** Content hash of all passes — unchanged sections are not re-uploaded after an edit. */
-  hash: number;
-}
-
+/**
+ * Geometry of one chunk column. Opaque and cut-out indices are ordered by vertical section (16×SECTION×16),
+ * so a contiguous run of visible sections is one draw range; `*Ranges[s]..*Ranges[s+1]` is section s.
+ * Coordinates are chunk-local (x/z 0..16, absolute y).
+ */
 export interface MeshResult {
   type: 'mesh';
   id: number;
   cx: number;
   cz: number;
-  sections: SectionData[];
+  opaque: PassData | null;
+  /** Alpha-tested cubes (leaves, grates) and crosses (plants carry the fade flag in their layer byte). */
+  cutout: PassData | null;
+  translucent: PassData | null;
+  /** Centre of every translucent quad (for back-to-front sorting). */
+  quadCenters: Float32Array | null;
+  /** Index offsets per section (length sections + 1). */
+  opaqueRanges: Uint32Array;
+  cutoutRanges: Uint32Array;
+  /** Vertical geometry extent per section (min > max when the section has no geometry). */
+  sectionMinY: Float32Array;
+  sectionMaxY: Float32Array;
+  /**
+   * Face-to-face visibility per section through non-opaque cells (cave culling): bit for the face pair
+   * (a, b), a < b, in pair order (0,1),(0,2)…(4,5); faces 0 +X, 1 -X, 2 +Y, 3 -Y, 4 +Z, 5 -Z.
+   */
+  vis: Uint16Array;
+  /** Content hash per pass (opaque, cut-out, translucent): unchanged passes are not re-uploaded. */
+  hashes: Uint32Array;
   /** Whether plant geometry was omitted (distance LOD) — the streamer re-meshes when the chunk comes closer. */
   skipPlants: boolean;
   ms: number;

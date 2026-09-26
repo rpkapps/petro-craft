@@ -12,16 +12,19 @@ ${COMMON_UNIFORMS_GLSL}
 ${NOISE_GLSL}
 ${FOG_GLSL}
 ${TERRAIN_LIGHTING_GLSL}
-#ifdef PLANTS
+#ifdef CUTOUT
 uniform vec2 uPlantFade;
 #endif
 void main() {
-  #ifdef PLANTS
-  // distance LOD: plants dissolve (stable per-texel pattern) between uPlantFade.x and .y blocks
-  float plantKeep = 1.0 - smoothstep(uPlantFade.x, uPlantFade.y, length(vWorldPos.xz - cameraPosition.xz));
-  if (hash13(vec3(floor(vUv * 6.0), floor(vWorldPos.x) * 7.0 + floor(vWorldPos.z) * 13.0)) >= plantKeep) discard;
-  #endif
   float layer = floor(vLayer + 0.5);
+  #ifdef CUTOUT
+  if (layer >= 128.0) {
+    // plants (layer flag): distance LOD dissolve with a stable per-texel pattern
+    layer -= 128.0;
+    float plantKeep = 1.0 - smoothstep(uPlantFade.x, uPlantFade.y, length(vWorldPos.xz - cameraPosition.xz));
+    if (hash13(vec3(floor(vUv * 6.0), floor(vWorldPos.x) * 7.0 + floor(vWorldPos.z) * 13.0)) >= plantKeep) discard;
+  }
+  #endif
   vec4 props = texelFetch(uLayerProps, ivec2(int(layer), 0), 0);
   float kind = floor(props.b * 255.0 + 0.5);
   vec2 uv = vUv;
@@ -188,7 +191,9 @@ uniform sampler2DArray uAtlas;
 varying vec2 vUv;
 flat varying float vLayer;
 void main() {
-  if (texture(uAtlas, vec3(vUv, floor(vLayer + 0.5))).a < 0.5) discard;
+  float layer = floor(vLayer + 0.5);
+  if (layer >= 128.0) layer -= 128.0; // plant flag
+  if (texture(uAtlas, vec3(vUv, layer)).a < 0.5) discard;
   gl_FragColor = vec4(1.0);
 }
 `;
@@ -253,9 +258,7 @@ void main() {
 export interface TerrainMaterialSet {
   opaque: THREE.ShaderMaterial;
   cutout: THREE.ShaderMaterial;
-  /** Cut-out variant for swaying cross plants with a distance dissolve. */
-  plants: THREE.ShaderMaterial;
-  /** (fade start, fade end) distance of plants in blocks. */
+  /** (fade start, fade end) distance of plants (cut-out vertices with the plant layer flag), blocks. */
   plantFade: { value: THREE.Vector2 };
   cutoutDepth: THREE.ShaderMaterial;
   translucent: THREE.ShaderMaterial;
@@ -278,23 +281,13 @@ export function createTerrainMaterials(u: SharedUniforms): TerrainMaterialSet {
   });
   opaque.shadowSide = THREE.BackSide;
 
+  const plantFade = { value: new THREE.Vector2(56, 80) };
   const cutout = new THREE.ShaderMaterial({
     name: 'terrain-cutout',
-    uniforms: withShared({}),
-    vertexShader: TERRAIN_VERTEX_GLSL,
-    fragmentShader: SOLID_FRAGMENT,
-    defines: { CUTOUT: 1 },
-    lights: true,
-    side: THREE.DoubleSide,
-  });
-
-  const plantFade = { value: new THREE.Vector2(56, 80) };
-  const plants = new THREE.ShaderMaterial({
-    name: 'terrain-plants',
     uniforms: withShared({ uPlantFade: plantFade }),
     vertexShader: TERRAIN_VERTEX_GLSL,
     fragmentShader: SOLID_FRAGMENT,
-    defines: { CUTOUT: 1, PLANTS: 1 },
+    defines: { CUTOUT: 1 },
     lights: true,
     side: THREE.DoubleSide,
   });
@@ -349,7 +342,6 @@ export function createTerrainMaterials(u: SharedUniforms): TerrainMaterialSet {
   return {
     opaque,
     cutout,
-    plants,
     plantFade,
     cutoutDepth,
     translucent,
@@ -358,7 +350,6 @@ export function createTerrainMaterials(u: SharedUniforms): TerrainMaterialSet {
     dispose() {
       opaque.dispose();
       cutout.dispose();
-      plants.dispose();
       cutoutDepth.dispose();
       translucent.dispose();
       ghost.dispose();

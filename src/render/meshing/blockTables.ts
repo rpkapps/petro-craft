@@ -33,8 +33,10 @@ export const LC_LEAF = 2;
 export const LC_STRUCT = 3;
 export const LC_WATER = 4;
 export const LIGHT_CLASS = new Uint8Array(256);
-/** Swaying cross plants: own mesh pass with distance fade / LOD. */
+/** Swaying cross plants: distance-faded in the shader (layer flag) and dropped for far chunks. */
 export const PLANT = new Uint8Array(256);
+/** Added to the layer attribute of plant vertices (texture layers must stay below this). */
+export const PLANT_LAYER_FLAG = 128;
 /** Vertex-shader wind sway: 1 = whole block (leaves), 2 = anchored at the bottom (plants). */
 export const SWAY = new Uint8Array(256);
 /** Emitted block light 0..15. */
@@ -75,3 +77,6 @@ LIGHT_CLASS[B.KELP] = LC_WATER;
 WATERLOGGED[B.SEAGRASS] = 1;
 WATERLOGGED[B.KELP] = 1;
 FULLBRIGHT[B.FIRE] = 1;
+for (let i = 0; i < FACE_LAYER.length; i++) {
+  if (FACE_LAYER[i] >= PLANT_LAYER_FLAG) throw new Error(`texture layer ${FACE_LAYER[i]} collides with the plant layer flag`);
+}

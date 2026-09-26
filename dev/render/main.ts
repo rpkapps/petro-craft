@@ -1,7 +1,10 @@
 // Render engine dev harness. URL params:
 //   scene=day|sunset|night|dawn|xray|underwater|storm|fog|pipes|leases (preset camera/time/weather)
 //   time=HH:MM  weather=<kind>  cover=0..1  overlay=xray|pipes|...  cam=x,y,z,yaw,pitch  rd=8
-//   post=0 (disable bloom/ssao)  ssao=1  shadows=0  quality=low|medium|high  speed=<game minutes / s>
+//   post=0 (disable bloom/ssao/AA)  ssao=1  shadows=0  quality=low|medium|high  speed=<game minutes / s>
+//   scale=0.5..1 (render scale)  aa=0  brightness=0.6..1.6  auto=1 (auto quality; off by default so shots are stable)
+//   lighttest=1 (stone hut with 1-block walls & doorway, lamp behind a wall, floating STRUCTURE deck and a
+//   STRUCTURE "tank" volume near the focus point — checks sky-light leakage and building shading)
 import type { EventBus, MapOverlay } from '../../src/core/EventBus';
 import { GameSession } from '../../src/core/Game';
 import { createInitialState } from '../../src/core/state';
@@ -21,6 +24,7 @@ interface Preset {
   cover?: number;
   overlay?: MapOverlay;
   cam: [number, number, number, number, number];
+  lighttest?: boolean;
 }
 // Camera offsets are relative to the focus point (spawn, at ground level).
 const PRESETS: Record<string, Preset> = {
@@ -41,6 +45,9 @@ const PRESETS: Record<string, Preset> = {
   pad: { time: '11:00', cam: [-12, 6, 12, -0.55, -0.35] },
   padnight: { time: '22:30', cam: [-4, 5, 16, -0.2, -0.3] },
   ground: { time: '14:00', overlay: 'xray', cam: [-6, 3, 20, -0.3, -0.35] },
+  lightday: { time: '13:30', cam: [-3, 9, 26, 0.05, -0.3], lighttest: true },
+  lightnight: { time: '22:40', cam: [-3, 9, 26, 0.05, -0.3], lighttest: true },
+  lightinside: { time: '13:30', cam: [-7.5, 1.6, 7.6, 0.4, -0.3], lighttest: true },
 };
 const preset = PRESETS[scene] ?? PRESETS.day;
 
@@ -101,6 +108,44 @@ function path(x: number, z: number, y0: number, y1: number, kick?: { y: number; 
   return pts;
 }
 
+/** Test structures for lighting (see `lighttest`). */
+function buildLightTest(world: IWorld, focus: { x: number; y: number; z: number }) {
+  const gy = world.getSurfaceY(Math.floor(focus.x), Math.floor(focus.z));
+  const set = (x: number, y: number, z: number, id: number) => world.setBlock(x, y, z, id, 'system');
+  const pad = (x0: number, z0: number, w: number, d: number) => {
+    for (let x = x0 - 1; x <= x0 + w; x++)
+      for (let z = z0 - 1; z <= z0 + d; z++) {
+        set(x, gy - 1, z, B.GRASS);
+        for (let y = gy; y < gy + 12; y++) set(x, y, z, B.AIR);
+      }
+  };
+  // hut: 7×7 outside, 1-thick stone walls, flat roof, 1×2 doorway facing +Z (towards the day camera)
+  const hx = Math.floor(focus.x) - 10;
+  const hz = Math.floor(focus.z) + 2;
+  pad(hx, hz, 7, 7);
+  for (let x = hx; x < hx + 7; x++)
+    for (let z = hz; z < hz + 7; z++) {
+      set(x, gy - 1, z, B.STONE);
+      const wall = x === hx || x === hx + 6 || z === hz || z === hz + 6;
+      for (let y = gy; y < gy + 4; y++) if (wall) set(x, y, z, B.STONE);
+      set(x, gy + 4, z, B.STONE);
+    }
+  set(hx + 3, gy, hz + 6, B.AIR);
+  set(hx + 3, gy + 1, hz + 6, B.AIR);
+  // lamp outside the hut's west wall: its light must not come through the wall
+  set(hx - 1, gy + 1, hz + 3, B.LAMP);
+  // floating building deck (structure occupancy only — the entity layer would draw the model)
+  const dx = Math.floor(focus.x) + 1;
+  const dz = Math.floor(focus.z) - 2;
+  pad(dx, dz, 8, 8);
+  for (let x = dx; x < dx + 8; x++) for (let z = dz; z < dz + 8; z++) for (let y = gy + 3; y < gy + 5; y++) set(x, y, z, B.STRUCTURE);
+  // a tank-like occupancy volume standing on the ground
+  const tx = Math.floor(focus.x) + 1;
+  const tz = Math.floor(focus.z) + 9;
+  pad(tx, tz, 5, 5);
+  for (let x = tx; x < tx + 5; x++) for (let z = tz; z < tz + 5; z++) for (let y = gy; y < gy + 6; y++) set(x, y, z, B.STRUCTURE);
+}
+
 async function main() {
   const seed = Number(params.get('seed') ?? 1337);
   const state = createInitialState(
@@ -121,7 +166,12 @@ async function main() {
   if (params.get('post') === '0') {
     settings.bloom = false;
     settings.ssao = false;
+    settings.antialias = false;
   }
+  settings.autoQuality = params.get('auto') === '1';
+  if (params.get('scale')) settings.renderScale = Number(params.get('scale'));
+  if (params.get('aa') === '0') settings.antialias = false;
+  if (params.get('brightness')) settings.brightness = Number(params.get('brightness'));
   if (params.get('ssao') === '1') settings.ssao = true;
   if (params.get('shadows') === '0') settings.shadows = false;
   if (params.get('quality')) settings.shadowQuality = params.get('quality') as Settings['shadowQuality'];
@@ -225,14 +275,21 @@ async function main() {
       for (let dx = 0; dx < 3; dx++) for (let dz = 0; dz < 3; dz++) world.setBlock(ex + dx, ey, ez + dz, B.AIR, 'player');
       world.setBlock(ex + 1, ey - 1, ez + 1, B.LAMP, 'player');
     }
+    if (demoEdit < 2 && r.loadProgress >= 1 && (params.get('lighttest') === '1' || preset.lighttest)) {
+      demoEdit = 2;
+      buildLightTest(world, focus);
+    }
     if (params.get('lightning') === '1' && Math.random() < dt * 3) {
       ctx.bus.emit('weather:lightning', { x: r.camera.position.x + (Math.random() - 0.5) * 80, z: r.camera.position.z - 40 + (Math.random() - 0.5) * 40 });
     }
     if (acc > 0.5) {
       acc = 0;
-      const info = r.renderer.info;
-      const cm = (r as unknown as { chunks: { stats: { lastMeshMs: number; pendingGen: number } } }).chunks.stats;
-      stats.textContent = `${source} · update ${upd.toFixed(1)}ms · render ${ren.toFixed(1)}ms · mesh ${cm.lastMeshMs.toFixed(1)}ms · gen-pending ${cm.pendingGen} · ${r.fps.toFixed(0)} fps · load ${(r.loadProgress * 100).toFixed(0)}% · calls ${info.render.calls} · tris ${(info.render.triangles / 1000).toFixed(0)}k · scene=${scene}`;
+      const cm = (r as unknown as { chunks: { stats: { lastMeshMs: number; pendingGen: number; culledSections?: number } } }).chunks.stats;
+      const info = r.renderer.info.render;
+      const rs = (r as unknown as { stats?: { gpuMs: number; autoQualityStep: number } }).stats;
+      const gpu = rs && Number.isFinite(rs.gpuMs) ? ` · gpu ${rs.gpuMs.toFixed(1)}ms` : '';
+      const q = rs ? ` · culled ${cm.culledSections ?? 0} · scale ${(r.effectiveRenderScale ?? 1).toFixed(2)} q${rs.autoQualityStep}` : '';
+      stats.textContent = `${source} · update ${upd.toFixed(1)}ms · render ${ren.toFixed(1)}ms${gpu} · mesh ${cm.lastMeshMs.toFixed(1)}ms · gen-pending ${cm.pendingGen} · ${r.fps.toFixed(0)} fps · load ${(r.loadProgress * 100).toFixed(0)}% · calls ${info.calls} · tris ${(info.triangles / 1000).toFixed(0)}k${q} · scene=${scene}`;
     }
   };
   requestAnimationFrame(frame);
