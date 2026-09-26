@@ -1,0 +1,25 @@
+{
+  "name": "petrocraft",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PetroCraft — a voxel oil & gas industrial simulation for the browser",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "simplex-noise": "^4.0.3",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "playwright-core": "^1.63.0",
+    "typescript": "5.9.3",
+    "vite": "^8.3.1"
+  }
+}
