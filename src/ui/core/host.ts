@@ -2,7 +2,7 @@
 import type { AppShell } from '../../core/client';
 import type { AudioEngine } from '../../audio';
 import type { GameContext, NotificationLevel } from '../../core/types';
-import type { GameEvents } from '../../core/EventBus';
+import type { GameEvents, UiPanelId } from '../../core/EventBus';
 import type { Command, CommandResult, CommandType } from '../../core/commands';
 import type { Units } from '../format';
 import type { IconName } from '../icons';
@@ -60,6 +60,8 @@ export interface UIHost {
   confirm(opts: { title: string; text: string; confirm?: string; danger?: boolean; icon?: IconName }): Promise<boolean>;
   /** Dispatch a command on the current game; plays feedback sounds. */
   dispatch<K extends CommandType>(cmd: Command<K>, opts?: { quiet?: boolean; successSound?: UISound }): CommandResult;
+  /** Announce an in-panel view on the bus as 'ui:open' (e.g. the map's lease layer → 'leases'); not re-handled by the UI. */
+  notifyView(panel: UiPanelId, args?: PanelArgs): void;
   /** Subscribe to the current game's bus; auto-unsubscribed when the game detaches. */
   listen<K extends keyof GameEvents>(type: K, fn: (p: GameEvents[K]) => void): () => void;
 }

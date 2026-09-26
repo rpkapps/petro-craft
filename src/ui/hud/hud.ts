@@ -80,7 +80,10 @@ export class Hud {
 
     ui.listen('money:changed', (p) => this.top.onMoney(p.amount));
     ui.listen('player:target', (p) => this.target.set(p));
-    ui.listen('player:scan', (p) => this.scan.show(p));
+    ui.listen('player:scan', (p) => {
+      if (p.tool === 'build' || p.tool === 'pipe') this.modes.setStatus(p);
+      else this.scan.show(p);
+    });
     ui.listen('ui:buildMode', (p) => this.modes.setBuild(p.type));
     ui.listen('ui:pipeMode', (p) => this.modes.setPipe(p.block));
     ui.listen('ui:overlay', (p) => this.modes.setOverlay(p.overlay));

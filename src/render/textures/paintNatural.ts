@@ -261,21 +261,37 @@ export const paintBirchTop: Painter = (p, pal) => paintRings(p, pal[2], pal[0], 
 // ---- foliage (cut-out) --------------------------------------------------------------------------
 
 export function paintLeaves(p: Pixmap, pal: RGB[], holes: number, accents: RGB[] = []) {
-  const r = [shade(pal[1], 0.72), pal[1], pal[0], pal[2], mixc(pal[2], rgb(0xf0f0a0), 0.2)];
+  const r = [shade(pal[1], 0.62), pal[1], pal[0], pal[2], mixc(pal[2], rgb(0xf0f0a0), 0.22)];
+  // leaf clusters: 2×2-ish pixel clumps with a lit upper-left edge and a dark lower-right edge
   p.forEach((x, y) => {
     const clump = p.f(x, y, 4, 2, 1);
-    const hsh = p.h(x, y, 2);
-    const open = clump * 0.6 + hsh * 0.4 < holes;
-    // light from the top-left of each clump
-    const lightT = clump * 0.55 + (1 - p.n(x + 1, y + 1, 4, 1)) * 0.2 + hsh * 0.35;
-    p.set(x, y, pick(r, lightT), open ? 0 : 1);
+    const fine = p.h(x >> 1, y >> 1, 5) * 0.5 + p.h(x, y, 2) * 0.5;
+    const t = clump * 0.45 + fine * 0.55;
+    p.set(x, y, pick(r.slice(1, 4), t));
+  });
+  p.forEach((x, y) => {
+    const here = p.h(x >> 1, y >> 1, 5);
+    const right = p.h((x + 1) >> 1, y >> 1, 5);
+    const below = p.h(x >> 1, (y + 1) >> 1, 5);
+    if ((x & 1) === 1 && here > right + 0.25) p.blend(x, y, r[0], 0.6);
+    if ((y & 1) === 1 && here > below + 0.25) p.blend(x, y, r[0], 0.6);
+    if ((x & 1) === 0 && (y & 1) === 0 && p.h(x, y, 8) < 0.35) p.blend(x, y, r[4], 0.55);
+  });
+  // cut-out gaps: scattered single pixels and small notches (never whole blobs)
+  p.forEach((x, y) => {
+    const hole = p.h(x, y, 11) * 0.7 + p.n(x, y, 2, 12) * 0.3;
+    if (hole < holes) {
+      p.setAlpha(x, y, 0);
+      p.blend(x + 1, y, r[0], 0.3);
+      p.blend(x, y + 1, r[0], 0.3);
+    }
   });
   for (const a of accents) p.speckle(a, 0.05, 30 + accents.indexOf(a));
 }
 
-export const paintLeavesOak: Painter = (p, pal) => paintLeaves(p, pal, 0.3);
-export const paintLeavesBirch: Painter = (p, pal) => paintLeaves(p, pal, 0.32, [rgb(0xb8d870)]);
-export const paintLeavesAutumn: Painter = (p, pal) => paintLeaves(p, pal, 0.33, [rgb(0xc23c1c), rgb(0xf2c84a)]);
+export const paintLeavesOak: Painter = (p, pal) => paintLeaves(p, pal, 0.2);
+export const paintLeavesBirch: Painter = (p, pal) => paintLeaves(p, pal, 0.22, [rgb(0xb8d870)]);
+export const paintLeavesAutumn: Painter = (p, pal) => paintLeaves(p, pal, 0.22, [rgb(0xc23c1c), rgb(0xf2c84a)]);
 
 export const paintLeavesPine: Painter = (p, pal) => {
   p.clear();

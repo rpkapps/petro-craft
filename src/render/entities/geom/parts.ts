@@ -135,6 +135,30 @@ export function latticeBoom(b: Builder, p0: V3, p1: V3, w: number, color: number
   });
 }
 
+/** Circular guard rail (posts + top & knee rails) of radius R standing on height y; optional arc [a0, a1]. */
+export function ringRail(b: Builder, x: number, y: number, z: number, R: number, color: number = C.HAZARD, a0 = 0, a1 = Math.PI * 2): void {
+  b.detail(() => {
+    const full = a1 - a0 >= Math.PI * 2 - 1e-3;
+    const n = Math.max(4, Math.round(((a1 - a0) * R) / 0.9));
+    let prev: V3 | null = null;
+    let prevK: V3 | null = null;
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + ((a1 - a0) * i) / n;
+      const px = x + Math.cos(a) * R;
+      const pz = z + Math.sin(a) * R;
+      if (!(full && i === n)) b.box(px, y + 0.5, pz, 0.05, 1, 0.05, color, 'paint');
+      const top: V3 = [px, y + 1, pz];
+      const knee: V3 = [px, y + 0.55, pz];
+      if (prev && prevK) {
+        b.beam(prev, top, 0.045, color, 'paint');
+        b.beam(prevK, knee, 0.035, color, 'paint');
+      }
+      prev = top;
+      prevK = knee;
+    }
+  });
+}
+
 /** Handrail from (x0,z0) to (x1,z1) standing on height y. */
 export function railing(b: Builder, x0: number, z0: number, x1: number, z1: number, y: number, color: number = C.HAZARD): void {
   const len = Math.hypot(x1 - x0, z1 - z0);
@@ -237,17 +261,13 @@ export function tank(b: Builder, o: TankOpts): void {
   else if (roof === 'dome') b.dome(o.x, top, o.z, o.r, col, 'paint', seg, o.r * 0.35);
   else if (roof === 'flat') b.cyl(o.x, top, o.z, o.r + 0.05, 0.1, C.STEEL, 'metal', seg);
   else b.ring(o.x, top, o.z, o.r, 0.08, col, 'paint', seg);
+  if (roof !== 'open' && o.ladder !== false) ringRail(b, o.x, o.z === o.z ? top + 0.02 : top, o.z, o.r - 0.12, C.HAZARD, -0.7, 0.7);
   if (o.spiral) spiralStair(b, o.x, o.z, y0, top, o.r);
   else if (o.ladder !== false) ladder(b, o.x + o.r + 0.05, y0, o.z, o.h, Math.PI, true);
   // roof railing segment & vent
   if (roof !== 'open') {
     b.detail(() => {
       b.cyl(o.x, top + Math.max(0.25, o.r * 0.22), o.z, 0.12, 0.35, C.STEEL, 'metal', 6);
-      const n = 6;
-      for (let i = 0; i <= n; i++) {
-        const a = -0.6 + (i / n) * 1.2;
-        b.box(o.x + Math.cos(a) * (o.r - 0.1), top + 0.5, o.z + Math.sin(a) * (o.r - 0.1), 0.05, 1, 0.05, C.HAZARD, 'paint');
-      }
     });
   }
 }
@@ -299,7 +319,7 @@ export function column(b: Builder, x: number, z: number, y0: number, h: number, 
   for (let y = y0 + platformEvery; y < y0 + h - 0.8; y += platformEvery) {
     b.ring(x, y, z, r + 0.35, 0.3, C.STEEL_DARK, 'metal', 16);
     b.box(x + r + 0.5, y + 0.4, z + 0.2, 0.12, 0.12, 0.12, C.LAMP_WARM, 'lamp');
-    b.detail(() => b.ring(x, y + 1, z, r + 0.62, 0.035, C.HAZARD, 'paint', 16));
+    ringRail(b, x, y, z, r + 0.62);
   }
   ladder(b, x - r - 0.1, y0 + 0.9, z, h - 0.9, 0, true);
   // overhead vapour line

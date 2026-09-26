@@ -173,7 +173,7 @@ export function wedgeThickness(w: Wedge, u: number, v: number): number {
 
 /** Base of the wedge sand above the host unit base (restored blocks). */
 export function wedgeBaseOffset(w: Wedge, u: number): number {
-  return 0.4 + (clamp(u, 0, w.L) / w.L) * (0.9 * w.T + 0.8);
+  return 0.4 + (clamp(u, 0, w.L) / w.L) * (1.1 * w.T + 1.0);
 }
 
 export interface Play {
@@ -350,9 +350,10 @@ export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin
       const o = cs.o;
       const shelfT = smoothstep(-24, bandW * 0.9, o);
       const base = lerp(9.0, 4.6, shelfT) + 1.4 * nB(x / 130, z / 130);
-      const seabed = o > 0 ? SEA_LEVEL + 0.5 - Terrain.profileDepth(o, cs.frac) : 200;
-      const ow = clamp(1 + o / (size * 0.55), 0, 1);
-      const c = o > 0 ? clamp((seabed + 8 - base) / STACK_NOMINAL, 0.36, 1.06) : lerp(1.0, 1.05, ow);
+      // smooth reference surface (land or seabed), continuous across the coastline; the sediment stack is
+      // scaled so its top stays ~13 blocks beneath it (keeps reservoirs buried under low coastal plains/shelf)
+      const refSurface = o > 0 ? SEA_LEVEL + 2.5 - Terrain.profileDepth(o, cs.frac) : 64 + 8 * smoothstep(0, 120, -o);
+      const c = clamp((refSurface - 13 - base) / STACK_NOMINAL, 0.36, 1.05);
       const fold = (5.2 * fbm(nFold, x / 220, z / 220, 2) + 1.5 * nFold2(x / 85, z / 85)) * lerp(0.45, 1, clamp(c, 0, 1));
       let domes = 0;
       for (const d of feats.domes) domes += domeValue(d, x, z);
@@ -384,7 +385,7 @@ export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin
           if (w.unit !== u) continue;
           wedgeLocal(w, x, z, loc);
           const fade = smoothstep(-6, 0, loc.u) * smoothstep(w.L + 6, w.L, loc.u) * smoothstep(w.W + 6, w.W, Math.abs(loc.v));
-          t += (w.T + 0.6) * fade;
+          t += (w.T + 1.8) * fade;
         }
         cum += Math.max(0, t);
         grid.hz[hb + u] = cum;

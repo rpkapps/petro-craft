@@ -5,7 +5,7 @@ import { Panel } from '../core/panel';
 import type { PanelArgs, UIHost } from '../core/host';
 import { button, emptyState, field, kpi, segmented, slider, type KpiCtl } from '../core/components';
 import { BarChart } from '../charts/BarChart';
-import { DIFFICULTY_SETTINGS } from '../../core/constants';
+import { amortisedPayment, loanRate, maxLoan } from '../../sim/economy';
 import type { DailyFinance, LedgerCategory, LedgerEntry, Loan } from '../../core/types';
 import { dayLabel, formatClock, money, moneyFull, signedMoney, pct, titleCase } from '../format';
 
@@ -127,7 +127,7 @@ export class FinancePanel extends Panel {
     if (sig === this.loanSig) return;
     this.loanSig = sig;
     clear(this.loans);
-    const rate = DIFFICULTY_SETTINGS[this.st.meta.difficulty]?.loanRate ?? 0.07;
+    const rate = loanRate(this.st);
     for (const l of c.loans) this.loans.appendChild(this.loanRow(l));
     if (!c.loans.length) this.loans.appendChild(h('div.dim.small', { style: 'padding:.3rem 0 .6rem' }, 'No outstanding loans.'));
     this.loans.appendChild(button('Take a loan…', { icon: 'plus', variant: 'teal', size: 'sm', block: true, onClick: () => this.loanDialog(rate) }));
@@ -146,19 +146,25 @@ export class FinancePanel extends Panel {
     let amount = 1_000_000;
     let term = 365;
     const preview = h('div.fn-preview');
+    const cap = maxLoan(this.st, this.ui.game.services.economy.netWorth());
+    if (cap < 100_000) {
+      this.ui.toast('warning', 'Credit limit reached', 'Repay existing loans or grow your net worth and reputation to borrow more.', { icon: 'bank' });
+      return;
+    }
+    amount = Math.min(amount, cap);
     const paint = () => {
-      const total = amount * (1 + rate * (term / 365));
+      const daily = amortisedPayment(amount, rate, term);
       preview.replaceChildren(
         h('div.row.between', h('span.dim', 'Interest rate'), h('b.mono', `${pct(rate, 1)} APR`)),
-        h('div.row.between', h('span.dim', 'Daily repayment'), h('b.mono', money(total / term))),
-        h('div.row.between', h('span.dim', 'Total repaid'), h('b.mono', money(total))));
+        h('div.row.between', h('span.dim', 'Daily repayment'), h('b.mono', money(daily))),
+        h('div.row.between', h('span.dim', 'Total repaid'), h('b.mono', money(daily * term))),
+        h('div.row.between', h('span.dim', 'Credit available'), h('b.mono', money(cap))));
     };
     paint();
-    const cap = Math.max(1_000_000, Math.round(Math.max(this.ui.game.services.economy.netWorth(), 2_000_000) * 0.6 / 250_000) * 250_000);
     this.ui.modal({
       title: 'Take a loan', icon: 'bank', width: '30rem',
       body: h('div.col', { style: 'gap:.9rem' },
-        field('Amount', slider({ min: 250_000, max: cap, step: 250_000, value: amount, format: (v) => money(v), onInput: (v) => { amount = v; paint(); } }).el),
+        field('Amount', slider({ min: Math.min(100_000, cap), max: cap, step: 10_000, value: amount, format: (v) => money(v), onInput: (v) => { amount = v; paint(); } }).el),
         field('Term', segmented<string>([{ value: '90', label: '90 d' }, { value: '180', label: '180 d' }, { value: '365', label: '1 yr' }, { value: '730', label: '2 yr' }], String(term), (v) => { term = Number(v); paint(); }).el),
         preview,
         h('div.tiny.dim', 'Repayments are deducted daily. Missing payments hurts your credit rating and reputation.')),

@@ -10,6 +10,7 @@ import { BUILDINGS } from '../../content/buildings';
 import { techStatus, type TechStatus } from '../game';
 import { roman, int, titleCase, fixed } from '../format';
 import { ring, type RingCtl } from '../charts/mini';
+import { researchEta } from '../../sim/economy';
 
 const BRANCH_INFO: Record<TechBranch, { label: string; icon: IconName; color: string }> = {
   exploration: { label: 'Exploration', icon: 'seismic', color: '#2ad0e0' }, drilling: { label: 'Drilling', icon: 'rig', color: '#ff8a1f' },
@@ -294,7 +295,7 @@ export class ResearchPanel extends Panel {
     if (status === 'available') actions.append(button('Research now', { icon: 'play', variant: 'primary', block: true, onClick: () => this.start(id) }), button('Add to queue', { icon: 'plus', block: true, onClick: () => this.queue(id) }));
     else if (status === 'locked') actions.append(button(this.missingChain(id).length > 1 ? `Queue with ${this.missingChain(id).length - 1} prerequisites` : 'Add to queue', { icon: 'plus', variant: 'primary', block: true, onClick: () => this.queue(id) }));
     else if (status === 'queued') actions.append(button('Research now', { icon: 'play', variant: 'primary', block: true, onClick: () => this.start(id) }), button('Remove from queue', { icon: 'close', block: true, onClick: () => this.unqueue(id) }));
-    const days = st.research.pointsPerDay > 0 ? Math.ceil(Math.max(0, t.cost - (status === 'current' ? st.research.progress : 0)) / st.research.pointsPerDay) : Infinity;
+    const days = Math.ceil(researchEta(st, id));
     this.detail.append(
       h('div.rs-dhead', { style: { '--br-c': info.color } }, h('div.rs-dic', icon(info.icon)), h('div.col', { style: 'gap:.1rem;min-width:0' }, h('div.rs-dbranch', `${info.label} · Tier ${roman(t.tier)}`), h('div.rs-dname', t.name))),
       h('div.row.wrap', statusChip, t.cost ? chip(`${int(t.cost)} pts`, '', true) : null, status !== 'done' && Number.isFinite(days) ? chip(`≈ ${days} days`, '', true) : null),

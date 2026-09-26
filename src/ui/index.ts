@@ -50,6 +50,12 @@ const PANEL_ALIASES: Partial<Record<UiPanelId, PanelId>> = {
   seismic: 'seismic', inspector: 'inspector', objectives: 'objectives', help: 'help', environment: 'environment', notifications: 'notifications',
 };
 
+const PANEL_EVENT_IDS: Partial<Record<PanelId, UiPanelId>> = {
+  load: 'saveLoad', planner: 'wellPlanner', well: 'wells', pause: 'pause', settings: 'settings', build: 'build', inventory: 'inventory',
+  research: 'research', market: 'market', contracts: 'contracts', workforce: 'workforce', finance: 'finance', map: 'map', wells: 'wells',
+  seismic: 'seismic', inspector: 'inspector', objectives: 'objectives', help: 'help', environment: 'environment', notifications: 'notifications',
+};
+
 const PANEL_BINDS: [string, PanelId][] = [
   ['inventory', 'inventory'], ['build', 'build'], ['research', 'research'], ['market', 'market'], ['map', 'map'], ['wells', 'wells'],
   ['workforce', 'workforce'], ['contracts', 'contracts'], ['finance', 'finance'], ['objectives', 'objectives'],
@@ -72,6 +78,7 @@ class Controller implements UIController {
   private wasLocked = false;
   private scaleKey = '';
   private lastErrorAt = 0;
+  private echo = false;
 
   constructor(host: HTMLElement, readonly app: AppShell, readonly audio: AudioEngine) {
     this.root = host;
@@ -123,6 +130,33 @@ class Controller implements UIController {
     const p = this.panels.open(id, args, !!opts.stack);
     if (p && !wasOpen) this.sound('open');
     this.tooltip.hide();
+    if (p) this.announce(id, args);
+  }
+
+  /** Re-broadcast panel opens on the game bus (tutorial steps listen for them). Self-events are ignored. */
+  private announce(id: PanelId, args: PanelArgs) {
+    const bus = this.session?.bus;
+    const panel = PANEL_EVENT_IDS[id];
+    if (!bus || !panel) return;
+    this.echo = true;
+    try {
+      bus.emit('ui:open', { panel, args });
+      if (id === 'map' && args.layer === 'leases') bus.emit('ui:open', { panel: 'leases', args });
+    } finally {
+      this.echo = false;
+    }
+  }
+
+  /** Called by panels when a notable in-panel view is shown (e.g. the map's lease layer). */
+  notifyView(panel: UiPanelId, args: PanelArgs = {}) {
+    const bus = this.session?.bus;
+    if (!bus) return;
+    this.echo = true;
+    try {
+      bus.emit('ui:open', { panel, args });
+    } finally {
+      this.echo = false;
+    }
   }
 
   close(id?: PanelId) {
@@ -227,7 +261,9 @@ class Controller implements UIController {
       this.lastErrorAt = now;
       this.toast('danger', 'Cannot do that', e.text, { icon: 'ban', ttl: 4 });
     });
-    this.listen('ui:open', (e) => this.openFromEvent(e.panel, e.args ?? {}));
+    this.listen('ui:open', (e) => {
+      if (!this.echo) this.openFromEvent(e.panel, e.args ?? {});
+    });
     this.listen('ui:close', (e) => {
       const id = e.panel ? PANEL_ALIASES[e.panel] : undefined;
       if (e.panel && !id) return;
@@ -242,6 +278,7 @@ class Controller implements UIController {
       if (e.slot !== 'autosave') this.toast('success', 'Game saved', e.slot === 'quicksave' ? 'Quicksave' : this.session?.state.meta.saveName, { icon: 'save', ttl: 3 });
     });
     this.listen('research:completed', () => this.sound('success'));
+    this.listen('achievement:unlocked', (a) => this.toast('success', `Achievement unlocked: ${a.title}`, undefined, { icon: 'trophy', ttl: 7, onClick: () => this.open('objectives', { tab: 'achievements' }) }));
     this.listen('objective:completed', () => this.sound('success'));
   }
 

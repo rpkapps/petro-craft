@@ -3,7 +3,8 @@ import { h, setText, toggleClass, setBar, bar, KeyedList } from '../dom';
 import { icon } from '../icons';
 import type { GameContext, Objective } from '../../core/types';
 import type { UIHost } from '../core/host';
-import { money, roman, compact } from '../format';
+import { money, roman, compact, keyLabel } from '../format';
+import { TUTORIAL_STEPS } from '../../sim/economy';
 
 export class ObjectivesTracker {
   readonly el: HTMLElement;
@@ -12,6 +13,7 @@ export class ObjectivesTracker {
   private tutorial: HTMLElement;
   private collapsed = false;
   private count: HTMLElement;
+  private tutKey = '~';
 
   constructor(private ui: UIHost, private ctx: GameContext) {
     try {
@@ -77,10 +79,19 @@ export class ObjectivesTracker {
     setText(this.count, total ? `${doneCount}/${total}` : '');
     toggleClass(this.el, 'collapsed', this.collapsed);
     toggleClass(this.el, 'hidden', o.list.length === 0 && o.tutorialDone);
-    const next = show.find((x) => !x.done);
-    const tut = !o.tutorialDone && next ? next.description : '';
-    setText(this.tutorial, tut);
-    toggleClass(this.tutorial, 'hidden', !tut || this.collapsed);
+    const step = !o.tutorialDone ? TUTORIAL_STEPS[o.tutorialStep] : undefined;
+    const tutKey = step ? `${o.tutorialStep}|${step.key ?? ''}|${this.ui.app.settings.keybinds[step.key ?? ''] ?? ''}` : '';
+    if (tutKey !== this.tutKey) {
+      this.tutKey = tutKey;
+      this.tutorial.replaceChildren();
+      if (step) {
+        const k = step.key ? this.ui.app.settings.keybinds[step.key] : undefined;
+        this.tutorial.append(
+          h('div.ob-tut-title', icon('bulb'), h('span', step.title), k ? h('span.kbd', keyLabel(k)) : null),
+          h('div.ob-tut-text', step.text));
+      }
+    }
+    toggleClass(this.tutorial, 'hidden', !step || this.collapsed);
     this.list.sync(this.collapsed ? [] : show);
     const claimable = o.list.some((x) => x.done && !x.claimed && x.reward > 0);
     toggleClass(this.el, 'claimable', claimable);

@@ -125,22 +125,36 @@ export class ModeStrip {
   private overlay: MapOverlay | null = null;
   private main: HTMLElement;
   private xray: HTMLElement;
+  private status: HTMLElement;
 
   constructor(private ui: UIHost, private ctx: GameContext) {
+    this.status = h('div.ms-status');
     this.main = h('div.ms-strip.glass.flat');
     this.xray = h('div.ms-xray', icon('xray'), h('span', 'X-Ray View'), h('span.kbd', keyLabel(ui.app.settings.keybinds.xray)));
-    this.el = h('div.pc-modestrip', this.xray, this.main);
+    this.el = h('div.pc-modestrip', this.xray, this.status, this.main);
     this.render();
+  }
+
+  /** Placement feedback from the player module ('player:scan' with tool 'build' | 'pipe'). */
+  setStatus(p: GameEvents['player:scan'] | null) {
+    clear(this.status);
+    const show = !!p && p.lines.length > 0 && (!!this.build || this.pipe !== null);
+    toggleClass(this.status, 'show', show);
+    if (!p || !show) return;
+    this.status.className = `ms-status show ${p.level ?? 'info'}`;
+    this.status.append(icon(p.level === 'danger' ? 'ban' : p.level === 'warning' ? 'warning' : 'check'), h('div.col', { style: 'gap:0' }, p.lines.map((l) => h('span', l))));
   }
 
   setBuild(type: string | null) {
     this.build = type;
     if (type) this.pipe = null;
+    else this.setStatus(null);
     this.render();
   }
   setPipe(block: number | null) {
     this.pipe = block;
     if (block !== null) this.build = null;
+    else this.setStatus(null);
     this.render();
   }
   setOverlay(o: MapOverlay | null) {

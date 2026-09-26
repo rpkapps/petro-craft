@@ -1,6 +1,6 @@
 // Build menu: category list, building cards (cost/size/power/crew/emissions, lock state) and
 // the Pipes & Roads line tools. Clicking a card enters build mode ('ui:buildMode') and closes the menu.
-import { h, clear, setText, toggleClass, KeyedList } from '../dom';
+import { h, clear, setText, toggleClass } from '../dom';
 import { icon, buildingIcon, CATEGORY_ICON, type IconName } from '../icons';
 import { Panel } from '../core/panel';
 import type { PanelArgs, UIHost } from '../core/host';
@@ -12,6 +12,7 @@ import { isUnlocked, techName, ROLE_NAMES } from '../game';
 import { itemIconEl } from '../render/itemIcons';
 import { tipBody } from '../core/tooltip';
 import { CATEGORY_COLOR } from '../hud/minimap';
+import { blockPrice } from '../../sim/economy';
 
 type Cat = BuildingCategory | 'lines';
 const CATS: { id: Cat; label: string }[] = [
@@ -22,14 +23,13 @@ const CATS: { id: Cat; label: string }[] = [
   { id: 'lines', label: 'Pipes & Roads' },
 ];
 
-/** Listed shop prices per block for line tools (mirrors the economy's block price list). */
-const LINE_TOOLS: { block: number; desc: string; price: number }[] = [
-  { block: B.PIPE_OIL, desc: 'Carries crude & condensate. Connects to oil ports on wellheads, tanks, terminals and plants.', price: 350 },
-  { block: B.PIPE_GAS, desc: 'Carries raw and dry gas, CO₂. Long lines need compressor stations.', price: 400 },
-  { block: B.PIPE_WATER, desc: 'Produced & treated water to pits, disposal wells, injectors and frac spreads.', price: 250 },
-  { block: B.PIPE_PRODUCT, desc: 'Refined products, NGLs and chemicals between plants, tanks and terminals.', price: 450 },
-  { block: B.ASPHALT_ROAD, desc: 'Paved road. Faster movement for crews and trucks.', price: 60 },
-  { block: B.CONCRETE, desc: 'Solid concrete for foundations, walls and pads.', price: 30 },
+const LINE_TOOLS: { block: number; desc: string }[] = [
+  { block: B.PIPE_OIL, desc: 'Carries crude & condensate. Connects to oil ports on wellheads, tanks, terminals and plants.' },
+  { block: B.PIPE_GAS, desc: 'Carries raw and dry gas, CO₂. Long lines need compressor stations.' },
+  { block: B.PIPE_WATER, desc: 'Produced & treated water to pits, disposal wells, injectors and frac spreads.' },
+  { block: B.PIPE_PRODUCT, desc: 'Refined products, NGLs and chemicals between plants, tanks and terminals.' },
+  { block: B.ASPHALT_ROAD, desc: 'Paved road. Faster movement for crews and trucks.' },
+  { block: B.CONCRETE, desc: 'Solid concrete for foundations, walls and pads.' },
 ];
 const ROLE_ICON: Record<WorkerRole, IconName> = { roughneck: 'worker', driller: 'rig', operator: 'gauge', engineer: 'settings', technician: 'wrench', geoscientist: 'seismic', firefighter: 'fire', trucker: 'truck' };
 
@@ -41,7 +41,6 @@ export class BuildPanel extends Panel {
   private catBtns = new Map<Cat, HTMLElement>();
   private grid!: HTMLElement;
   private search!: HTMLInputElement;
-  private cards: KeyedList<BuildingDef> | null = null;
   private cashEl!: HTMLElement;
   private cardEls = new Map<string, { el: HTMLElement; cost: HTMLElement }>();
 
@@ -140,10 +139,11 @@ export class BuildPanel extends Panel {
     return el;
   }
 
-  private lineCard(t: { block: number; desc: string; price: number }): HTMLElement {
+  private lineCard(t: { block: number; desc: string }): HTMLElement {
     const def = BLOCKS[t.block];
+    const price = blockPrice(def.key);
     const el = h('button.bd-card.line', { type: 'button', style: { '--cat-c': '#9aa1a8' } },
-      h('div.bd-head', h('div.bd-ic.blk', itemIconEl(`block:${def.key}`)), h('div.col.grow', { style: 'gap:.05rem' }, h('div.bd-name', def.name), h('div.bd-catname', def.pipe ? `${titleCase(def.pipe)} network` : 'Surface')), h('span.bd-cost.mono', `${money(t.price)}/blk`)),
+      h('div.bd-head', h('div.bd-ic.blk', itemIconEl(`block:${def.key}`)), h('div.col.grow', { style: 'gap:.05rem' }, h('div.bd-name', def.name), h('div.bd-catname', def.pipe ? `${titleCase(def.pipe)} network` : 'Surface')), h('span.bd-cost.mono', `${money(price)}/blk`)),
       h('div.bd-desc', t.desc),
       h('div.bd-stats', h('span', icon('mouse-left'), 'Click start & end'), h('span', icon('pipe'), 'Straight & L runs')));
     el.addEventListener('mouseenter', () => this.ui.sound('hover'));

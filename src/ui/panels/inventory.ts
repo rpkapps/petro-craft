@@ -12,20 +12,10 @@ import { localPlayer } from '../game';
 import { money, int, compact } from '../format';
 import { tipBody } from '../core/tooltip';
 import type { InventorySlot } from '../../core/types';
+import { SHOP_BLOCKS, supplyPrice } from '../../sim/economy';
 
 type Tab = 'inventory' | 'shop' | 'warehouse';
 
-/** Block shop catalogue with listed per-block prices (mirrors the economy's price list). */
-const SHOP: { key: string; price: number; group: string }[] = [
-  { key: 'pipe_oil', price: 350, group: 'Pipelines' }, { key: 'pipe_gas', price: 400, group: 'Pipelines' },
-  { key: 'pipe_water', price: 250, group: 'Pipelines' }, { key: 'pipe_product', price: 450, group: 'Pipelines' },
-  { key: 'asphalt_road', price: 60, group: 'Construction' }, { key: 'concrete', price: 30, group: 'Construction' },
-  { key: 'gravel_pad', price: 15, group: 'Construction' }, { key: 'steel_plate', price: 80, group: 'Construction' },
-  { key: 'steel_grate', price: 60, group: 'Construction' }, { key: 'brick', price: 25, group: 'Construction' },
-  { key: 'planks', price: 10, group: 'Construction' }, { key: 'glass', price: 20, group: 'Construction' },
-  { key: 'lamp', price: 150, group: 'Decoration' }, { key: 'hazard_stripe', price: 40, group: 'Decoration' },
-  { key: 'container_red', price: 500, group: 'Decoration' }, { key: 'container_blue', price: 500, group: 'Decoration' },
-];
 const SUPPLY_USE: Record<string, string> = {
   drill_pipe: 'Consumed while drilling', casing: 'Run at every casing point', cement: 'Casing cement jobs', drilling_mud: 'Circulating system & kicks',
   barite: 'Weighting up during a kick', drill_bit: 'Replaced when worn', proppant: 'Hydraulic fracturing', chemicals: 'Production & water treatment',
@@ -162,21 +152,27 @@ export class InventoryPanel extends Panel {
 
   // ---- block shop ----------------------------------------------------------------------------
   private renderShop() {
-    const groups = new Map<string, typeof SHOP>();
-    for (const s of SHOP) groups.set(s.group, [...(groups.get(s.group) ?? []), s]);
+    const group = (key: string, industrial: boolean) => (key.startsWith('pipe_') ? 'Pipelines' : industrial ? 'Industrial' : 'Natural & decorative');
+    const groups = new Map<string, typeof SHOP_BLOCKS>();
+    for (const s of SHOP_BLOCKS) {
+      const g = group(s.key, s.industrial);
+      groups.set(g, [...(groups.get(g) ?? []), s]);
+    }
     const wrap = h('div.col', { style: 'gap:1rem' });
-    for (const [g, items] of groups) {
+    for (const g of ['Pipelines', 'Industrial', 'Natural & decorative']) {
+      const items = groups.get(g);
+      if (!items?.length) continue;
       const grid = h('div.shop-grid');
       for (const s of items) {
         const def = BLOCK_BY_KEY[s.key];
         if (!def) continue;
         const buy = (n: number) => {
-          const r = this.ui.dispatch({ type: 'market/buy', item: `block:${s.key}`, quantity: n }, { successSound: 'cash' });
+          const r = this.ui.dispatch({ type: 'market/buy', item: s.item, quantity: n }, { successSound: 'cash' });
           if (r.ok) this.ui.toast('success', `Bought ${n} × ${def.name}`, undefined, { icon: 'cube', ttl: 3 });
         };
         grid.appendChild(h('div.card.shop-card',
-          h('div.shop-ic', itemIconEl(`block:${s.key}`)),
-          h('div.col.grow', { style: 'gap:.1rem;min-width:0' }, h('div.shop-name.ellipsis', def.name), h('div.mono.small.accent', `${money(s.price)} / block`)),
+          h('div.shop-ic', itemIconEl(s.item)),
+          h('div.col.grow', { style: 'gap:.1rem;min-width:0' }, h('div.shop-name.ellipsis', s.name), h('div.mono.small.accent', `${money(s.price)} / block`)),
           h('div.shop-buy', button('16', { size: 'xs', title: `Buy 16 for ${money(s.price * 16)}`, onClick: () => buy(16) }), button('64', { size: 'xs', variant: 'primary', title: `Buy 64 for ${money(s.price * 64)}`, onClick: () => buy(64) }))));
       }
       wrap.append(h('div.section-title', g), grid);
@@ -191,7 +187,7 @@ export class InventoryPanel extends Panel {
     const grid = h('div.sup-grid');
     for (const id of SUPPLY_IDS) {
       const it = ITEMS[id];
-      const unit = it.basePrice * (yard ? 0.8 : 1);
+      const unit = supplyPrice(st, id) || it.basePrice;
       const stock = h('span.mono');
       const buy = (n: number) => {
         const r = this.ui.dispatch({ type: 'market/buy', item: id, quantity: n }, { successSound: 'cash' });

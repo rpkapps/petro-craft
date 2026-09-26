@@ -171,7 +171,7 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   a.fogSun.copy(a.sunGlow).multiplyScalar(0.55 * smoothstep(-0.2, 0.05, e) * (1 - smoothstep(0.35, 0.9, e) * 0.6));
 
   keyColor(SUN_KEYS, (k: { c: number }) => k.c, e, a.sunDisk);
-  const sunI = smoothstep(-0.03, 0.22, e) * 2.25 * (1 - oc * 0.82) * dark;
+  const sunI = smoothstep(-0.03, 0.22, e) * 1.25 * (1 - oc * 0.82) * dark;
   const sunCol = tmpA.copy(a.sunDisk).multiplyScalar(sunI);
   a.sunDisk.multiplyScalar(1 - oc * 0.92);
 
@@ -196,7 +196,7 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   // ambient: sky dome irradiance
   const dayF = smoothstep(-0.18, 0.3, e);
   a.daylight = clamp(smoothstep(-0.12, 0.25, e) * (1 - 0.45 * oc) * dark, 0, 1);
-  const skyDay = new THREE.Color(0x9cc4f2).multiplyScalar(1.1);
+  const skyDay = new THREE.Color(0x9cc4f2).multiplyScalar(1.45);
   const skyNight = new THREE.Color(0x3a4c7c).multiplyScalar(0.22 + 0.14 * a.moonBright);
   a.skyAmbient.copy(skyNight).lerp(skyDay, dayF);
   // warm the ambient during golden hour
@@ -204,8 +204,8 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   a.skyAmbient.lerp(new THREE.Color(0xd8a080).multiplyScalar(0.6), golden * 0.35);
   desaturate(a.skyAmbient, oc * 0.6);
   a.skyAmbient.multiplyScalar(lerp(1, 1.12, oc * dayF) * dark);
-  const gDay = new THREE.Color(0x8a7a62).multiplyScalar(0.62);
-  const gNight = new THREE.Color(0x141a28).multiplyScalar(0.5);
+  const gDay = new THREE.Color(0x8a7a62).multiplyScalar(1.25);
+  const gNight = new THREE.Color(0x1a2233).multiplyScalar(0.8);
   a.groundAmbient.copy(gNight).lerp(gDay, dayF).multiplyScalar(dark);
 
   if (flash > 0) {

@@ -236,7 +236,8 @@ export function paintPipe(p: Pixmap, body: RGB, band: RGB, chevron: RGB, gloss =
     let c = shade(body, 0.8 + around * 0.3 * gloss);
     c = shade(c, 0.97 + p.h(x, y, 1) * 0.06);
     if (y === 3 || y === 4) c = mixc(c, WHITE, 0.14 * gloss);
-    if (x >= 6 && x <= 9) c = shade(band, 0.86 + around * 0.26);
+    if (x === 7 || x === 8) c = shade(band, 0.86 + around * 0.26);
+    if (x === 6 || x === 9) c = shade(c, 0.8);
     if (x === 0 || x === 15) c = shade(c, 0.7);
     if (x === 1) c = shade(c, 1.08);
     p.set(x, y, c);
@@ -247,6 +248,7 @@ export function paintPipe(p: Pixmap, body: RGB, band: RGB, chevron: RGB, gloss =
     p.set(8, yy + 1, chevron);
     p.set(7, yy + 2, chevron);
   }
+  void chevron;
 }
 
 export const paintPipeOil: Painter = (p, pal) => paintPipe(p, pal[0], pal[2], BLACK, 0.8);

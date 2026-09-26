@@ -324,3 +324,14 @@
   .pc-root .pc-dock { grid-template-columns: repeat(6, 2.35rem); }
   .pc-root .dk-btn { width: 2.35rem; height: 2.35rem; }
 }
+.pc-root .ms-status { display: none; align-items: center; gap: 0.5rem; padding: 0.35rem 0.7rem; border-radius: var(--r-md); background: rgba(10, 13, 18, 0.85); border: 1px solid rgba(61, 220, 132, 0.45); font-size: 0.74rem; color: var(--text-2); backdrop-filter: blur(8px); }
+.pc-root .ms-status.show { display: inline-flex; animation: pc-fade-up 0.2s ease; }
+.pc-root .ms-status .ic { color: var(--ok); flex: none; }
+.pc-root .ms-status.warning { border-color: rgba(255, 194, 51, 0.55); }
+.pc-root .ms-status.warning .ic { color: var(--warn); }
+.pc-root .ms-status.danger { border-color: rgba(255, 77, 79, 0.6); color: #ffd0d0; }
+.pc-root .ms-status.danger .ic { color: var(--danger); }
+.pc-root .ob-tut-title { display: flex; align-items: center; gap: 0.35rem; font-family: var(--f-head); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.04em; color: #e6fbff; margin-bottom: 0.15rem; }
+.pc-root .ob-tut-title .ic { color: var(--teal); width: 0.95rem; height: 0.95rem; }
+.pc-root .ob-tut-title .kbd { margin-left: auto; }
+.pc-root .ob-tut-text { font-size: 0.72rem; line-height: 1.42; color: #cdeff4; }

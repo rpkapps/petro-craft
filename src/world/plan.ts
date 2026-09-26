@@ -197,7 +197,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
     return uniqueName(`${unitNames[u]} ${String.fromCharCode(65 + n)}`);
   };
   const offQualifier = (u: number) =>
-    u === U.UPPER_SAND ? 'Shallow' : u === U.MID_SAND ? 'Main' : u === U.DEEP_SAND ? 'Deep' : u === U.BASAL_SAND ? 'Ultra-Deep' : u === U.PLATFORM ? 'Carbonate' : 'Field';
+    u === U.UPPER_SAND ? 'Shallow' : u === U.MID_SAND ? 'Upper' : u === U.DEEP_SAND ? 'Main' : u === U.BASAL_SAND ? 'Deep' : u === U.PLATFORM ? 'Carbonate' : 'Field';
   const addDome = (cx: number, cz: number, ra: number, rb: number, ang: number, amp: number): Dome => {
     const d: Dome = { cx, cz, ra, rb, cos: Math.cos(ang), sin: Math.sin(ang), amp };
     plan.domes.push(d);
@@ -289,7 +289,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       const saltBase = hzAt(U.SALT - 1, x, z);
       if (saltTop - saltBase < 1.5) continue;
       const g = gmin(x, z, 18);
-      const topY = Math.floor(Math.min(g - rr(12, 17), 64));
+      const topY = Math.floor(Math.min(g - rr(7, 11), 64));
       if (topY < saltTop + 14) continue;
       const d: Diapir = {
         name: domeNames[made % domeNames.length], cx: x, cz: z, r0, rTop: r0 * rr(1.3, 1.6), topY, bulbH: rr(4, 6.5), cap: rng() < 0.5 ? 1 : 2,
@@ -300,19 +300,22 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       occ.push({ x, z, r: reach });
       made++;
       const ring = r0 + dragW;
-      const cands = [U.DEEP_SAND, U.MID_SAND, U.UPPER_SAND].filter((u) => {
+      const pref = [U.DEEP_SAND, U.MID_SAND, U.PLATFORM, U.UPPER_SAND];
+      const cands = pref.filter((u) => {
         const h = hzAt(u, x + ring, z);
-        return h <= topY - 3 && h + d.dragA <= g - 13 && hzAt(u - 1, x + ring, z) >= saltTop + 1.5;
-      });
+        return h <= topY - 3 && h + 5 <= g - 12 && hzAt(u - 1, x + ring, z) >= saltTop + 0.5;
+      }).slice(0, cfg.flanksPer);
+      // cap the flank drag so the uplifted crest keeps enough cover
+      for (const u of cands) d.dragA = Math.min(d.dragA, Math.max(5, g - 12 - hzAt(u, x + ring, z)));
       let mid = rng() * Math.PI * 2;
-      for (let k = 0; k < cfg.flanksPer && cands.length; k++) {
-        const u = cands[(cands.length - 1 - k + cands.length * 4) % cands.length];
+      for (let k = 0; k < cands.length; k++) {
+        const u = cands[k];
         if (k > 0) mid += Math.PI + randSym(rng) * 0.6;
         const deg = ((mid * 180) / Math.PI + 360) % 360;
         // screen z grows southward: angle 90° = south
         const dirName = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'][Math.round(deg / 45) % 8];
         plan.traps.push(newTrap({
-          kind: 'salt_dome', unit: u, shape: SHAPE.SECTOR, cx: x, cz: z, ra: r0 + 4.2 * dragW, wl: 1.2, secMid: Math.atan2(Math.sin(mid), Math.cos(mid)),
+          kind: 'salt_dome', unit: u, shape: SHAPE.SECTOR, brine: u !== U.PLATFORM, cx: x, cz: z, ra: r0 + 4.2 * dragW, wl: 1.2, secMid: Math.atan2(Math.sin(mid), Math.cos(mid)),
           secHalf: rr(0.95, 1.35), bodyIdx: di, name: uniqueName(`${d.name} ${dirName} Flank`), desiredColumn: rr(5, 9),
           offshore: isOcean(x, z), quality: 0.2, charged: rng() < 0.92,
         }));
@@ -345,10 +348,10 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
     }
   }
 
-  // ---------------- stratigraphic pinch-outs (sand wedges) ----------------
+  // ---------------- stratigraphic pinch-outs (sand wedges thinning up the regional dip) ----------------
   {
     const names = shuffled(rng, WEDGE_NAMES);
-    for (let a = 0, made = 0; a < 400 && made < cfg.wedges; a++) {
+    for (let a = 0, made = 0; a < 600 && made < cfg.wedges; a++) {
       const x = rr(40, size - 40);
       const z = rr(40, size - 40);
       if (waterDepth(x, z) > 14) continue;
@@ -356,22 +359,27 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       const W = rr(11, 17);
       const T = rr(2.3, 3.4);
       if (!free(x, z, L / 2 + 4)) continue;
-      const ang = Math.atan2(-od.z, -od.x) + randSym(rng) * 0.6;
-      const dx = Math.cos(ang);
-      const dz = Math.sin(ang);
       const g = gmin(x, z, L / 2 + 2);
-      const unit = shuffled(rng, [U.SEAL, U.COAL, U.UPPER_MUD]).find((u) => {
-        const upTop = hzAt(u - 1, x + (dx * L) / 2, z + (dz * L) / 2) + 1.3 + 0.9 * T;
-        return upTop <= g - 13 && hzAt(u - 1, x, z) >= 11;
-      });
-      if (unit === undefined) continue;
-      const w: Wedge = { name: names[made % names.length], unit, ox: x - (dx * L) / 2, oz: z - (dz * L) / 2, dx, dz, L, W, T };
-      const wi = plan.wedges.push(w) - 1;
+      let placed: Wedge | null = null;
+      for (const unit of shuffled(rng, [U.SEAL, U.COAL, U.UPPER_MUD])) {
+        const gx = (hzAt(unit - 1, x + 10, z) - hzAt(unit - 1, x - 10, z)) / 20;
+        const gz = (hzAt(unit - 1, x, z + 10) - hzAt(unit - 1, x, z - 10)) / 20;
+        const mag = Math.hypot(gx, gz);
+        if (mag < 0.06) continue;
+        const dx = gx / mag;
+        const dz = gz / mag;
+        const upTop = hzAt(unit - 1, x + (dx * L) / 2, z + (dz * L) / 2) + 1.5 + 1.1 * T;
+        if (upTop > g - 13 || hzAt(unit - 1, x - (dx * L) / 2, z - (dz * L) / 2) < 11) continue;
+        placed = { name: names[made % names.length], unit, ox: x - (dx * L) / 2, oz: z - (dz * L) / 2, dx, dz, L, W, T };
+        break;
+      }
+      if (!placed) continue;
+      const wi = plan.wedges.push(placed) - 1;
       occ.push({ x, z, r: L / 2 + 4 });
       made++;
       plan.traps.push(newTrap({
-        kind: 'stratigraphic', unit, body: BODY.WEDGE, bodyIdx: wi, shape: SHAPE.WEDGE, cx: x, cz: z, ra: Math.max(L, W) / 2 + 2, wl: 1,
-        name: uniqueName(w.name), desiredColumn: rr(3, 5.5), offshore: isOcean(x, z), quality: 0.1, charged: rng() < 0.9,
+        kind: 'stratigraphic', unit: placed.unit, body: BODY.WEDGE, bodyIdx: wi, shape: SHAPE.WEDGE, cx: x, cz: z, ra: Math.max(L, W) / 2 + 2, wl: 1,
+        name: uniqueName(placed.name), desiredColumn: rr(4, 7), offshore: isOcean(x, z), quality: 0.1, charged: rng() < 0.92,
       }));
     }
   }
