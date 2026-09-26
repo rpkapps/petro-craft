@@ -17,9 +17,9 @@ export interface CommandMap {
   'player/setMode': { mode: PlayerMode };
   'player/selectSlot': { slot: number };
   'player/moveItem': { from: number; to: number };
-  'player/sync': { position: Vec3; velocity: Vec3; yaw: number; pitch: number };
+  'player/sync': { position: Vec3; velocity: Vec3; yaw: number; pitch: number; health?: number };
   // --- construction
-  'build/place': { type: string; x: number; z: number; rotation: Rotation };
+  'build/place': { buildingType: string; x: number; z: number; rotation: Rotation };
   'build/demolish': { buildingId: string };
   'build/cancel': { buildingId: string };
   'building/toggle': { buildingId: string; enabled: boolean };

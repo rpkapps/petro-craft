@@ -3,7 +3,6 @@
 import { B } from '../../src/core/blocks';
 import { BUILDINGS } from '../../src/content/buildings';
 import type { BuildingState } from '../../src/core/types';
-import { FakeWorld } from './fakeWorld';
 import { addWellhead, completeAll, grantTech, newHarness, pipe, placeCmd, produce, run, staff, stepsPerHour, type Harness } from './harness';
 
 let failures = 0;
@@ -604,8 +603,6 @@ section('13. Performance: 400 buildings, ~6,000 pipe blocks');
   check('full topology rebuild < 60 ms', tr < 60, `${tr.toFixed(1)} ms`);
   check('incremental pipe add < 1 ms', ti < 1, `${ti.toFixed(3)} ms`);
   check('step < 4 ms', per < 4, `${per.toFixed(2)} ms`);
-  const w = new FakeWorld(h.geo, null);
-  void w;
 }
 
 // -------------------------------------------------------------------------------------------------
