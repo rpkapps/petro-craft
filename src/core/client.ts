@@ -31,6 +31,12 @@ export interface RenderHost {
   readonly fps: number;
   /** Chunk load progress 0..1 around the player (for loading screen). */
   readonly loadProgress: number;
+  /** Highest sky-occluding block y+1 in a column (for keeping rain/snow out from under cover). */
+  skyHeightAt?(x: number, z: number): number;
+  /** Whether the camera is currently inside water. */
+  readonly isUnderwater?: boolean;
+  /** Current effective render scale after auto-quality (for the FPS/perf overlay). */
+  readonly effectiveRenderScale?: number;
 }
 
 export interface SaveSlotInfo {

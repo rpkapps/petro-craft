@@ -214,6 +214,8 @@ export interface GameState {
   objectives: ObjectivesState;
   notifications: Notification[];
   stats: StatsState;
+  /** Items dropped in the world (player 'Q' drops); picked up by walking over them. */
+  drops?: DroppedItem[];
   nextId: number;
   /** Economy module bookkeeping (plain JSON, owned by sim/economy). */
   economy?: unknown;
@@ -270,6 +272,8 @@ export interface DailyFinance { day: number; revenue: number; expenses: number; 
 
 export type PlayerMode = 'walk' | 'fly' | 'drone';
 export interface InventorySlot { item: string; count: number }
+/** An item stack lying in the world. Position is the item's centre (block coords). */
+export interface DroppedItem { id: string; item: string; count: number; x: number; y: number; z: number; droppedMinute: number; droppedBy?: string }
 export interface PlayerState {
   id: string;
   name: string;
@@ -594,6 +598,8 @@ export interface EnvironmentState {
   /** Warnings issued by regulator; at 3 → operations suspended for some days. */
   violations: number;
   suspendedUntilDay?: number;
+  /** Daily score history (end-of-day score, capped ~365). */
+  history?: number[];
 }
 export interface Spill { id: string; x: number; y: number; z: number; volume: number; cleaned: number; day: number; kind: 'oil' | 'water' | 'chemical' }
 
@@ -659,6 +665,14 @@ export interface Settings {
   units: 'imperial' | 'metric';
   autosaveMinutes: number;
   showFps: boolean;
+  /** Internal render resolution multiplier (0.5..1; pixel ratio is also capped by the device). */
+  renderScale: number;
+  /** Automatically lower render scale / effects when frame time is too high. */
+  autoQuality: boolean;
+  /** Post-process antialiasing (FXAA/SMAA). */
+  antialias: boolean;
+  /** Exposure/brightness multiplier (0.6..1.6). */
+  brightness: number;
   keybinds: Record<string, string>;
 }
 

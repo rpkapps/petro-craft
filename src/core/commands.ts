@@ -17,6 +17,11 @@ export interface CommandMap {
   'player/setMode': { mode: PlayerMode };
   'player/selectSlot': { slot: number };
   'player/moveItem': { from: number; to: number };
+  /** Drop `count` (default: whole stack) from an inventory slot in front of the player. */
+  'player/dropItem': { slot: number; count?: number };
+  /** Pick up a dropped item stack (must be within reach). */
+  'player/pickup': { dropId: string };
+  'notifications/markRead': { ids?: string[] };
   'player/sync': { position: Vec3; velocity: Vec3; yaw: number; pitch: number; health?: number };
   // --- construction
   'build/place': { buildingType: string; x: number; z: number; rotation: Rotation };

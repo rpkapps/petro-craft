@@ -92,6 +92,9 @@ export function environmentNewDay(ctx: GameContext, rt: EconomyRuntime, day: num
     else delta += Math.min(1, env.carbonCredits / 200 + renewables * 0.1) - (renewables === 0 && env.carbonCredits <= 0 ? (env.score - ENV_NEUTRAL_SCORE) * 0.01 : 0);
   }
   env.score = Math.max(0, Math.min(100, env.score + delta));
+  const hist = (env.history ??= []);
+  hist.push(Math.round(env.score * 10) / 10);
+  if (hist.length > 365) hist.splice(0, hist.length - 365);
   ext.lastScoreDelta = delta;
 
   // ---- Carbon credits ----

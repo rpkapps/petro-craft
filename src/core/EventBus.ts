@@ -9,6 +9,7 @@ export interface GameEvents {
   'game:loaded': { slot: string };
   'game:disposed': {};
   'game:paused': { paused: boolean };
+  'settings:changed': { keys: string[] };
   // time
   'time:newDay': { day: number };
   'time:newHour': { day: number; hour: number };
@@ -70,6 +71,8 @@ export interface GameEvents {
   /** Player died / respawned. */
   'player:death': { cause: string };
   'player:respawn': {};
+  'player:itemDropped': { dropId: string };
+  'player:itemPickedUp': { item: string; count: number };
   // ui (client-side)
   'ui:open': { panel: UiPanelId; args?: Record<string, unknown> };
   'ui:close': { panel?: UiPanelId };

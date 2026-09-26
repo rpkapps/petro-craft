@@ -72,6 +72,7 @@ export class App implements AppShell {
 
   applySettings(s: Partial<Settings>) {
     Object.assign(this.settings, s);
+    this.session?.bus.emit('settings:changed', { keys: Object.keys(s) });
     saveSettings(this.settings);
     this.audio.setVolumes(this.settings.masterVolume, this.settings.musicVolume, this.settings.sfxVolume);
     if (this.session) this.session.ctx.settings = this.settings;

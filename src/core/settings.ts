@@ -26,6 +26,10 @@ export const DEFAULT_SETTINGS: Settings = {
   units: 'imperial',
   autosaveMinutes: 5,
   showFps: false,
+  renderScale: 1,
+  autoQuality: true,
+  antialias: true,
+  brightness: 1,
   keybinds: { ...DEFAULT_KEYBINDS },
 };
 

@@ -40,6 +40,11 @@ class TimeSystem implements SimSystem {
       c.state.time.speed = s;
       return { ok: true };
     });
+    ctx.commands.register('notifications/markRead', (cmd, c) => {
+      const ids = cmd.ids ? new Set(cmd.ids) : null;
+      for (const n of c.state.notifications) if (!ids || ids.has(n.id)) n.read = true;
+      return { ok: true };
+    });
     ctx.commands.register('time/setPaused', (cmd, c) => {
       c.state.time.paused = cmd.paused;
       c.bus.emit('game:paused', { paused: cmd.paused });
