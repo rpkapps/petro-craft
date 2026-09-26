@@ -248,7 +248,6 @@ export function paintPipe(p: Pixmap, body: RGB, band: RGB, chevron: RGB, gloss =
     p.set(8, yy + 1, chevron);
     p.set(7, yy + 2, chevron);
   }
-  void chevron;
 }
 
 export const paintPipeOil: Painter = (p, pal) => paintPipe(p, pal[0], pal[2], BLACK, 0.8);
