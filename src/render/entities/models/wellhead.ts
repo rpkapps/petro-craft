@@ -194,10 +194,13 @@ function animatePumpjack(a: AnimState): void {
   const beam = a.node('beam');
   const crank = a.node('crank');
   if (!beam || !crank) return;
-  const oil = a.well ? Math.max(0, a.well.rates.oil + a.well.rates.water * 0.5) : 200;
-  const hz = 0.18 + 0.22 * Math.min(1, oil / 400);
+  // stroke rate: upstream's data.strokesPerMinute, else 6 + 6 × choke (stopped unless producing)
+  const w = a.well;
+  const spmData = a.b.data?.strokesPerMinute;
+  const producing = !w || w.status === 'producing';
+  const spm = typeof spmData === 'number' ? spmData : producing ? 6 + 6 * (w?.choke ?? 0.5) : 0;
   const m = a.mem;
-  m.phi = ((m.phi ?? 0) - a.dt * hz * Math.PI * 2 * a.speed) % (Math.PI * 2);
+  m.phi = ((m.phi ?? 0) - a.dt * (spm / 60) * Math.PI * 2 * a.speed) % (Math.PI * 2);
   const phi = m.phi;
   crank.rotation.z = phi;
   const th = beamAngle(phi);
@@ -304,6 +307,7 @@ const wellhead: ModelDef = {
   },
   activity(bs, ctx) {
     const w = bs.wellId ? ctx.state.wells[bs.wellId] : undefined;
+    if (typeof bs.data?.strokesPerMinute === 'number') return bs.data.strokesPerMinute > 0 ? 1 : 0;
     if (!w) return bs.status === 'active' ? 1 : 0;
     return w.status === 'producing' || w.status === 'injecting' ? 1 : 0;
   },

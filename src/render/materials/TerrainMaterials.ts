@@ -179,6 +179,7 @@ attribute vec4 aNormal;
 attribute vec4 aInfo;
 varying vec3 vWorldPos;
 varying vec3 vNormal;
+varying float vSky;
 flat varying float vLayer;
 void main() {
   vec4 worldPosition = modelMatrix * vec4(position, 1.0);
@@ -186,6 +187,7 @@ void main() {
   vWorldPos = worldPosition.xyz;
   vNormal = aNormal.xyz;
   vLayer = aInfo.x;
+  vSky = aInfo.z / 255.0;
 }
 `;
 
@@ -197,6 +199,7 @@ uniform float uGhostStrength;
 uniform vec3 uGhostTint;
 varying vec3 vWorldPos;
 varying vec3 vNormal;
+varying float vSky;
 flat varying float vLayer;
 void main() {
   vec3 avg = texelFetch(uLayerProps, ivec2(int(floor(vLayer + 0.5)), 1), 0).rgb;
@@ -221,6 +224,8 @@ void main() {
   a *= smoothstep(1.5, 7.0, dist);
   float ring = fract((dist - uTime * 26.0) / 140.0);
   a += smoothstep(0.965, 1.0, ring) * 0.12 * (1.0 - smoothstep(40.0, 220.0, dist));
+  // the sky-lit surface shell reads clearly; cave walls stay a faint whisper
+  a *= mix(0.16, 1.0, smoothstep(0.15, 0.6, vSky));
   a *= uXray * uGhostStrength;
   gl_FragColor = vec4(col * a, 1.0);
 }

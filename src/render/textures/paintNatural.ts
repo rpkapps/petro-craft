@@ -1,5 +1,5 @@
 // Painters for soils, surface covers, water/ice, wood and foliage.
-import { TEX, Pixmap, ramp, pick, rgb, shade, mixc, WHITE, type RGB } from './Pixmap';
+import { TEX, Pixmap, ramp, pick, rgb, shade, mixc, saturate, WHITE, type RGB } from './Pixmap';
 
 export type Painter = (p: Pixmap, pal: RGB[]) => void;
 
@@ -31,7 +31,7 @@ export function paintDirt(p: Pixmap, d: RGB, dark?: RGB, light?: RGB) {
 }
 
 function grassRamp(pal: RGB[]): RGB[] {
-  const g = pal[0];
+  const g = saturate(pal[0], 0.82);
   return [shade(pal[1], 0.78), pal[1], g, mixc(shade(g, 1.12), rgb(0xd8e070), 0.12), mixc(shade(g, 1.2), rgb(0xe8f080), 0.25)];
 }
 
@@ -260,7 +260,8 @@ export const paintBirchTop: Painter = (p, pal) => paintRings(p, pal[2], pal[0], 
 
 // ---- foliage (cut-out) --------------------------------------------------------------------------
 
-export function paintLeaves(p: Pixmap, pal: RGB[], holes: number, accents: RGB[] = []) {
+export function paintLeaves(p: Pixmap, palIn: RGB[], holes: number, accents: RGB[] = []) {
+  const pal = palIn.map((c) => saturate(c, 0.85));
   const r = [shade(pal[1], 0.62), pal[1], pal[0], pal[2], mixc(pal[2], rgb(0xf0f0a0), 0.22)];
   // leaf clusters: 2×2-ish pixel clumps with a lit upper-left edge and a dark lower-right edge
   p.forEach((x, y) => {
@@ -453,16 +454,19 @@ export const paintCactusTop: Painter = (p, pal) => {
 };
 
 export const paintCoral: Painter = (p, pal) => {
-  const v = p.voronoi(9, 5);
+  // bumpy polyp colony: warm base with bright polyp rings and dark pores
+  const base = mixc(pal[0], pal[1], 0.35);
+  p.forEach((x, y) => p.set(x, y, shade(base, 0.8 + p.f(x, y, 4, 2, 1) * 0.35)));
+  const v = p.voronoi(10, 5);
   p.forEach((x, y) => {
     const i = y * TEX + x;
-    const c = pal[v.cell[i] % pal.length];
-    const [cx, cy] = v.pts[v.cell[i]];
+    const cell = v.cell[i];
+    const c = pal[cell % pal.length];
+    const [cx, cy] = v.pts[cell];
     const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
-    let col = shade(c, 1.1 - d * 0.08);
-    if (v.edge[i] < 0.8) col = shade(c, 0.55);
-    if (d < 0.9) col = mixc(c, WHITE, 0.5);
-    p.set(x, y, col);
+    if (d < 2.4) p.set(x, y, shade(mixc(c, WHITE, 0.15), 1.1 - d * 0.12));
+    if (d < 0.9) p.set(x, y, shade(c, 0.45));
+    if (v.edge[i] < 0.6) p.blend(x, y, shade(base, 0.6), 0.5);
   });
 };
 

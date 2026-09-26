@@ -62,12 +62,15 @@ const vertexShader = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     vec2 c = position.xy;
     if (kind == 2.0 || kind == 3.0) {
-      vec3 vv = (modelViewMatrix * vec4(v, 0.0)).xyz;
+      // stretch along the screen-space velocity (sparks, droplets)
+      vec3 vv = mat3(modelViewMatrix) * v;
       float sp = length(vv.xy);
-      vec2 dir = sp > 1e-4 ? vv.xy / sp : vec2(0.0, 1.0);
-      vec2 perp = vec2(-dir.y, dir.x);
+      float ang = atan(vv.y, vv.x + 1e-5) - 1.5707963;
       float len = size + sp * (kind == 2.0 ? 0.045 : 0.03);
-      mv.xy += perp * c.x * size + dir * c.y * len;
+      vec2 sc = vec2(c.x * size, c.y * len);
+      float cs = cos(ang);
+      float sn = sin(ang);
+      mv.xy += vec2(sc.x * cs - sc.y * sn, sc.x * sn + sc.y * cs);
     } else {
       float ang = iMisc.z * age + iMisc.w * 6.2831;
       float cs = cos(ang);
@@ -107,40 +110,45 @@ const fragmentShader = /* glsl */ `
     float r = length(q);
     if (r > 1.0) discard;
     float t = vT;
+    // varyings are interpolated: round the kind id before comparing
+    float kind = floor(vKind + 0.5);
     vec4 outc;
     bool additive = false;
-    if (vKind == 0.0) {
-      // fire: hot core → orange → deep red, noisy tongues
-      float n = fbm(q * 2.2 + vec2(vSeed * 13.0, vSeed * 7.0 - t * 2.0));
-      float soft = pow(max(0.0, 1.0 - r), 1.4) * (0.45 + 0.75 * n);
-      vec3 hot = vec3(1.0, 0.92, 0.62);
-      vec3 mid = vec3(1.0, 0.46, 0.08);
-      vec3 cool = vec3(0.55, 0.08, 0.02);
-      vec3 col = t < 0.28 ? mix(hot, mid, t / 0.28) : mix(mid, cool, (t - 0.28) / 0.72);
-      float inten = soft * pow(1.0 - t, 1.3) * vColor.a * 2.4 * smoothstep(0.0, 0.08, t);
-      outc = vec4(col * vColor.rgb * inten, 0.0);
+    if (kind == 0.0) {
+      // fire: licking tongues — noisy, crisp-edged cells, hot core → orange → deep red
+      float n = fbm(q * 2.4 + vec2(vSeed * 13.0, vSeed * 7.0 - t * 2.5));
+      float body = (1.0 - r) * (0.55 + 0.9 * n);
+      float shape = smoothstep(0.22, 0.62, body);
+      vec3 hot = vec3(1.0, 0.8, 0.45);
+      vec3 mid = vec3(1.0, 0.4, 0.07);
+      vec3 cool = vec3(0.5, 0.07, 0.02);
+      float heat = clamp(t * 1.2 + (1.0 - body) * 0.35, 0.0, 1.0);
+      vec3 col = heat < 0.3 ? mix(hot, mid, heat / 0.3) : mix(mid, cool, (heat - 0.3) / 0.7);
+      float inten = shape * pow(1.0 - t, 1.2) * vColor.a * 1.6 * smoothstep(0.0, 0.06, t);
+      // partly occluding (alpha) so dense flames saturate to orange instead of blowing out to white
+      outc = vec4(col * vColor.rgb * inten, min(1.0, inten * 0.5));
       additive = true;
-    } else if (vKind == 2.0) {
+    } else if (kind == 2.0) {
       float core = smoothstep(1.0, 0.0, r);
       vec3 col = mix(vec3(1.0, 0.92, 0.6), vec3(1.0, 0.35, 0.05), t);
       outc = vec4(col * vColor.rgb * core * (1.0 - t) * vColor.a * 3.0, 0.0);
       additive = true;
-    } else if (vKind == 4.0) {
+    } else if (kind == 4.0) {
       float soft = pow(max(0.0, 1.0 - r), 2.0);
       outc = vec4(vColor.rgb * soft * vColor.a * (1.0 - t), 0.0);
       additive = true;
-    } else if (vKind == 3.0) {
+    } else if (kind == 3.0) {
       float shape = smoothstep(1.0, 0.45, r);
       float a = shape * vColor.a * (1.0 - t * t);
       vec3 col = vColor.rgb * mix(1.0, uLight, 0.8) * (0.85 + 0.3 * (1.0 - r));
       outc = vec4(col * a, a);
     } else {
       // smoke / dust / steam / foam puffs
-      float sc = vKind == 5.0 ? 1.6 : 2.3;
+      float sc = kind == 5.0 ? 1.6 : 2.3;
       float n = fbm(q * sc + vec2(vSeed * 17.0, vSeed * 5.0 + t * 0.6));
       float shape = smoothstep(1.0, 0.15, r + (n - 0.5) * 0.55);
-      float fadeIn = smoothstep(0.0, vKind == 7.0 ? 0.02 : 0.12, t);
-      float a = shape * vColor.a * fadeIn * pow(1.0 - t, vKind == 6.0 ? 1.1 : 1.6);
+      float fadeIn = smoothstep(0.0, kind == 7.0 ? 0.02 : 0.12, t);
+      float a = shape * vColor.a * fadeIn * pow(1.0 - t, kind == 6.0 ? 1.1 : 1.6);
       float shade = 0.72 + 0.4 * (n - 0.3) + 0.18 * (-q.y);
       vec3 col = vColor.rgb * shade * uLight;
       outc = vec4(col * a, a);
@@ -149,7 +157,7 @@ const fragmentShader = /* glsl */ `
       float f = uFogParams.x < 1.5
         ? smoothstep(uFogParams.y, uFogParams.z, vFogDepth)
         : 1.0 - exp(-uFogParams.y * uFogParams.y * vFogDepth * vFogDepth);
-      if (additive) outc.rgb *= (1.0 - f);
+      if (additive) outc *= (1.0 - f);
       else outc.rgb = mix(outc.rgb, uFogColor * outc.a, f);
     }
     gl_FragColor = outc;

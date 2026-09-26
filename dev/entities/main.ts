@@ -175,7 +175,17 @@ function buildVehicleScene(): void {
   ctx.state.surveys.s1 = { id: 's1', kind: '2d', x0: 20, z0: 30, x1: 120, z1: 30, status: 'in_progress', progress: 0.4, quality: 1, fluidIndicators: false, startedDay: 1, cost: 0, name: 'Line 1' };
 }
 
-if (scene === 'anim' || scene === 'fx') buildAnimScene();
+function buildFxScene(): void {
+  addWell(ctx, 60, LAND_Y, 50, { status: 'blowout', blowout: { startedDay: 1, onFire: true, flowRate: 4000, capProgress: 0 } });
+  addWell(ctx, 84, LAND_Y, 50, { status: 'blowout', blowout: { startedDay: 1, onFire: false, flowRate: 4000, capProgress: 0 } });
+  const rig = addBuilding(ctx, 'drilling_rig_land', 100, LAND_Y, 48);
+  rig.wellId = addWell(ctx, 102, LAND_Y, 50, { status: 'kick', rigId: rig.id }).id;
+  ctx.state.networks.n1 = { id: 'n1', category: 'water', pipeCount: 10, buildings: [], linepack: {}, capacity: 1, flow: 0, boosters: 0, anchor: { x: 72, y: LAND_Y, z: 58 }, leak: { x: 72, y: LAND_Y, z: 58, rate: 300, startedDay: 1 } };
+  ctx.state.networks.n2 = { id: 'n2', category: 'oil', pipeCount: 10, buildings: [], linepack: {}, capacity: 1, flow: 0, boosters: 0, anchor: { x: 76, y: LAND_Y, z: 58 }, leak: { x: 76, y: LAND_Y, z: 58, rate: 300, startedDay: 1 } };
+}
+
+if (scene === 'anim') buildAnimScene();
+else if (scene === 'fx') buildFxScene();
 else if (scene === 'vehicles') buildVehicleScene();
 else buildGrid();
 
@@ -204,7 +214,10 @@ if (fb) {
   const dist = r * Number(P.get('zoom') ?? 1.35);
   host.camera.position.set(c.x + Math.sin(az) * dist, c.y + r * 0.55 + (fb.y < LAND_Y ? 4 : 0), c.z + Math.cos(az) * dist);
   controls.target.copy(c);
-} else if (scene === 'anim' || scene === 'fx') {
+} else if (scene === 'fx') {
+  host.camera.position.set(80, 74, 96);
+  controls.target.set(80, 72, 50);
+} else if (scene === 'anim') {
   host.camera.position.set(38, 88, 98);
   controls.target.set(58, 66, 50);
 } else if (scene === 'vehicles') {
@@ -238,7 +251,7 @@ function frame(now: number): void {
   const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
   last = now;
   tAcc += dt;
-  if ((scene === 'anim' || scene === 'fx') && Math.floor(tAcc / 6) !== Math.floor((tAcc - dt) / 6)) ctx.bus.emit('hazard:explosion', { x: 78, y: LAND_Y, z: 62, power: 1.5 });
+  if ((scene === 'anim' || scene === 'fx') && P.get('boom') !== '0' && Math.floor(tAcc / 6) !== Math.floor((tAcc - dt) / 6)) ctx.bus.emit('hazard:explosion', { x: 78, y: LAND_Y, z: 62, power: 1.5 });
   if (weather === 'storm' && Math.random() < dt * 0.4) ctx.bus.emit('weather:lightning', { x: controls.target.x + (Math.random() - 0.5) * 80, z: controls.target.z - 40 + Math.random() * 30 });
   host.update(dt);
   controls.update();

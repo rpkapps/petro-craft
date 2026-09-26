@@ -26,6 +26,7 @@ const legendEl = document.getElementById('legend')!;
 
 const MAP_PX = Number(qs.get('map') ?? 380);
 const SEC_W = Math.max(400, window.innerWidth - MAP_PX - 40);
+(document.querySelector('main') as HTMLElement).style.gridTemplateColumns = `${MAP_PX}px ${SEC_W}px`;
 const SEC_H = Number(qs.get('sech') ?? 380);
 const SEIS_H = Number(qs.get('seish') ?? 200);
 

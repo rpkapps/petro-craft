@@ -38,6 +38,8 @@ const PRESETS: Record<string, Preset> = {
   pipes: { time: '13:00', overlay: 'pipes', cam: [-10, 9, 18, -0.4, -0.5] },
   leases: { time: '13:00', overlay: 'leases', cam: [-28, 43, 42, -0.6, -0.6] },
   pad: { time: '11:00', cam: [-12, 6, 12, -0.55, -0.35] },
+  padnight: { time: '22:30', cam: [-4, 5, 16, -0.2, -0.3] },
+  ground: { time: '14:00', overlay: 'xray', cam: [-6, 3, 20, -0.3, -0.35] },
 };
 const preset = PRESETS[scene] ?? PRESETS.day;
 
@@ -215,7 +217,8 @@ async function main() {
     if (acc > 0.5) {
       acc = 0;
       const info = r.renderer.info;
-      stats.textContent = `${source} · ${r.fps.toFixed(0)} fps · load ${(r.loadProgress * 100).toFixed(0)}% · calls ${info.render.calls} · tris ${(info.render.triangles / 1000).toFixed(0)}k · scene=${scene}`;
+      const cm = (r as unknown as { chunks: { stats: { lastMeshMs: number; pendingGen: number } } }).chunks.stats;
+      stats.textContent = `${source} · mesh ${cm.lastMeshMs.toFixed(1)}ms · gen-pending ${cm.pendingGen} · ${r.fps.toFixed(0)} fps · load ${(r.loadProgress * 100).toFixed(0)}% · calls ${info.render.calls} · tris ${(info.render.triangles / 1000).toFixed(0)}k · scene=${scene}`;
     }
   };
   requestAnimationFrame(frame);

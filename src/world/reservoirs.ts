@@ -5,7 +5,8 @@ import { B } from '../core/blocks';
 import type { Reservoir, ReservoirFluid } from '../core/types';
 import { clamp, makeRng, smoothstep } from '../core/rng';
 import type { Geology } from './geology';
-import { BODY, ColumnCtx, RC, type ResModel, type TrapModel } from './model';
+import { BODY, ColumnCtx, RC, SHAPE, type ResModel, type TrapModel } from './model';
+import { ellipseQ } from './structure';
 import { randRange, randSym, subSeed } from './noise';
 import { U } from './strata';
 import { TF } from './terrain';
@@ -37,17 +38,32 @@ interface Stats {
 
 const newStats = (): Stats => ({ count: 0, gas: 0, x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, sx: 0, sz: 0, top: -1, bottom: 1e9 });
 
-function addVoxel(s: Stats, x: number, y: number, z: number, gas: boolean): void {
-  s.count++;
-  if (gas) s.gas++;
+function addVoxel(s: Stats, x: number, y: number, z: number, gas: boolean, w = 1): void {
+  s.count += w;
+  if (gas) s.gas += w;
   if (x < s.x0) s.x0 = x;
   if (x > s.x1) s.x1 = x;
   if (z < s.z0) s.z0 = z;
   if (z > s.z1) s.z1 = z;
   if (y > s.top) s.top = y;
   if (y < s.bottom) s.bottom = y;
-  s.sx += x + 0.5;
-  s.sz += z + 0.5;
+  s.sx += (x + 0.5) * w;
+  s.sz += (z + 0.5) * w;
+}
+
+const TWO_PI = Math.PI * 2;
+
+/** Cheap analytic pre-test of a trap's HC region (wedges are resolved per column by the classifier). */
+function inRegion(t: TrapModel, fx: number, fz: number): boolean {
+  if (t.shape === SHAPE.ELLIPSE) return ellipseQ(t.cx, t.cz, t.ra, t.rb, t.cos, t.sin, fx, fz) <= 1.0001;
+  if (t.shape === SHAPE.WEDGE) return true;
+  const dx = fx - t.cx;
+  const dz = fz - t.cz;
+  if (dx * dx + dz * dz > t.ra * t.ra * 1.0002) return false;
+  if (t.shape === SHAPE.CIRCLE) return true;
+  let d = Math.atan2(dz, dx) - t.secMid;
+  d -= TWO_PI * Math.round(d / TWO_PI);
+  return Math.abs(d) <= t.secHalf + 1e-6;
 }
 
 const round = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
@@ -65,6 +81,12 @@ function hostLith(t: TrapModel): Reservoir['lithology'] {
   return 'sandstone';
 }
 
+function growVox(a: Int32Array): Int32Array {
+  const b = new Int32Array(a.length * 2);
+  b.set(a);
+  return b;
+}
+
 export function finalizeReservoirs(geo: Geology): void {
   const rng = makeRng(subSeed(geo.seed, 500));
   const ctx = new ColumnCtx();
@@ -75,6 +97,8 @@ export function finalizeReservoirs(geo: Geology): void {
   const goc = new Float64Array(NM);
   const range = { lo: 0, hi: 0 };
   const terrain = geo.terrain;
+  let vox: Int32Array = new Int32Array(4 * 4096);
+  let vn = 0;
 
   for (let ti = 0; ti < geo.traps.length; ti++) {
     const t = geo.traps[ti];
@@ -84,9 +108,14 @@ export function finalizeReservoirs(geo: Geology): void {
     minY.fill(9999);
     const all: Stats[] = Array.from({ length: NM }, newStats);
 
-    // ---------- pass 1: host voxels, crest & spill per compartment ----------
-    for (let z = t.z0; z <= t.z1; z++) {
-      for (let x = t.x0; x <= t.x1; x++) {
+    // ---------- pass 1: host voxels, crest & spill per compartment (cached for pass 2) ----------
+    // Huge continuous plays are sampled every other column (volumes weighted ×4).
+    const step = isPlay ? 2 : 1;
+    const w = step * step;
+    vn = 0;
+    for (let z = t.z0; z <= t.z1; z += step) {
+      for (let x = t.x0; x <= t.x1; x += step) {
+        if (!inRegion(t, x + 0.5, z + 0.5)) continue;
         geo.prepareColumn(ctx, x, z);
         const j = geo.trapSlot(ctx, ti);
         if (j < 0) continue;
@@ -100,7 +129,15 @@ export function finalizeReservoirs(geo: Geology): void {
           if (y > crest[m]) crest[m] = y;
           if (y < minY[m]) minY[m] = y;
           if (ring && y > spill[m]) spill[m] = y;
-          addVoxel(all[m], x, y, z, false);
+          addVoxel(all[m], x, y, z, false, w);
+          if (!isPlay) {
+            if (vn * 4 >= vox.length) vox = growVox(vox);
+            vox[vn * 4] = x;
+            vox[vn * 4 + 1] = y;
+            vox[vn * 4 + 2] = z;
+            vox[vn * 4 + 3] = m;
+            vn++;
+          }
         }
       }
     }
@@ -157,18 +194,11 @@ export function finalizeReservoirs(geo: Geology): void {
         if (allGas) hc[m].gas = hc[m].count;
       }
     } else {
-      for (let z = t.z0; z <= t.z1; z++) {
-        for (let x = t.x0; x <= t.x1; x++) {
-          geo.prepareColumn(ctx, x, z);
-          const j = geo.trapSlot(ctx, ti);
-          if (j < 0 || !(ctx.tCode[j] & RC.HC)) continue;
-          geo.hostRange(ctx, t, range);
-          for (let y = range.lo; y <= range.hi; y++) {
-            const m = geo.hostMask(ctx, y, t);
-            if (m < 0 || y < owc[m]) continue;
-            addVoxel(hc[m], x, y, z, allGas || y >= goc[m]);
-          }
-        }
+      for (let k = 0; k < vn; k++) {
+        const y = vox[k * 4 + 1];
+        const m = vox[k * 4 + 3];
+        if (y < owc[m]) continue;
+        addVoxel(hc[m], vox[k * 4], y, vox[k * 4 + 2], allGas || y >= goc[m]);
       }
     }
 

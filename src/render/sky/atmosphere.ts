@@ -157,14 +157,14 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   a.windDir.set(Math.cos(w.windDir), Math.sin(w.windDir));
   a.windStrength = clamp(w.windSpeed / 18, 0, 1.5);
   const oc = a.overcast;
-  const dark = 1 - a.storm * 0.55;
+  const dark = 1 - a.storm * 0.62;
 
   // ---- sky gradient -----------------------------------------------------------------------------
   keyColor(SKY_KEYS, (k: Key) => k.zenith, e, a.zenith);
   keyColor(SKY_KEYS, (k: Key) => k.horizon, e, a.horizon);
   keyColor(SKY_KEYS, (k: Key) => k.glow, e, a.sunGlow);
   desaturate(a.zenith, oc * 0.85).multiplyScalar(lerp(1, 0.72, oc) * dark);
-  desaturate(a.horizon, oc * 0.8).multiplyScalar(lerp(1, 0.9, oc) * dark);
+  desaturate(a.horizon, oc * 0.8).multiplyScalar(lerp(1, 0.8, oc) * dark);
   // overcast skies are brighter near the horizon and flatter overall
   if (oc > 0) a.zenith.lerp(a.horizon, oc * 0.55);
   a.sunGlow.multiplyScalar((1 - oc * 0.8) * dark);
@@ -218,8 +218,8 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   a.cloudLit.copy(a.horizon).lerp(new THREE.Color(1, 1, 1), 0.55 * dayF).multiplyScalar(0.55 + 0.6 * dayF);
   a.cloudLit.add(tmpA.copy(sunCol).multiplyScalar(0.28));
   a.cloudShade.copy(a.zenith).lerp(a.horizon, 0.6).multiplyScalar(0.8);
-  desaturate(a.cloudLit, oc * 0.7).multiplyScalar(lerp(1, 0.72, oc) * dark);
-  desaturate(a.cloudShade, oc * 0.7).multiplyScalar(lerp(1, 0.6, oc) * dark);
+  desaturate(a.cloudLit, oc * 0.7).multiplyScalar(lerp(1, 0.5, oc) * dark);
+  desaturate(a.cloudShade, oc * 0.7).multiplyScalar(lerp(1, 0.62, oc) * lerp(1, dark, 0.6));
 
   a.starVis = smoothstep(-0.04, -0.22, e) * (1 - oc);
 

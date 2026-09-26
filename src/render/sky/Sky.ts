@@ -82,7 +82,7 @@ void main() {
   float h = d.y;
   vec3 horizon = fogTint(d);
   vec3 col = mix(horizon, uZenith, pow(clamp(h, 0.0, 1.0), 0.48));
-  if (h < 0.0) col = mix(horizon, horizon * 0.55 + uZenith * 0.1, smoothstep(0.0, -0.35, h));
+  if (h < 0.0) col = mix(horizon, horizon * 0.8, smoothstep(-0.25, -0.9, h));
   float s = max(dot(d, uSunDir), 0.0);
   float horizonBand = 1.0 - smoothstep(0.0, 0.5, abs(h));
   col += uSunGlow * (pow(s, 90.0) * 0.9 + pow(s, 7.0) * 0.22 * horizonBand);

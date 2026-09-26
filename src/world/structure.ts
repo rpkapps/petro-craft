@@ -254,13 +254,13 @@ export class HorizonGrid {
   /** Salt basin presence per node. */
   readonly salt: Float32Array;
 
-  constructor(size: number) {
+  constructor(size: number, base: GridBase) {
     this.n = Math.floor((size - 1) / GRID_STEP) + 2;
     const nn = this.n * this.n;
     this.hz = new Float32Array(nn * NUM_HORIZONS);
     this.op = new Float32Array(nn);
-    this.dolo = new Float32Array(nn);
-    this.salt = new Float32Array(nn);
+    this.dolo = base.dolo;
+    this.salt = base.salt;
   }
 
   /** Bilinear sample of every horizon into `out` (length NUM_HORIZONS). Also returns node weights via `w`. */
@@ -328,9 +328,25 @@ export function faultCompensation(faults: readonly FaultModel[], x: number, z: n
   return comp;
 }
 
-export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin, feats: StructuralFeatures, faults: readonly FaultModel[]): HorizonGrid {
+/** Feature-independent (noise-derived) part of the horizon grid; computed once and reused for every rebuild. */
+export interface GridBase {
+  n: number;
+  /** Basement-top datum per node (base + folds + fault compensation). */
+  datum: Float32Array;
+  /** Unit thickness per node: thick[node * NUM_HORIZONS + u] (u ≥ 1). */
+  thick: Float32Array;
+  /** Regional (offshore) overpressure per node. */
+  opBase: Float32Array;
+  salt: Float32Array;
+  dolo: Float32Array;
+}
+
+export function buildGridBase(seed: number, terrain: Terrain, salt: SaltBasin, faults: readonly FaultModel[]): GridBase {
   const size = terrain.size;
-  const grid = new HorizonGrid(size);
+  const n = Math.floor((size - 1) / GRID_STEP) + 2;
+  const nn = n * n;
+  const H = NUM_HORIZONS;
+  const out: GridBase = { n, datum: new Float32Array(nn), thick: new Float32Array(nn * H), opBase: new Float32Array(nn), salt: new Float32Array(nn), dolo: new Float32Array(nn) };
   const nB = noise2(seed, 310);
   const nFold = noise2(seed, 311);
   const nFold2 = noise2(seed, 312);
@@ -338,12 +354,9 @@ export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin
   const nDolo = noise2(seed, 314);
   const cs: CoastSample = { o: 0, frac: 0 };
   const bandW = terrain.bandWidth;
-  const H = NUM_HORIZONS;
-  const loc = { u: 0, v: 0 };
-
-  for (let j = 0; j < grid.n; j++) {
-    for (let i = 0; i < grid.n; i++) {
-      const node = i + j * grid.n;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const node = i + j * n;
       const x = Math.min(i * GRID_STEP, size - 1);
       const z = Math.min(j * GRID_STEP, size - 1);
       terrain.coast(x, z, cs);
@@ -355,24 +368,12 @@ export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin
       const refSurface = o > 0 ? SEA_LEVEL + 2.5 - Terrain.profileDepth(o, cs.frac) : 64 + 8 * smoothstep(0, 120, -o);
       const c = clamp((refSurface - 13 - base) / STACK_NOMINAL, 0.36, 1.05);
       const fold = (5.2 * fbm(nFold, x / 220, z / 220, 2) + 1.5 * nFold2(x / 85, z / 85)) * lerp(0.45, 1, clamp(c, 0, 1));
-      let domes = 0;
-      for (const d of feats.domes) domes += domeValue(d, x, z);
-      const sm = salt.at(x, z);
-      grid.salt[node] = sm;
-
-      let reefDrape = 0;
-      for (const rf of feats.reefs) {
-        const dx = x - rf.cx;
-        const dz = z - rf.cz;
-        const rho = Math.sqrt(dx * dx + dz * dz) / rf.r;
-        if (rho < 1.4) reefDrape = Math.max(reefDrape, reefMound(rf, x, z) + 1.2 * smoothstep(1.35, 0.95, rho));
-      }
-
       let datum = base + fold + faultCompensation(faults, x, z);
       if (datum < 4.5) datum = 4.5 - (4.5 - datum) * 0.25; // keep the stack off the bedrock floor
-      let cum = datum + domes;
+      out.datum[node] = datum;
+      const sm = salt.at(x, z);
+      out.salt[node] = sm;
       const hb = node * H;
-      grid.hz[hb] = cum;
       for (let u = 1; u < H; u++) {
         const def = UNITS[u];
         const nom = def.nominal * c;
@@ -380,6 +381,40 @@ export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin
         if (u === U.SALT) t = nom * (0.65 + 0.35 * nThk(x / 150 + 91.3, z / 150 - 12.1)) * sm;
         else if (u === U.ANHYDRITE) t = def.nominal * smoothstep(0.3, 0.55, sm);
         else t = Math.max(nom * def.minFrac, nom * (1 + def.variation * nThk(x / 150 + u * 37.1, z / 150 - u * 19.7)));
+        out.thick[hb + u] = t;
+      }
+      out.opBase[node] = o > -40 ? (0.3 + 0.6 * cs.frac) * smoothstep(-40, 12, o) : 0;
+      out.dolo[node] = nDolo(x / 70, z / 70);
+    }
+  }
+  return out;
+}
+
+/** Builds the horizon grid for the given structural features (domes/reefs/wedges/plays/OP zones). */
+export function buildHorizonGrid(base: GridBase, size: number, feats: StructuralFeatures): HorizonGrid {
+  const grid = new HorizonGrid(size, base);
+  const H = NUM_HORIZONS;
+  const loc = { u: 0, v: 0 };
+  const n = base.n;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const node = i + j * n;
+      const x = Math.min(i * GRID_STEP, size - 1);
+      const z = Math.min(j * GRID_STEP, size - 1);
+      let domes = 0;
+      for (const d of feats.domes) domes += domeValue(d, x, z);
+      let reefDrape = 0;
+      for (const rf of feats.reefs) {
+        const dx = x - rf.cx;
+        const dz = z - rf.cz;
+        const rho = Math.sqrt(dx * dx + dz * dz) / rf.r;
+        if (rho < 1.4) reefDrape = Math.max(reefDrape, reefMound(rf, x, z) + 1.2 * smoothstep(1.35, 0.95, rho));
+      }
+      let cum = base.datum[node] + domes;
+      const hb = node * H;
+      grid.hz[hb] = cum;
+      for (let u = 1; u < H; u++) {
+        let t = base.thick[hb + u];
         if (u === U.LOWER_SHALE) t += reefDrape;
         for (const w of feats.wedges) {
           if (w.unit !== u) continue;
@@ -392,8 +427,7 @@ export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin
       }
 
       // overpressure strength
-      let op = 0;
-      if (o > -40) op = Math.max(op, (0.3 + 0.6 * cs.frac) * smoothstep(-40, 12, o));
+      let op = base.opBase[node];
       for (const z0 of feats.opZones) {
         const q = ellipseQ(z0.cx, z0.cz, z0.ra, z0.rb, z0.cos, z0.sin, x, z);
         if (q < 1.3) op = Math.max(op, z0.strength * (1 - smoothstep(0.55, 1.2, q)));
@@ -403,7 +437,6 @@ export function buildHorizonGrid(seed: number, terrain: Terrain, salt: SaltBasin
         if (q < 1.3) op = Math.max(op, p.op * (1 - smoothstep(0.7, 1.2, q)));
       }
       grid.op[node] = clamp(op, 0, 1);
-      grid.dolo[node] = nDolo(x / 70, z / 70);
     }
   }
   return grid;

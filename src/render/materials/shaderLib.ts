@@ -170,8 +170,10 @@ vec3 shadeSurface(vec3 albedo, vec3 N, vec4 props, float ao, float sky, float bl
   if (kind == 8.0) NdotL = NdotL * 0.6 + 0.4; // foliage: light wraps through leaves
   float direct = max(NdotL, 0.0) * sunShadow() * cloudShadowAt(vWorldPos) * skyVis;
   directOut = direct;
-  float faceShade = N.y > 0.5 ? 1.0 : (N.y < -0.5 ? 0.62 : (abs(N.x) > 0.5 ? 0.84 : 0.76));
+  float faceShade = N.y > 0.5 ? 1.0 : (N.y < -0.5 ? 0.66 : (abs(N.x) > 0.5 ? 0.9 : 0.84));
   vec3 hemi = mix(uGroundAmbient, uSkyAmbient, N.y * 0.5 + 0.5);
+  // warm bounce light from sunlit ground onto walls and undersides
+  hemi += uSunColor * (0.16 * (1.0 - max(N.y, 0.0)));
   vec3 ambient = hemi * (sky * sky * 0.92 + sky * 0.08) * faceShade;
   vec3 blockL = uBlockLightColor * pow(blk, 2.2) * 1.7;
   vec3 light = (ambient + uCaveAmbient) * aoF + uSunColor * direct * mix(1.0, aoF, 0.4) + blockL * mix(1.0, aoF, 0.6);
@@ -202,12 +204,18 @@ vec3 overlayTint(vec3 col, vec3 albedo, vec3 N, vec4 props) {
   vec2 cell = vWorldPos.xz / uLeaseInfo.x;
   vec2 f = fract(cell);
   vec2 e = min(f, 1.0 - f) * uLeaseInfo.x;
-  float line = 1.0 - smoothstep(0.0, 0.18, min(e.x, e.y));
+  float ed = min(e.x, e.y);
+  float w = fwidth(ed);
+  float line = 1.0 - smoothstep(w * 0.5, w * 1.5 + 0.1, ed);
   vec2 luv = (floor(cell) + 0.5) / uLeaseInfo.yz;
   vec4 lease = texture2D(uLeaseMap, luv);
   float up = step(0.5, N.y);
-  col = mix(col, col * 0.7 + lease.rgb * 0.35, lease.a * up * 0.8);
-  col = mix(col, vec3(1.0, 0.55, 0.15) * 1.4, line * up * 0.7);
+  float l = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(col, vec3(l) * 0.8, 0.35);
+  float inner = 1.0 - smoothstep(0.0, 2.5, ed);
+  col = mix(col, col * 0.55 + lease.rgb * 0.55, lease.a * up * 0.75);
+  col += lease.rgb * lease.a * inner * up * (0.5 + 0.3 * sin(uTime * 3.0));
+  col = mix(col, vec3(1.0, 0.62, 0.25) * 1.2, line * up * 0.75);
   return col;
 }
 `;

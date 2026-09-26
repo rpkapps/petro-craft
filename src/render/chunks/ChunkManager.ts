@@ -246,13 +246,15 @@ export class ChunkManager {
 
   private dispatch() {
     if (this.pool.capacity <= 0) return;
+    // Job assembly copies ~50 KB per chunk on the main thread: cap it per frame.
+    const deadline = performance.now() + 3;
     // urgent edits first, then by priority order
     for (const e of this.wanted) {
       if (this.pool.capacity <= 0) return;
       if (e.urgent && !e.inflight && this.needsMesh(e) && this.neighbourhoodReady(e)) this.submit(e);
     }
     for (const e of this.wanted) {
-      if (this.pool.capacity <= 0) return;
+      if (this.pool.capacity <= 0 || performance.now() > deadline) return;
       if (!e.inflight && this.needsMesh(e) && this.neighbourhoodReady(e)) this.submit(e);
     }
   }

@@ -13,7 +13,7 @@ import { planDikes, planFaults, planFeatures } from './plan';
 import { finalizeAquifers, finalizeReservoirs } from './reservoirs';
 import { buildOverburdenBands, chooseUnitNames, NUM_HORIZONS, TERRACOTTA_BANDS, U, UNITS } from './strata';
 import {
-  buildHorizonGrid, diapirDrag, diapirRadius, ellipseQ, faultCrossY, reefMound, SaltBasin, wedgeBaseOffset, wedgeLocal, wedgeThickness,
+  buildGridBase, buildHorizonGrid, diapirDrag, diapirRadius, ellipseQ, faultCrossY, reefMound, SaltBasin, wedgeBaseOffset, wedgeLocal, wedgeThickness,
   type Diapir, type Dike, type Dome, type FaultModel, type HorizonGrid, type OpZone, type Play, type Reef, type Wedge,
 } from './structure';
 import { Terrain, TF } from './terrain';
@@ -103,7 +103,8 @@ export class Geology implements IGeology {
     this.sumThrow = this.faultModels.reduce((s, f) => s + f.throw, 0);
     this.dikes = planDikes(this.seed, size);
 
-    const baseGrid = buildHorizonGrid(this.seed, this.terrain, this.salt, { domes: [], reefs: [], wedges: [], plays: [], opZones: [] }, this.faultModels);
+    const gridBase = buildGridBase(this.seed, this.terrain, this.salt, this.faultModels);
+    const baseGrid = buildHorizonGrid(gridBase, size, { domes: [], reefs: [], wedges: [], plays: [], opZones: [] });
     const plan = planFeatures(this.seed, this.terrain, baseGrid, this.salt, this.faultModels, this.unitNames);
     this.diapirs = plan.diapirs;
     this.domes = plan.domes;
@@ -115,7 +116,7 @@ export class Geology implements IGeology {
     this.aqModels = plan.aquifers;
     const t2 = performance.now();
 
-    this.grid = buildHorizonGrid(this.seed, this.terrain, this.salt, plan, this.faultModels);
+    this.grid = buildHorizonGrid(gridBase, size, plan);
     const t3 = performance.now();
 
     // spatial index
@@ -129,7 +130,8 @@ export class Geology implements IGeology {
     this.cellWedge = mk();
     const sealMask = this.faultModels.reduce((m, f) => m | f.bit, 0);
     this.traps.forEach((t, i) => {
-      t.maskAnd = sealMask;
+      // continuous shale plays have no meaningful fault compartments (matrix permeability is nil anyway)
+      t.maskAnd = t.kind === 'shale_play' ? 0 : sealMask;
       this.computeTrapBox(t);
       this.indexBox(this.cellTraps, i, t.x0, t.z0, t.x1, t.z1);
     });
@@ -785,7 +787,9 @@ export class Geology implements IGeology {
     if (blk === B.WATER) {
       return { rock: 'water', porosity: 1, permeability: 0, hardness: 0.3, impedance: 1.5, gammaRay: 10, resistivity: 0.5, density: 1.03, fluid: 'brine' };
     }
-    const base = ROCK_BASE[blk] ?? ROCK_BASE[B.STONE]!;
+    // clay below the soil zone is fault gouge (smeared shale) — log & seismic like shale
+    const gouge = blk === B.CLAY && yi < c.ground - c.soilDepth;
+    const base = gouge ? GOUGE : ROCK_BASE[blk] ?? ROCK_BASE[B.STONE]!;
     const ix = c.x;
     const iz = c.z;
     const h = hash4(this.propSeed, ix, yi, iz);
@@ -799,7 +803,7 @@ export class Geology implements IGeology {
     let impedance = base.imp * (1 + 0.0032 * comp) * (1 + 0.025 * j3);
     let gammaRay = base.gr * (1 + 0.1 * j2);
     let resistivity = base.rt * (1 + 0.25 * j1);
-    let density = base.rho + 0.004 * comp * (base.rho > 1.5 ? 1 : 0) * 0.1;
+    let density = base.rho + (base.rho > 1.5 ? 0.0006 * comp : 0) + 0.02 * j3;
     let fluid: RockProperties['fluid'] = base.fluid;
     let reservoirId: string | undefined;
     let aquiferId: string | undefined;
@@ -834,7 +838,6 @@ export class Geology implements IGeology {
     if (resistivity < 0.5) resistivity = 0.5;
     if (gammaRay > 150) gammaRay = 150;
     if (gammaRay < 5) gammaRay = 5;
-    if (fluid === 'none' && porosity < 0.02) porosity = Math.max(0, porosity);
     return {
       rock: base.rock,
       porosity: Math.max(0, porosity),
@@ -864,7 +867,7 @@ export class Geology implements IGeology {
     if (yi >= c.ground - c.soilDepth) return c.soilMode === SM_BADLANDS ? 'Red Beds' : 'Soil';
     if (blk === B.BEDROCK) return 'Bedrock';
     if (c.res >= 0) return this.resModels[c.res].pub.name;
-    if (c.unit === U.SALT && c.dIdx >= 0 && blk === B.SALT && c.dR < this.diapirs[c.dIdx].influence) return `${this.diapirs[c.dIdx].name} Salt Dome`;
+    if (blk === B.SALT && c.dIdx >= 0 && c.dR < diapirRadius(this.diapirs[c.dIdx], yi) * c.dMod) return `${this.diapirs[c.dIdx].name} Salt Dome`;
     if (blk === B.CAPROCK && c.dIdx >= 0) return `${this.diapirs[c.dIdx].name} Caprock`;
     if (blk === B.CLAY && c.unit < 0) return 'Fault Gouge';
     if (c.body === BODY.REEF) return this.reefs[c.reef].name;
@@ -880,6 +883,8 @@ export class Geology implements IGeology {
     return c.unit;
   }
 }
+
+const GOUGE = { rock: 'clay' as RockType, phi: 0.08, perm: 0.001, hard: 0.9, imp: 6.0, gr: 112, rt: 3, rho: 2.45, fluid: 'brine' as const };
 
 function airProps(): RockProperties {
   return { rock: 'soil', porosity: 0, permeability: 0, hardness: 0.3, impedance: 0.4, gammaRay: 5, resistivity: 200, density: 0.0012, fluid: 'none' };

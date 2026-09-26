@@ -10,7 +10,7 @@ import { EMISSION_SCALE, FX_DISTANCE, PARTICLE_CAPACITY, MAX_POINT_LIGHTS } from
 import { RIG_FLOOR } from '../models/rigSpecs';
 import { COL, count, dust, dustRing, exhaust, flames, flare, gasJet, jet, smoke, sparks, steam } from './emitters';
 import { LightPool } from './LightPool';
-import { PK, ParticleSystem } from './ParticleSystem';
+import { PK, ParticleSystem, rgb } from './ParticleSystem';
 import { Shockwaves } from './Shockwave';
 
 interface Blast {
@@ -21,6 +21,7 @@ interface Blast {
   t: number;
 }
 
+const FIRE_TINT = rgb(0xffb070);
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
@@ -70,7 +71,8 @@ export class FxManager {
 
   /** Spawn an explosion (also used by the 'hazard:explosion' event). */
   explode(x: number, y: number, z: number, power: number): void {
-    const p = Math.max(0.3, Math.min(5, power));
+    const pw = Math.max(0.3, Math.min(10, Number.isFinite(power) ? power : 1));
+    const p = Math.sqrt(pw) * 1.15;
     this.blasts.push({ x, y, z, power: p, t: 0 });
     this.waves.spawn(x, y, z, p);
     const ps = this.ps;
@@ -95,8 +97,8 @@ export class FxManager {
       ps.emit(PK.SMOKE, x + sr(2 * sp), y + 1 + rnd() * 3 * sp, z + sr(2 * sp), sr(3), 2 + rnd() * 4, sr(3), 7 + rnd() * 6, s, s * 3, COL.SMOKE_DARK, 0.8, 0.8, 0.6, 0.8, sr(0.5));
     }
     const d = this.cam.distanceTo(_v.set(x, y, z));
-    const shake = p * Math.max(0, 1 - d / (90 + 40 * p));
-    if (shake > 0.02) this.host.shake(Math.min(2, shake), 0.4 + 0.3 * p);
+    const shake = (0.3 + pw * 0.14) * Math.max(0, 1 - d / (70 + 18 * pw));
+    if (shake > 0.02) this.host.shake(Math.min(1.8, shake), 0.35 + 0.08 * pw);
   }
 
   /** Main per-frame update (world hazards). Building anchors are driven via buildingFx(). */
@@ -217,16 +219,17 @@ export class FxManager {
     const flow = Math.max(0.4, Math.min(1.6, (well.blowout?.flowRate ?? 3000) / 4000 + 0.5));
     if (well.blowout?.onFire) {
       const H = 16 + 10 * flow;
-      const n = count(160 * q * flow, dt);
+      const n = count(120 * q * flow, dt);
       for (let i = 0; i < n; i++) {
         const t = Math.pow(rnd(), 0.8);
-        const s = (1.4 + rnd() * 1.8) * (0.7 + t * 1.3) * flow;
-        ps.emit(PK.FIRE, x + sr(0.6 + t * 1.5), y + t * H * 0.55, z + sr(0.6 + t * 1.5), sr(1.2), 9 + rnd() * 8, sr(1.2), 0.9 + rnd() * 0.7, s, s * 0.6, COL.FIRE, 1, 2, 0.8, 0.7, sr(1.5));
+        const s = (1.0 + rnd() * 1.4) * (0.7 + t * 1.3) * flow;
+        const spread = 0.5 + t * 2.2;
+        ps.emit(PK.FIRE, x + sr(spread), y + t * H * 0.5, z + sr(spread), sr(1.6), 8 + rnd() * 8, sr(1.6), 0.8 + rnd() * 0.8, s, s * 0.8, FIRE_TINT, 0.45 + (1 - t) * 0.25, 2, 0.8, 0.7, sr(1.5));
       }
       flames(ps, x, y, z, 1.6, 1, dt, q, 1.4);
-      smoke(ps, x, y + H * 0.85, z, 2.8 * flow, 5 * flow, 1, dt, q, 2.6);
+      smoke(ps, x, y + H * 0.85, z, 2.8 * flow, 3.2 * flow, 1, dt, q, 2.6);
       if (rnd() < dt * 10) ps.emit(PK.SPARK, x + sr(1), y + rnd() * H * 0.6, z + sr(1), sr(4), 8 + rnd() * 8, sr(4), 1.5 + rnd(), 0.09, 0.05, COL.SPARK, 1, -4, 0.4, 0.8);
-      if (rnd() < dt * 3) ps.emit(PK.GLOW, x, y + H * 0.3, z, 0, 3, 0, 1, H * 0.8, H, COL.GLOW_FIRE, 0.35, 0, 1, 0.4);
+      if (rnd() < dt * 3) ps.emit(PK.GLOW, x, y + H * 0.25, z, 0, 2, 0, 1, H * 0.45, H * 0.55, COL.GLOW_FIRE, 0.12, 0, 1, 0.4);
       const fl = 0.8 + 0.2 * Math.sin(this.time * 17) * Math.sin(this.time * 9.3 + 1);
       this.lights.offer(x, y + H * 0.35, z, 0xff8030, 1400 * flow * fl, 80, this.cam, 30);
       this.lights.offer(x, y + 3, z, 0xff6a20, 500 * flow * fl, 40, this.cam, 10);
@@ -234,21 +237,30 @@ export class FxManager {
       // dark crude geyser arcing up and raining down, gas plume above
       const n = count(150 * q * flow, dt);
       for (let i = 0; i < n; i++) {
-        const v = (17 + rnd() * 12) * Math.sqrt(flow);
+        const v = (12 + rnd() * 9) * Math.sqrt(flow);
         const a = rnd() * Math.PI * 2;
-        const lat = rnd() * 3.2;
-        const s = 0.2 + rnd() * 0.35;
-        ps.emit(PK.DROP, x + sr(0.25), y, z + sr(0.25), Math.cos(a) * lat, v, Math.sin(a) * lat, 3.4 + rnd() * 1.2, s, s * 1.4, COL.OIL, 0.95, -11, 0.12, 0.35);
+        const lat = 0.5 + rnd() * 4.5;
+        const s = 0.3 + rnd() * 0.5;
+        ps.emit(PK.DROP, x + sr(0.25), y, z + sr(0.25), Math.cos(a) * lat, v, Math.sin(a) * lat, 3.4 + rnd() * 1.2, s, s * 1.8, COL.OIL_DROP, 1, -11, 0.12, 0.35);
+      }
+      // dense crude column core + drifting brown mist
+      const c = count(60 * q, dt);
+      for (let i = 0; i < c; i++) {
+        const s = 0.7 + rnd() * 0.6;
+        const h = rnd();
+        ps.emit(PK.SMOKE, x + sr(0.3 + h * 0.5), y + h * 10, z + sr(0.3 + h * 0.5), sr(0.6), 8 + rnd() * 5, sr(0.6), 0.8 + rnd() * 0.4, s, s * 1.8, COL.OIL_MIST, 0.4, -6, 0.3, 0.2, sr(0.5));
       }
       const m = count(20 * q, dt);
       for (let i = 0; i < m; i++) {
         const s = 1 + rnd() * 1.5;
-        ps.emit(PK.SMOKE, x + sr(0.5), y + 2 + rnd() * 12, z + sr(0.5), sr(1.5), 4 + rnd() * 5, sr(1.5), 4 + rnd() * 3, s, s * 4, COL.OIL_MIST, 0.45, -0.2, 0.7, 0.8, sr(0.5));
+        ps.emit(PK.SMOKE, x + sr(0.5), y + 2 + rnd() * 12, z + sr(0.5), sr(1.5), 4 + rnd() * 5, sr(1.5), 4 + rnd() * 3, s, s * 4, COL.OIL_MIST, 0.35, -0.2, 0.7, 0.8, sr(0.5));
       }
+      // pooled crude splashing on the ground around the well
+      if (rnd() < dt * 20) jet(ps, x + sr(4), y + 0.1, z + sr(4), 0, 1, 0, 2, COL.OIL, 30, dt * 3, q, 0.6, 0.12);
       const g = count(18 * q, dt);
       for (let i = 0; i < g; i++) {
         const s = 1.5 + rnd();
-        ps.emit(PK.STEAM, x + sr(0.4), y + 14 + rnd() * 6, z + sr(0.4), sr(1.5), 5 + rnd() * 3, sr(1.5), 4 + rnd() * 2, s, s * 5, COL.GAS, 0.22, 0.5, 0.5, 1, sr(0.3));
+        ps.emit(PK.STEAM, x + sr(0.4), y + 12 + rnd() * 6, z + sr(0.4), sr(1.5), 5 + rnd() * 3, sr(1.5), 4 + rnd() * 2, s, s * 5, COL.GAS_DIRTY, 0.13, 0.5, 0.5, 1, sr(0.3));
       }
     }
   }

@@ -8,7 +8,7 @@ import { randSym, shuffled, subSeed } from './noise';
 import { MAX_FAULTS, MAX_SEALING, SHAPE, BODY, type AquiferModel, type TrapModel } from './model';
 import { DOME_NAMES, OFFSHORE_NAMES, REEF_NAMES, U, WEDGE_NAMES } from './strata';
 import {
-  faultPlanePoint, type Diapir, type Dike, type Dome, type FaultModel, type HorizonGrid, type OpZone, type Play, type Reef,
+  faultCrossY, faultPlanePoint, type Diapir, type Dike, type Dome, type FaultModel, type HorizonGrid, type OpZone, type Play, type Reef,
   type SaltBasin, type Wedge,
 } from './structure';
 import { TF, Terrain } from './terrain';
@@ -30,8 +30,8 @@ interface SizeCfg {
 
 function sizeCfg(size: number): SizeCfg {
   if (size <= 256) return { faults: 3, anticlines: 4, faultTraps: 1, diapirs: 1, flanksPer: 1, reefs: 1, wedges: 1, plays: 1, opZones: 1, fresh: 2, brine: 2, dikes: 2 };
-  if (size <= 512) return { faults: 4, anticlines: 8, faultTraps: 2, diapirs: 2, flanksPer: 2, reefs: 2, wedges: 2, plays: 2, opZones: 2, fresh: 3, brine: 3, dikes: 4 };
-  return { faults: 6, anticlines: 13, faultTraps: 3, diapirs: 3, flanksPer: 2, reefs: 3, wedges: 3, plays: 3, opZones: 3, fresh: 4, brine: 4, dikes: 6 };
+  if (size <= 512) return { faults: 4, anticlines: 9, faultTraps: 2, diapirs: 2, flanksPer: 2, reefs: 2, wedges: 2, plays: 2, opZones: 2, fresh: 3, brine: 3, dikes: 4 };
+  return { faults: 6, anticlines: 14, faultTraps: 3, diapirs: 3, flanksPer: 2, reefs: 3, wedges: 3, plays: 3, opZones: 3, fresh: 4, brine: 4, dikes: 6 };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -181,7 +181,13 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
     for (const [a, b] of RING) m = Math.min(m, terrain.ground[idx(x + a * r, z + b * r)]);
     return m;
   };
-  const hzAt = (k: number, x: number, z: number) => grid.horizonAt(k, x, z);
+  /** Estimated REAL elevation of horizon k (restored horizon minus hanging-wall fault offsets). */
+  const hzAt = (k: number, x: number, z: number) => {
+    const h = grid.horizonAt(k, x, z);
+    let off = 0;
+    for (const f of faults) if (h - off > faultCrossY(f, x, z)) off += f.throw;
+    return h - off;
+  };
   const free = (x: number, z: number, r: number) => occ.every((o) => Math.hypot(o.x - x, o.z - z) >= o.r + r + 4);
   const inside = (x: number, z: number, r: number) => x - r >= 3 && z - r >= 3 && x + r <= size - 4 && z + r <= size - 4;
   const uniqueName = (n: string) => {
@@ -205,7 +211,8 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
   };
   const hostOk = (u: number, x: number, z: number, amp: number, g: number, minY = 11) => {
     const crest = hzAt(u, x, z) + amp;
-    return crest <= g - 13 && crest >= minY;
+    // offshore the seabed is flat & known, so a thinner safety margin is enough
+    return crest <= g - (isOcean(x, z) ? 11 : 13) && crest >= minY;
   };
 
   // ---------------- starter field (onshore, near the map centre, modest & forgiving) ----------------
@@ -387,7 +394,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
   // ---------------- anticlines (fill the remaining quota; ~40% offshore) ----------------
   {
     const target = cfg.anticlines;
-    const offQuota = Math.round(target * 0.42);
+    const offQuota = Math.round(target * 0.5);
     let on = 0;
     let offC = 0;
     for (let a = 0; a < 1500 && on + offC < target; a++) {
@@ -418,9 +425,9 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
           brine: unit !== U.PLATFORM, name: off ? uniqueName(`${fieldName} ${offQualifier(unit)}`) : unitLetterName(unit),
           desiredColumn: rr(4, 9) * (off ? 1.4 : 1), offshore: off, charged, quality: off ? 0.35 : randSym(rng) * 0.4,
         });
-      plan.traps.push(mk(u, rng() < 0.84));
+      plan.traps.push(mk(u, rng() < (off ? 0.9 : 0.84)));
       // stacked pay: a deeper reservoir in the same structure
-      if (rng() < 0.38) {
+      if (rng() < 0.3) {
         const deeper = [U.UPPER_SAND, U.MID_SAND, U.DEEP_SAND, U.BASAL_SAND, U.PLATFORM].filter((k) => k < u || (u === U.UPPER_SAND && k === U.PLATFORM));
         const k2 = shuffled(rng, deeper).find((k) => k !== u && hostOk(k, x, z, amp, g, 9));
         if (k2 !== undefined) plan.traps.push(mk(k2, rng() < 0.8));

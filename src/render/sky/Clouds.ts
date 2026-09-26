@@ -48,6 +48,8 @@ void main() {
   vec3 dir = normalize(d);
   vec3 sky = mix(fogTint(dir), uZenith, pow(clamp(dir.y, 0.0, 1.0), 0.48));
   float fade = smoothstep(uCloudFar * 0.45, uCloudFar, dist);
+  // weather murk: heavy fog / storms swallow the cloud deck
+  col = mix(col, fogTint(dir), fogFactor(length(d) * 0.4, 200.0) * 0.85);
   col = mix(col, sky, max(fade, 1.0 - uCloudOpacity));
   col += uFlash * vec3(0.6, 0.65, 0.8);
   gl_FragColor = vec4(col, 1.0);

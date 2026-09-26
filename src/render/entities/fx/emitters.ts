@@ -5,16 +5,18 @@ import { PK, rgb, type ParticleSystem, type RGB } from './ParticleSystem';
 export const COL = {
   WHITE: rgb(0xffffff),
   FIRE: rgb(0xffffff),
-  SMOKE_DARK: rgb(0x1c1a19),
+  SMOKE_DARK: rgb(0x2a2724),
   SMOKE_MID: rgb(0x55514d),
   SMOKE_LIGHT: rgb(0x9a968f),
   STEAM: rgb(0xeef0f2),
   OIL: rgb(0x1a120b),
   OIL_MIST: rgb(0x3b2b1e),
+  OIL_DROP: rgb(0x3a2614),
   MUD: rgb(0x6b4f36),
   WATER: rgb(0xb8d8ea),
   PRODUCT: rgb(0xd9a13a),
   GAS: rgb(0xd8dde2),
+  GAS_DIRTY: rgb(0xb9b1a5),
   DUST: rgb(0xb59a72),
   FOAM: rgb(0xf6f8fa),
   EXHAUST: rgb(0x3a3a3a),
@@ -50,9 +52,11 @@ export function flames(ps: ParticleSystem, x: number, y: number, z: number, r: n
 export function smoke(ps: ParticleSystem, x: number, y: number, z: number, r: number, density: number, dark: number, dt: number, q: number, rise = 1): void {
   const n = count(4 * density * q * (0.5 + r), dt);
   for (let i = 0; i < n; i++) {
-    const c: RGB = dark > 0.5 ? COL.SMOKE_DARK : dark > 0.2 ? COL.SMOKE_MID : COL.SMOKE_LIGHT;
-    const s = (0.8 + rnd() * 0.6) * (0.6 + r);
-    ps.emit(PK.SMOKE, x + sr(r * 0.6), y, z + sr(r * 0.6), sr(0.3), (1.2 + rnd() * 1.2) * rise, sr(0.3), 6 + rnd() * 5, s, s * (3.2 + rnd() * 1.5), c, 0.55 + dark * 0.3, 0.35 * rise, 0.35, 0.9, sr(0.4));
+    // mix shades for depth: dark smoke carries some mid-grey puffs
+    const k = dark - rnd() * 0.45;
+    const c: RGB = k > 0.45 ? COL.SMOKE_DARK : k > 0.1 ? COL.SMOKE_MID : COL.SMOKE_LIGHT;
+    const s = (0.8 + rnd() * 0.7) * (0.6 + r);
+    ps.emit(PK.SMOKE, x + sr(r * 0.6), y, z + sr(r * 0.6), sr(0.3), (1.2 + rnd() * 1.2) * rise, sr(0.3), 6 + rnd() * 5, s, s * (3.2 + rnd() * 1.8), c, 0.34 + dark * 0.22, 0.35 * rise, 0.35, 0.9, sr(0.4));
   }
 }
 

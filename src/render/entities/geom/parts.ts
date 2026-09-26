@@ -261,7 +261,7 @@ export function tank(b: Builder, o: TankOpts): void {
   else if (roof === 'dome') b.dome(o.x, top, o.z, o.r, col, 'paint', seg, o.r * 0.35);
   else if (roof === 'flat') b.cyl(o.x, top, o.z, o.r + 0.05, 0.1, C.STEEL, 'metal', seg);
   else b.ring(o.x, top, o.z, o.r, 0.08, col, 'paint', seg);
-  if (roof !== 'open' && o.ladder !== false) ringRail(b, o.x, o.z === o.z ? top + 0.02 : top, o.z, o.r - 0.12, C.HAZARD, -0.7, 0.7);
+  if (roof !== 'open' && o.ladder !== false) ringRail(b, o.x, top + 0.02, o.z, o.r - 0.12, C.HAZARD, -0.7, 0.7);
   if (o.spiral) spiralStair(b, o.x, o.z, y0, top, o.r);
   else if (o.ladder !== false) ladder(b, o.x + o.r + 0.05, y0, o.z, o.h, Math.PI, true);
   // roof railing segment & vent
