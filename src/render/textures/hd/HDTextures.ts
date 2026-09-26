@@ -11,7 +11,7 @@ export type HDQuality = 'high' | 'ultra';
 export type TextureQuality = 'classic' | HDQuality;
 
 /** Bump when painters change so cached textures are regenerated. */
-export const HD_GEN_VERSION = 3;
+export const HD_GEN_VERSION = 8;
 export const HD_SIZE: Record<HDQuality, number> = { high: 64, ultra: 256 };
 
 export interface HDTextureSet {

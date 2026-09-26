@@ -94,4 +94,14 @@ function run(q: AutoQuality, seconds: number, intervalMs: number, costMs: number
   run(q, 120, 16.7, 4, false);
   check('without GPU timer, vsync-pinned light frames step back up', l > 0 && q.level === 0, `from ${l}`);
 }
+{
+  // ultra textures: parallax occlusion mapping is the first thing to go
+  const q = new AutoQuality();
+  const ultra = { ...settings, textureQuality: 'ultra' as const };
+  q.configure(ultra);
+  run(q, 1.2, 16.7, 8);
+  run(q, 5, 40, 38);
+  q.effective(ultra, eff);
+  check('ultra: first step disables parallax, render scale untouched', q.level === 1 && !eff.pom && eff.renderScale === 1, JSON.stringify(eff));
+}
 if (failed) process.exitCode = 1;

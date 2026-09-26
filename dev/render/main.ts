@@ -54,6 +54,11 @@ const PRESETS: Record<string, Preset> = {
   closenight: { time: '22:40', cam: [-4, 1.7, 13, -0.35, -0.42], lighttest: true },
   closewall: { time: '15:20', cam: [-6.5, 1.7, 13.2, 0.1, -0.12], lighttest: true },
   mid: { time: '10:40', cam: [-14, 7, 26, -0.5, -0.3], lighttest: true },
+  // material showcase wall (x −16..+1, z +18): close-up from the pad side, dusk & night with the lamp
+  wall: { time: '11:30', cam: [-12.5, 1.8, 22.5, 0.25, -0.2], lighttest: true },
+  wallrock: { time: '14:30', cam: [-4.5, 1.8, 21.2, 0.2, -0.12], lighttest: true },
+  wallnight: { time: '22:20', cam: [-12.5, 1.8, 22.5, 0.25, -0.2], lighttest: true },
+  padclose: { time: '16:30', cam: [-12, 2.2, 25.5, 0.9, -0.55], lighttest: true },
 };
 const preset = PRESETS[scene] ?? PRESETS.day;
 
@@ -150,6 +155,21 @@ function buildLightTest(world: IWorld, focus: { x: number; y: number; z: number 
   const tz = Math.floor(focus.z) + 9;
   pad(tx, tz, 5, 5);
   for (let x = tx; x < tx + 5; x++) for (let z = tz; z < tz + 5; z++) for (let y = gy; y < gy + 6; y++) set(x, y, z, B.STRUCTURE);
+  // material showcase: a 2-high wall of different materials, a concrete pad with a pipe run and a lamp
+  const wx = Math.floor(focus.x) - 16;
+  const wz = Math.floor(focus.z) + 18;
+  const mats = [B.BRICK, B.PLANKS, B.CONCRETE, B.STEEL_PLATE, B.CONTAINER_RED, B.HAZARD_STRIPE, B.SANDSTONE, B.SHALE, B.LIMESTONE, B.GRANITE, B.BASALT, B.MOSSY_STONE, B.LOG_OAK, B.BIRCH_LOG, B.GRAVEL, B.SAND, B.STONE, B.COAL_SEAM];
+  pad(wx, wz, mats.length, 6);
+  mats.forEach((id, k) => {
+    set(wx + k, gy, wz, id);
+    set(wx + k, gy + 1, wz, id);
+  });
+  for (let x = wx; x < wx + mats.length; x++)
+    for (let z = wz + 2; z < wz + 6; z++) set(x, gy - 1, z, x < wx + 9 ? B.CONCRETE_PAD : z < wz + 4 ? B.GRAVEL_PAD : B.ASPHALT_ROAD);
+  for (let x = wx + 1; x < wx + 8; x++) set(x, gy, wz + 3, B.PIPE_OIL);
+  for (let x = wx + 1; x < wx + 8; x++) set(x, gy, wz + 5, B.PIPE_GAS);
+  set(wx + 8, gy, wz + 3, B.STEEL_PLATE);
+  set(wx + 4, gy + 2, wz, B.LAMP);
 }
 
 async function main() {

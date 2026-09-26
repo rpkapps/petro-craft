@@ -45,11 +45,11 @@ function rockField(s: Surface, seed: number, o: RockOpts) {
     const [wu, wv] = warp(u, v, 3, o.warp, seed);
     const m = fbm(u + wu, v + wv, 3, 5, seed + 1);
     const g = fbm(u, v, 48, 2, seed + 2);
-    const micro = gnoise(u, v, 128, seed + 3) * 0.5 + 0.5;
+    const micro = fbm(u, v, 64, 3, seed + 3, 0.6);
     worley(u + wu * 0.6, v + wv * 0.6, o.cells, seed + 4, c, 0.9);
     const edge = c.f2 - c.f1;
     // fractures are discontinuous: faded out along their length by noise, so no closed polygons
-    const crackVis = smooth(0.45, 0.6, fbm(u, v, 5, 3, seed + 12));
+    const crackVis = smooth(0.52, 0.66, fbm(u, v, 5, 3, seed + 12));
     const crack = (1 - smooth(0, o.crack, edge)) * crackVis;
     worley(u + wu, v + wv, o.cells * 3, seed + 5, c2, 1);
     const fine = (1 - smooth(0, o.crack * 0.6, c2.f2 - c2.f1)) * smooth(0.55, 0.7, fbm(u, v, 9, 2, seed + 13));
@@ -57,10 +57,12 @@ function rockField(s: Surface, seed: number, o: RockOpts) {
     const facet = c.id; // per fragment tone
     let col = mix(o.colors[0], o.colors[1], smooth(0.25, 0.75, m));
     col = mix(col, o.colors[2], smooth(0.55, 0.95, g) * o.grain);
-    col = mul(col, 0.92 + (facet - 0.5) * 0.12 * o.mottle + (micro - 0.5) * 0.08);
-    col = mul(col, 1 - crack * 0.45 - fine * 0.15 - pit * 0.2);
+    const lichen = smooth(0.72, 0.8, fbm(u, v, 7, 3, seed + 14)) * 0.5;
+    col = mul(col, 0.9 + (facet - 0.5) * 0.14 * o.mottle + (micro - 0.5) * 0.3);
+    col = mul(col, 1 - crack * 0.35 - fine * 0.12 - pit * 0.18);
+    col = mix(col, mix(hex(0x9a9a78), hex(0x5f6a4a), g), lichen);
     s.setCol(i, col);
-    s.h[i] = 0.55 + (m - 0.5) * 0.5 + (facet - 0.5) * 0.25 + (g - 0.5) * 0.1 + (micro - 0.5) * 0.06 - crack * 0.5 - fine * 0.12 - pit * 0.15;
+    s.h[i] = 0.55 + (m - 0.5) * 0.45 + (facet - 0.5) * 0.3 + (g - 0.5) * 0.12 + (micro - 0.5) * 0.25 - crack * 0.4 - fine * 0.1 - pit * 0.15 + lichen * 0.05;
     s.r[i] = clamp01(o.rough + (micro - 0.5) * 0.1 + crack * 0.05);
   });
 }
@@ -96,7 +98,7 @@ function scatterPebbles(s: Surface, seed: number, count: number, rmin: number, r
     const cu = R();
     const cv = R();
     const r = rmin + (rmax - rmin) * R() * R();
-    const col = mul(palette[Math.floor(R() * palette.length)], 0.8 + R() * 0.35);
+    const col = mul(palette[Math.floor(R() * palette.length)], 0.75 + R() * 0.3);
     const sq = 0.7 + R() * 0.6;
     s.disk(cu, cv, r * 1.15, (i, du, dv) => {
       const d = Math.sqrt((du * sq) ** 2 + (dv / sq) ** 2) / r;
@@ -147,7 +149,7 @@ function soil(s: Surface, pal: Pal, seed: number, o: { clods: number; pebbles: n
       }, (R() - 0.5) * 0.1);
     }
   }
-  if (o.pebbles > 0) scatterPebbles(s, seed + 7, o.pebbles, 0.008, 0.035, [hex(0x8a8580), hex(0x6e675e), hex(0xa39a8c), hex(0x5d5249)]);
+  if (o.pebbles > 0) scatterPebbles(s, seed + 7, o.pebbles, 0.008, 0.03, [hex(0x6e675e), hex(0x5d5249), hex(0x7a7064), hex(0x4f4841)]);
 }
 
 const paintDirt: Painter = (s, pal, seed) => {
@@ -197,12 +199,14 @@ function sandField(s: Surface, pal: Pal, seed: number, ripples: number, shells: 
     const grain = gnoise(u, v, s.n / 2, seed + 1) * 0.5 + 0.5;
     const grain2 = gnoise(u, v, s.n / 4, seed + 2) * 0.5 + 0.5;
     const m = fbm(u, v, 4, 3, seed + 3);
-    let col = mix(a, b, smooth(0.2, 0.8, m * 0.6 + ripA * 0.4));
+    let col = mix(a, b, smooth(0.2, 0.8, m * 0.75 + ripA * 0.25));
     col = mix(col, light, smooth(0.75, 1, grain) * 0.5);
     col = mul(col, 0.93 + (grain2 - 0.5) * 0.14);
     if (grain > 0.93) col = mix(col, hex(0x3b3530), 0.5); // dark mineral grains
     s.setCol(i, col);
-    s.h[i] = ripA * 0.55 + m * 0.2 + grain * 0.1;
+    // ripples fade in and out so neighbouring (bombed) blocks never show a regular pattern
+    const ripAmt = smooth(0.35, 0.65, fbm(u, v, 2, 2, seed + 6));
+    s.h[i] = ripA * 0.45 * ripAmt + m * 0.3 + grain * 0.1;
     s.r[i] = 0.92;
   });
   if (shells) scatterPebbles(s, seed + 9, Math.round(s.n * 0.05), 0.006, 0.02, [hex(0xe8dcc8), hex(0xcfc0a6), hex(0x9c8c78)], 0.2);
@@ -346,12 +350,15 @@ function grassBlades(s: Surface, seed: number, density: number, greens: RGB[], s
   // soil + thatch underneath
   s.each((u, v, i) => {
     const m = fbm(u, v, 5, 4, seed + 1);
-    s.setCol(i, mul(mix(mul(soilCol, 0.55), mix(soilCol, greens[0], 0.35), m), 0.8));
+    s.setCol(i, mul(mix(mul(greens[3], 0.5), mix(mul(soilCol, 0.6), greens[1], 0.4), m * 0.6), 0.85));
     s.h[i] = 0.1 + m * 0.1;
     s.r[i] = 0.85;
   });
   const R = rng(seed);
-  const count = Math.round(s.n * s.n * density);
+  // blades never thinner than ~1.6 texels (at 64² the blades get fewer but wider)
+  const minW = 1.6 / s.n;
+  const wScale = Math.max(1, minW / 0.012);
+  const count = Math.round((s.n * s.n * density) / wScale);
   for (let k = 0; k < count; k++) {
     const cu = R();
     const cv = R();
@@ -359,9 +366,10 @@ function grassBlades(s: Surface, seed: number, density: number, greens: RGB[], s
     const len = (0.04 + R() * 0.07) * lenScale;
     const g0 = greens[Math.floor(R() * greens.length)];
     const patch = fbm(cu, cv, 3, 3, seed + 3); // lusher / drier patches
-    const col = mul(mix(g0, hex(0xb3a45a), smooth(0.62, 0.85, patch) * 0.55), 0.8 + R() * 0.35);
+    const dead = R() < 0.08 ? 0.75 : smooth(0.6, 0.85, patch) * 0.5;
+    const col = mul(mix(g0, hex(0x9c8f5a), dead), 0.75 + R() * 0.4);
     const top = 0.45 + R() * 0.55;
-    s.stroke(cu, cv, ang, len, 0.012, 0.002, (i, t, sv) => {
+    s.stroke(cu, cv, ang, len * (wScale > 1 ? 1.3 : 1), 0.012 * wScale, 0.003 * wScale, (i, t, sv) => {
       const hh = top * (0.35 + t * 0.65) * (1 - Math.abs(sv) * 0.3);
       if (hh <= s.h[i]) return;
       s.h[i] = hh;
@@ -372,10 +380,16 @@ function grassBlades(s: Surface, seed: number, density: number, greens: RGB[], s
   }
 }
 
-const GRASS = (pal: Pal): RGB[] => [nat(pal[0], 0.82, 0.86), nat(pal[1], 0.82, 0.86), nat(mix(pal[0], hex(0x8aa04a), 0.4), 0.8, 0.9), nat(mix(pal[1], hex(0x3d5a2a), 0.5), 0.8, 0.85)];
+const GRASS = (pal: Pal): RGB[] => [
+  nat(mix(pal[0], hex(0x5a6e2c), 0.45), 0.7, 0.82),
+  nat(mix(pal[1], hex(0x3f5424), 0.5), 0.7, 0.8),
+  nat(mix(pal[0], hex(0x8a8f45), 0.55), 0.65, 0.85),
+  nat(mix(pal[1], hex(0x2f4a22), 0.55), 0.7, 0.78),
+  nat(mix(pal[0], hex(0x6f7a38), 0.6), 0.6, 0.82),
+];
 
 const paintGrassTop: Painter = (s, pal, seed) => {
-  grassBlades(s, seed, 0.11, GRASS(pal), nat(pal[2], 0.8, 0.9));
+  grassBlades(s, seed, 0.14, GRASS(pal), nat(pal[2], 0.8, 0.9), 0.85);
   // a few clover leaves & fallen seeds
   scatterPebbles(s, seed + 12, Math.round(s.n * 0.03), 0.006, 0.012, [mul(nat(pal[1]), 0.9)], 0.6);
   return { depth: 0.05, cavity: 0.7 };
@@ -397,7 +411,7 @@ const paintGrassSide: Painter = (s, pal, seed) => {
     soil(ss, [p[2], mul(p[2], 0.85), mul(p[2], 1.1)], sd, { clods: 1, pebbles: Math.round(ss.n * 0.12), roots: 16 });
     return { depth: 0.05 };
   }, pal, (i, u, v, d) => {
-    const g = greens[Math.floor(hash01(Math.floor(u * s.n * 0.5), Math.floor(v * s.n * 0.25), seed) * greens.length)];
+    const g = greens[Math.floor(hash01(Math.floor(u * s.n * 0.5), Math.floor(v * s.n * 0.25), seed) * greens.length) % greens.length];
     const blade = gnoise2(u, v, s.n / 3, 4, seed + 5) * 0.5 + 0.5;
     s.setCol(i, mul(g, 0.7 + blade * 0.4 + d * 0.1));
     s.h[i] = 0.65 + blade * 0.3;
@@ -446,12 +460,12 @@ const paintSnowSide: Painter = (s, pal, seed) => {
 };
 
 const paintMossyStone: Painter = (s, pal, seed) => {
-  cobble(s, [hex(0x7d7d80), hex(0x6a6a6d), hex(0x8e8e91)], seed);
+  cobble(s, [hex(0x77756f), hex(0x625f5a), hex(0x85817a), hex(0x6d6a60)], seed);
   s.each((u, v, i) => {
-    const moss = smooth(0.48, 0.62, fbm(u, v, 3, 5, seed + 60) + (s.h[i] < 0.4 ? 0.08 : 0));
+    const moss = smooth(0.5, 0.66, fbm(u, v, 3, 5, seed + 60) + (s.h[i] < 0.35 ? 0.12 : 0));
     if (moss <= 0) return;
     const fuzz = gnoise(u, v, s.n / 2, seed + 61) * 0.5 + 0.5;
-    s.blend(i, mul(mix(nat(pal[1], 0.9), nat(pal[0], 0.9, 1), fuzz), 0.8 + fuzz * 0.3), moss);
+    s.blend(i, mul(mix(nat(pal[1], 0.6, 0.8), nat(pal[0], 0.6, 0.9), fuzz), 0.75 + fuzz * 0.3), moss);
     s.h[i] += moss * (0.08 + fuzz * 0.06);
     s.r[i] = lerp(s.r[i], 0.9, moss);
   });
@@ -460,12 +474,20 @@ const paintMossyStone: Painter = (s, pal, seed) => {
 
 /** Irregular fitted stones with mortar/soil joints. */
 function cobble(s: Surface, tones: RGB[], seed: number) {
-  stones(s, seed, 4, 0.35, (i, dome, id, gap, u, v) => {
-    const g = fbm(u, v, 32, 2, seed + 3);
-    const t = mix(tones[Math.floor(id * tones.length)], tones[(Math.floor(id * 7) + 1) % tones.length], g * 0.4);
-    s.setCol(i, mul(mix(t, hex(0x3a3833), gap), 0.8 + dome * 0.3 + (g - 0.5) * 0.15));
-    s.h[i] = Math.pow(dome, 0.5) * 0.8 + (g - 0.5) * 0.08;
-    s.r[i] = 0.8;
+  const c: Cell = { f1: 0, f2: 0, id: 0, dx: 0, dy: 0 };
+  s.each((u, v, i) => {
+    const [wu, wv] = warp(u, v, 3, 0.05, seed + 1);
+    worley(u + wu, v + wv, 4, seed, c, 0.9);
+    const e = c.f2 - c.f1;
+    const joint = 1 - smooth(0.015, 0.06, e);
+    const bevel = smooth(0.0, 0.22, e); // stones round off towards their joints
+    const g = fbm(u, v, 48, 3, seed + 3, 0.6);
+    const m = fbm(u, v, 6, 3, seed + 4);
+    const t = mix(tones[Math.floor(c.id * tones.length)], tones[(Math.floor(c.id * 7) + 1) % tones.length], m * 0.5);
+    const stone = mul(t, 0.72 + bevel * 0.25 + (g - 0.5) * 0.3);
+    s.setCol(i, mix(stone, hex(0x2c2924), joint));
+    s.h[i] = Math.sqrt(bevel) * 0.75 + (g - 0.5) * 0.15 + c.id * 0.08 - joint * 0.2;
+    s.r[i] = 0.82;
   });
 }
 
@@ -483,8 +505,8 @@ const paintBedrock: Painter = (s, pal, seed) => {
 
 const paintGranite: Painter = (s, pal, seed) => {
   const c: Cell = { f1: 0, f2: 0, id: 0, dx: 0, dy: 0 };
-  const feld = nat(pal[0], 0.7, 1);
-  const feld2 = nat(pal[2], 0.7, 1);
+  const feld = nat(pal[0], 0.45, 0.95);
+  const feld2 = nat(pal[2], 0.45, 0.95);
   const quartz = hex(0xc8c4bc);
   const biot = hex(0x1c1a1a);
   s.each((u, v, i) => {
@@ -492,8 +514,9 @@ const paintGranite: Painter = (s, pal, seed) => {
     worley(u + wu, v + wv, 34, seed, c, 1);
     const id = c.id;
     const edge = smooth(0, 0.08, c.f2 - c.f1);
-    let col = id < 0.45 ? mix(feld, feld2, hash01(Math.floor(id * 1000), 1, seed)) : id < 0.75 ? quartz : id < 0.93 ? mix(biot, hex(0x3a3431), 0.3) : hex(0x6b6a66);
+    let col = id < 0.5 ? mix(feld, feld2, hash01(Math.floor(id * 1000), 1, seed)) : id < 0.8 ? quartz : id < 0.92 ? mix(biot, hex(0x4a4441), 0.4) : hex(0x7b7a76);
     const m = fbm(u, v, 4, 3, seed + 3);
+    col = mix(col, mix(feld, quartz, 0.5), 0.25 + (m - 0.5) * 0.3);
     col = mul(col, 0.85 + m * 0.2 + (edge - 1) * 0.12);
     s.setCol(i, col);
     s.h[i] = 0.6 + (id < 0.75 && id >= 0.45 ? 0.06 : 0) + m * 0.2 - (1 - edge) * 0.1;
@@ -518,31 +541,58 @@ const paintBasalt: Painter = (s, pal, seed) => {
   return { depth: 0.07 };
 };
 
-function sedimentary(s: Surface, pal: Pal, seed: number, o: { bands: number; wav: number; cross: number; fissile: number; rough: number; sat?: number }) {
-  const cols = [nat(pal[1], o.sat ?? 0.75, 0.92), nat(pal[0], o.sat ?? 0.75, 1), nat(pal[2], o.sat ?? 0.75, 1.04)];
-  strata(s, seed, o.bands, o.wav, (i, u, v, _b, inBand, id) => {
-    const g = gnoise(u, v, s.n / 2, seed + 1) * 0.5 + 0.5;
-    const m = fbm(u, v, 6, 3, seed + 2);
-    // cross-bedding: inclined laminae inside each bed
-    const lam = o.cross > 0 ? Math.sin((inBand * 9 + u * o.cross * (id > 0.5 ? 1 : -1) + (m - 0.5) * 0.8) * Math.PI * 2) * 0.5 + 0.5 : 0.5;
+function sedimentary(s: Surface, pal: Pal, seed: number, o: { bands: number; wav: number; cross: number; fissile: number; rough: number; sat?: number; stain?: number }) {
+  const cols = [nat(pal[1], o.sat ?? 0.6, 0.9), nat(pal[0], o.sat ?? 0.6, 0.97), nat(pal[2], o.sat ?? 0.6, 1.02)];
+  const c: Cell = { f1: 0, f2: 0, id: 0, dx: 0, dy: 0 };
+  const TAU = Math.PI * 2;
+  const p1 = hash01(1, 2, seed) * TAU;
+  const p2 = hash01(3, 4, seed) * TAU;
+  s.each((u, v, i) => {
+    const m = fbm(u, v, 4, 4, seed + 2);
+    // gently undulating bedding planes with irregular bed thickness (monotonic, tileable remap of v)
+    let vv = v + (fbm(u, v, 2, 3, seed) - 0.5) * o.wav + gnoise(u, 0.5, 1, seed + 3) * o.wav * 0.4;
+    vv += (0.3 * Math.sin(TAU * vv + p1)) / TAU + (0.2 * Math.sin(TAU * 2 * vv + p2)) / (2 * TAU);
+    const L = vv * o.bands;
+    const b = Math.floor(L);
+    const inBand = L - b;
+    const id = hash01(((b % o.bands) + o.bands) % o.bands, 0, seed + 9);
+    const g = fbm(u, v, 64, 2, seed + 1, 0.6);
+    const speck = gnoise(u, v, s.n / 2, seed + 4) * 0.5 + 0.5;
+    // cross-bedding: faint inclined laminae inside each bed
+    const lam = o.cross > 0 ? Math.sin((inBand * 9 + u * o.cross * (id > 0.5 ? 1 : -1) + (m - 0.5) * 0.8) * TAU) * 0.5 + 0.5 : 0.5;
     // fissility: very thin partings that split the rock
-    const fis = o.fissile > 0 ? smooth(0.82, 0.97, Math.abs(Math.sin((v + (m - 0.5) * 0.02) * o.fissile * Math.PI))) : 0;
-    const bedEdge = smooth(0.0, 0.06, inBand) * smooth(0.0, 0.06, 1 - inBand);
-    let col = mix(cols[0], cols[1], id);
-    col = mix(col, cols[2], lam * 0.25 + (g > 0.8 ? 0.3 : 0));
-    col = mul(col, 0.9 + (m - 0.5) * 0.2 - fis * 0.25 - (1 - bedEdge) * 0.12);
+    const fis = o.fissile > 0 ? smooth(0.86, 0.98, Math.abs(Math.sin((vv + (m - 0.5) * 0.015) * o.fissile * Math.PI))) * smooth(0.35, 0.6, fbm(u, v, 6, 2, seed + 5)) : 0;
+    // weathered bedding plane: a soft recess, not a painted line
+    const parting = (1 - smooth(0.0, 0.04, inBand)) * (0.5 + 0.5 * smooth(0.4, 0.6, fbm(u, v, 5, 2, seed + 6)));
+    // vertical joints: one or two per bed at random positions, stopping at the bedding planes
+    const bk = ((b % o.bands) + o.bands) % o.bands;
+    let joint = 0;
+    for (let j = 0; j < 2; j++) {
+      if (j === 1 && hash01(bk, 7, seed) < 0.5) break;
+      const ju = hash01(bk, 11 + j, seed);
+      const wig = gnoise(ju * 7, v, 6, seed + 20 + j) * 0.025 + gnoise(ju * 3, v, 24, seed + 30 + j) * 0.006;
+      const du = Math.abs(((u - ju + wig + 1.5) % 1) - 0.5);
+      const width = 0.002 + 0.006 * (fbm(ju, v, 8, 2, seed + 40 + j));
+      const along = smooth(0.3, 0.55, fbm(ju * 5, v, 4, 2, seed + 50 + j)); // joints open and close along their length
+      joint = Math.max(joint, (1 - smooth(width * 0.3, width, du)) * along);
+    }
+    void c;
+    let col = mix(cols[0], cols[1], smooth(0.05, 0.95, id * 0.8 + m * 0.2));
+    col = mix(col, cols[2], lam * 0.12 + smooth(0.75, 1, speck) * 0.25);
+    col = mul(col, 0.88 + (m - 0.5) * 0.18 + (g - 0.5) * 0.22 - fis * 0.18 - parting * 0.15 - joint * 0.28);
+    if (o.stain) col = mix(col, hex(0x8a5a30), smooth(0.62, 0.85, fbm(u, v, 3, 4, seed + 10)) * o.stain);
     s.setCol(i, col);
-    s.h[i] = 0.55 + id * 0.25 + lam * 0.08 + g * 0.05 - fis * 0.2 - (1 - bedEdge) * 0.3 + (m - 0.5) * 0.15;
-    s.r[i] = o.rough + (g - 0.5) * 0.1;
+    s.h[i] = 0.55 + id * 0.18 + lam * 0.04 + (g - 0.5) * 0.2 + (m - 0.5) * 0.2 - fis * 0.18 - parting * 0.35 - joint * 0.3;
+    s.r[i] = o.rough + (speck - 0.5) * 0.1;
   });
 }
 
 const paintSandstone: Painter = (s, pal, seed) => {
-  sedimentary(s, pal, seed, { bands: 4, wav: 0.08, cross: 2.5, fissile: 0, rough: 0.9 });
+  sedimentary(s, pal, seed, { bands: 3, wav: 0.08, cross: 2.5, fissile: 0, rough: 0.9, stain: 0.35 });
   return { depth: 0.06 };
 };
 const paintShale: Painter = (s, pal, seed) => {
-  sedimentary(s, pal, seed, { bands: 7, wav: 0.03, cross: 0, fissile: 26, rough: 0.7, sat: 0.6 });
+  sedimentary(s, pal, seed, { bands: 5, wav: 0.03, cross: 0, fissile: 22, rough: 0.7, sat: 0.4 });
   return { depth: 0.05 };
 };
 const paintMudstone: Painter = (s, pal, seed) => {
@@ -560,7 +610,7 @@ const paintMudstone: Painter = (s, pal, seed) => {
 };
 
 const paintLimestone: Painter = (s, pal, seed) => {
-  sedimentary(s, pal, seed, { bands: 3, wav: 0.04, cross: 0, fissile: 0, rough: 0.75, sat: 0.6 });
+  sedimentary(s, pal, seed, { bands: 2, wav: 0.04, cross: 0, fissile: 0, rough: 0.75, sat: 0.4, stain: 0.15 });
   // stylolites: dark jagged seams
   s.each((u, v, i) => {
     const y = 0.37 + Math.abs(gnoise(u, 0.1, 40, seed + 5)) * 0.03 + (gnoise(u, 0.2, 6, seed + 6)) * 0.03;
@@ -800,7 +850,7 @@ const paintLogPine: Painter = (s, pal, seed) => {
   return { depth: 0.08 };
 };
 const paintBirchLog: Painter = (s, pal, seed) => {
-  const white = hex(0xe6e2d8);
+  const white = hex(0xd8d3c6);
   s.each((u, v, i) => {
     const m = fbm(u, v, 3, 4, seed);
     const g = gnoise(u, v, 60, seed + 1) * 0.5 + 0.5;
@@ -954,7 +1004,7 @@ function blade(s: Surface, u0: number, len: number, w: number, lean: number, col
 const paintTallGrass: Painter = (s, pal, seed) => {
   const g = GRASS(pal);
   plant(s, seed, (R) => {
-    for (let k = 0; k < 16; k++) blade(s, 0.08 + R() * 0.84, 0.45 + R() * 0.5, 0.035 + R() * 0.02, (R() - 0.5) * 0.7, g[Math.floor(R() * 4)], mix(g[0], hex(0xc2b46a), 0.4));
+    for (let k = 0; k < 18; k++) blade(s, 0.08 + R() * 0.84, 0.45 + R() * 0.5, 0.03 + R() * 0.02, (R() - 0.5) * 0.7, g[Math.floor(R() * g.length)], mix(g[2], hex(0xb0a468), 0.45));
   });
   return { depth: 0.02, cavity: 0 };
 };
@@ -1201,15 +1251,11 @@ const paintAsphalt: Painter = (s, pal, seed) => {
     s.h[i] = 0.5 + stone * 0.25 + g * 0.1 - crack * 0.4;
     s.r[i] = 0.9 - stone * 0.25;
   });
-  // worn centre line (dashed along v)
-  const line = nat(pal[2], 0.7, 0.95);
+  // oil drips & tyre polish
   s.each((u, v, i) => {
-    if (Math.abs(u - 0.5) > 0.035 || v > 0.62) return;
-    const wear = fbm(u, v, 16, 3, seed + 5);
-    if (wear < 0.35) return;
-    s.blend(i, line, smooth(0.35, 0.55, wear) * 0.9);
-    s.h[i] += 0.05;
-    s.r[i] = 0.6;
+    const drip = smooth(0.8, 0.9, fbm(u, v, 5, 3, seed + 5));
+    s.blend(i, hex(0x141414), drip * 0.5);
+    s.r[i] = lerp(s.r[i], 0.35, drip);
   });
   return { depth: 0.03 };
 };
@@ -1424,7 +1470,7 @@ function pipeSkin(s: Surface, seed: number, body: RGB, band: RGB, chevron: RGB |
       s.h[i] = 0.6 + brushed * 0.05;
       s.r[i] = 0.35 + brushed * 0.1;
     });
-  } else wornPaint(s, seed, body, 0.35, 0.35, []);
+  } else wornPaint(s, seed, body, 0.12, 0.1, []);
   s.each((u, v, i) => {
     // colour band around the pipe with a weld seam next to it
     if (Math.abs(u - 0.5) < 0.09) {
