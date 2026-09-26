@@ -104,6 +104,15 @@ const result = await page.evaluate(async () => {
   L('objectives', s.objectives.list.map((o) => `${o.title} ${o.progress}/${o.target}${o.done ? ' ✓' : ''}`));
   L('notifications', s.notifications.slice(-12).map((n) => n.title));
   L('power', s.power, 'env', { score: s.environment.score, flared: s.environment.flaredToday });
+  const before = { day: s.time.day, money: Math.round(s.company.money), b: Object.keys(s.buildings).length, w: Object.keys(s.wells).length, nets: Object.keys(s.networks).length, pipe: ctx.world.getBlock(pts[0].x, pts[0].y, pts[0].z) };
+  await app.saveGame('scenario-test');
+  await app.loadGame('scenario-test');
+  const c2 = app.ctx, s2 = c2.state;
+  for (let i = 0; i < 50; i++) app.session.step();
+  const after = { day: s2.time.day, money: Math.round(s2.company.money), b: Object.keys(s2.buildings).length, w: Object.keys(s2.wells).length, nets: Object.keys(s2.networks).length, pipe: c2.world.getBlock(pts[0].x, pts[0].y, pts[0].z) };
+  L('save/load before', before, 'after', after, 'well after', s2.wells[wellId].status, s2.wells[wellId].rates);
+  const saves = await app.listSaves();
+  L('saves', saves.map((x) => x.slot + ':' + (x.thumbnail ? 'thumb' : 'nothumb')));
   return 'ok';
 });
 console.log('[sc] result', JSON.stringify(result));
