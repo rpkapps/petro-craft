@@ -227,7 +227,7 @@ export class FxManager {
         ps.emit(PK.FIRE, x + sr(spread), y + t * H * 0.5, z + sr(spread), sr(1.6), 8 + rnd() * 8, sr(1.6), 0.8 + rnd() * 0.8, s, s * 0.8, FIRE_TINT, 0.45 + (1 - t) * 0.25, 2, 0.8, 0.7, sr(1.5));
       }
       flames(ps, x, y, z, 1.6, 1, dt, q, 1.4);
-      smoke(ps, x, y + H * 0.85, z, 2.8 * flow, 3.2 * flow, 1, dt, q, 2.6);
+      smoke(ps, x, y + H * 0.85, z, 2.8 * flow, 2.6 * flow, 1, dt, q, 2.6);
       if (rnd() < dt * 10) ps.emit(PK.SPARK, x + sr(1), y + rnd() * H * 0.6, z + sr(1), sr(4), 8 + rnd() * 8, sr(4), 1.5 + rnd(), 0.09, 0.05, COL.SPARK, 1, -4, 0.4, 0.8);
       if (rnd() < dt * 3) ps.emit(PK.GLOW, x, y + H * 0.25, z, 0, 2, 0, 1, H * 0.45, H * 0.55, COL.GLOW_FIRE, 0.12, 0, 1, 0.4);
       const fl = 0.8 + 0.2 * Math.sin(this.time * 17) * Math.sin(this.time * 9.3 + 1);
@@ -235,12 +235,12 @@ export class FxManager {
       this.lights.offer(x, y + 3, z, 0xff6a20, 500 * flow * fl, 40, this.cam, 10);
     } else {
       // dark crude geyser arcing up and raining down, gas plume above
-      const n = count(150 * q * flow, dt);
+      const n = count(260 * q * flow, dt);
       for (let i = 0; i < n; i++) {
         const v = (12 + rnd() * 9) * Math.sqrt(flow);
         const a = rnd() * Math.PI * 2;
         const lat = 0.5 + rnd() * 4.5;
-        const s = 0.3 + rnd() * 0.5;
+        const s = 0.16 + rnd() * 0.3;
         ps.emit(PK.DROP, x + sr(0.25), y, z + sr(0.25), Math.cos(a) * lat, v, Math.sin(a) * lat, 3.4 + rnd() * 1.2, s, s * 1.8, COL.OIL_DROP, 1, -11, 0.12, 0.35);
       }
       // dense crude column core + drifting brown mist

@@ -121,10 +121,10 @@ const fragmentShader = /* glsl */ `
       float shape = smoothstep(0.22, 0.62, body);
       vec3 hot = vec3(1.0, 0.8, 0.45);
       vec3 mid = vec3(1.0, 0.4, 0.07);
-      vec3 cool = vec3(0.5, 0.07, 0.02);
+      vec3 cool = vec3(0.3, 0.09, 0.03);
       float heat = clamp(t * 1.2 + (1.0 - body) * 0.35, 0.0, 1.0);
       vec3 col = heat < 0.3 ? mix(hot, mid, heat / 0.3) : mix(mid, cool, (heat - 0.3) / 0.7);
-      float inten = shape * pow(1.0 - t, 1.2) * vColor.a * 1.6 * smoothstep(0.0, 0.06, t);
+      float inten = shape * pow(1.0 - t, 1.6) * vColor.a * 1.7 * smoothstep(0.0, 0.06, t);
       // partly occluding (alpha) so dense flames saturate to orange instead of blowing out to white
       outc = vec4(col * vColor.rgb * inten, min(1.0, inten * 0.5));
       additive = true;
