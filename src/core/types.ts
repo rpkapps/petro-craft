@@ -673,6 +673,12 @@ export interface Settings {
   antialias: boolean;
   /** Exposure/brightness multiplier (0.6..1.6). */
   brightness: number;
+  /**
+   * Block & material texture style: 'classic' = 16×16 pixel art; 'high' = 64 px procedural realistic textures with
+   * normal maps; 'ultra' = 256 px realistic PBR materials (albedo/normal/roughness), parallax on rock & ground,
+   * anisotropic filtering and detailed building materials.
+   */
+  textureQuality: 'classic' | 'high' | 'ultra';
   keybinds: Record<string, string>;
 }
 

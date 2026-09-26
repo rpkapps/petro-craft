@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoQuality: true,
   antialias: true,
   brightness: 1,
+  textureQuality: 'classic',
   keybinds: { ...DEFAULT_KEYBINDS },
 };
 
