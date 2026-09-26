@@ -1,6 +1,9 @@
-// STUB — owned by the Render Engine agent.
+// Render engine entry point.
+//   createRenderer(canvas, ctx) → Renderer (implements RenderHost + frame/resize/dispose)
+// See Renderer.ts for the subsystem wiring and docs in the individual modules.
 import type { RenderHost } from '../core/client';
 import type { GameContext } from '../core/types';
+import { RenderEngine } from './Renderer';
 
 export interface Renderer extends RenderHost {
   /** Called every animation frame before render (dt seconds). Runs onFrame callbacks, streams chunks, updates sky. */
@@ -11,5 +14,9 @@ export interface Renderer extends RenderHost {
 }
 
 export function createRenderer(canvas: HTMLCanvasElement, ctx: GameContext): Renderer {
-  throw new Error('createRenderer not implemented');
+  return new RenderEngine(canvas, ctx);
 }
+
+export { RenderEngine };
+export { createBlockAtlas, paintLayer } from './textures/atlas';
+export { LAYERS, layerOf } from './textures/layers';
