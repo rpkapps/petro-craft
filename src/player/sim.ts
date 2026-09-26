@@ -1,7 +1,8 @@
 // Authoritative handlers for world/* and player/* commands (runs on the host / single-player).
 //
 // Commands handled: world/breakBlock, world/placeBlock, world/placeLine, player/moveItem, player/selectSlot,
-// player/setMode, player/sync. `player/sync` additionally accepts an optional `health` number (not part of the
+// player/setMode, player/sync, player/dropItem, player/pickup. The system tick runs dropped-item physics
+// (see drops.ts). `player/sync` additionally accepts an optional `health` number (not part of the
 // typed payload; read via cast) so the client-side health model persists in PlayerState.health.
 import type { Command } from '../core/commands';
 import type { GameContext, PlayerState, SimSystem, Vec3 } from '../core/types';
@@ -9,9 +10,11 @@ import { B, BLOCKS, blockItemId } from '../core/blocks';
 import { HOTBAR_SLOTS, INVENTORY_SLOTS, PLAYER_EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_REACH, PLAYER_WIDTH, SEA_LEVEL } from '../core/constants';
 import { createPlayer, formatMoney } from '../core/state';
 import { findBuildingAt } from '../core/buildingUtil';
-import { dropForBlock, isPlaceableBlock, isPlant, isReplaceable, isUnbreakable, isWaterPlant, linePrice, placeableBlockFromItem } from './blockUtil';
+import { dropForBlock, isPlaceableBlock, isPlant, isReplaceable, isTreeBlock, isTrunkBlock, isUnbreakable, isWaterPlant, linePrice, placeableBlockFromItem } from './blockUtil';
 import { addItem, countItem, moveItem, normaliseInventory, removeItem } from './inventory';
 import { LINE } from './config';
+import { dropFromSlot, normaliseDrops, pickupDrop, spawnDrop, tickDrops } from './drops';
+import { treeClearance } from './linePath';
 
 type Result = { ok: boolean; error?: string; data?: unknown };
 const fail = (error: string): Result => ({ ok: false, error });
@@ -66,6 +69,7 @@ function ensurePlayers(ctx: GameContext): void {
     if (p.mode !== 'walk' && p.mode !== 'fly' && p.mode !== 'drone') p.mode = 'walk';
     p.velocity ??= { x: 0, y: 0, z: 0 };
   }
+  normaliseDrops(s);
 }
 
 // ---- handlers ---------------------------------------------------------------------------------------------
@@ -87,10 +91,19 @@ function breakBlock(cmd: Command<'world/breakBlock'>, ctx: GameContext): Result 
     if (isPlant(above)) ctx.world.setBlock(x, y + 1, z, isWaterPlant(above) ? B.WATER : B.AIR, 'player');
   }
   const drop = dropForBlock(id);
-  let lost = 0;
-  if (drop) lost = addItem(p.inventory, drop, 1);
+  let spilled = 0;
+  let dropId: string | undefined;
+  if (drop) {
+    // Straight into the inventory; when it is full the item pops out at the broken block instead of being lost.
+    spilled = addItem(p.inventory, drop, 1);
+    if (spilled > 0) {
+      const s = spawnDrop(ctx, drop, spilled, { x: x + 0.5, y: y + 0.5, z: z + 0.5 }, { x: 0, y: 1.5, z: 0 });
+      dropId = s.drop.id;
+      ctx.bus.emit('player:itemDropped', { dropId });
+    }
+  }
   ctx.state.stats.blocksMined++;
-  return { ok: true, data: { prev: id, drop, lost } };
+  return { ok: true, data: { prev: id, drop, spilled, dropId } };
 }
 
 function placeBlock(cmd: Command<'world/placeBlock'>, ctx: GameContext): Result {
@@ -120,6 +133,10 @@ function placeBlock(cmd: Command<'world/placeBlock'>, ctx: GameContext): Result 
 export interface LineQuote {
   /** Cells that will receive a block (already-identical cells are skipped). */
   cells: Vec3[];
+  /** Subset of `cells` currently holding tree parts (logs, leaves, cacti) that the run clears. */
+  clearing: Vec3[];
+  /** Distinct trunks (log / cactus columns) the run cuts through; their trunk above and canopy are cleared too. */
+  trees: number;
   blocked: Vec3[];
   fromInventory: number;
   bought: number;
@@ -130,6 +147,8 @@ export interface LineQuote {
 export function quoteLine(ctx: GameContext, p: PlayerState | undefined, block: number, points: Vec3[]): LineQuote {
   const cells: Vec3[] = [];
   const blocked: Vec3[] = [];
+  const clearing: Vec3[] = [];
+  const trunks = new Set<string>();
   const seen = new Set<string>();
   for (const pt of points) {
     if (!pt || !isInt(pt.x) || !isInt(pt.y) || !isInt(pt.z)) {
@@ -145,18 +164,24 @@ export function quoteLine(ctx: GameContext, p: PlayerState | undefined, block: n
     }
     const cur = ctx.world.getBlock(pt.x, pt.y, pt.z);
     if (cur === block) continue;
-    if (!isReplaceable(cur) || findBuildingAt(ctx.state, pt.x, pt.y, pt.z) || (BLOCKS[block].solid && intersectsPlayers(ctx, pt.x, pt.y, pt.z))) {
+    const tree = isTreeBlock(cur);
+    if ((!isReplaceable(cur) && !tree) || findBuildingAt(ctx.state, pt.x, pt.y, pt.z) || (BLOCKS[block].solid && intersectsPlayers(ctx, pt.x, pt.y, pt.z))) {
       blocked.push(pt);
       continue;
     }
-    cells.push({ x: pt.x, y: pt.y, z: pt.z });
+    const c = { x: pt.x, y: pt.y, z: pt.z };
+    cells.push(c);
+    if (tree) {
+      clearing.push(c);
+      if (isTrunkBlock(cur)) trunks.add(`${pt.x},${pt.z}`);
+    }
   }
   const creative = ctx.state.meta.rules.creative;
   const have = creative ? cells.length : p ? countItem(p.inventory, blockItemId(block)) : 0;
   const fromInventory = Math.min(have, cells.length);
   const bought = cells.length - fromInventory;
   const cost = creative ? 0 : Math.round(bought * linePrice(block) * ctx.modifier('construction_cost'));
-  return { cells, blocked, fromInventory, bought, cost };
+  return { cells, clearing, trees: trunks.size, blocked, fromInventory, bought, cost };
 }
 
 function placeLine(cmd: Command<'world/placeLine'>, ctx: GameContext): Result {
@@ -178,9 +203,19 @@ function placeLine(cmd: Command<'world/placeLine'>, ctx: GameContext): Result {
     return fail(`Not enough money: ${q.bought} × ${def.name} costs ${formatMoney(q.cost)}${q.fromInventory ? ` (after ${q.fromInventory} from inventory)` : ''}`);
   }
   if (!ctx.state.meta.rules.creative && q.fromInventory > 0) removeItem(p.inventory, blockItemId(block), q.fromInventory, p.selectedSlot);
-  for (const c of q.cells) ctx.world.setBlock(c.x, c.y, c.z, block, 'player');
+  // Trees cut by the run are felled whole (trunk above, branches, own canopy) so nothing is left floating; the
+  // wood is not recovered.
+  const w = ctx.world;
+  const extra = q.clearing.length ? treeClearance((x, y, z) => w.getBlock(x, y, z), q.cells) : [];
+  for (const c of extra) {
+    if (!findBuildingAt(ctx.state, c.x, c.y, c.z)) w.setBlock(c.x, c.y, c.z, B.AIR, 'player');
+  }
+  for (const c of q.cells) w.setBlock(c.x, c.y, c.z, block, 'player');
   ctx.state.stats.blocksPlaced += q.cells.length;
-  return { ok: true, data: { placed: q.cells.length, fromInventory: q.fromInventory, bought: q.bought, cost: q.cost } };
+  return {
+    ok: true,
+    data: { placed: q.cells.length, fromInventory: q.fromInventory, bought: q.bought, cost: q.cost, cleared: q.clearing.length + extra.length, trees: q.trees },
+  };
 }
 
 function sync(cmd: Command<'player/sync'>, ctx: GameContext): Result {
@@ -232,9 +267,20 @@ export function createPlayerSimSystem(): SimSystem {
         return OK;
       });
       c.register('player/sync', sync);
+      c.register('player/dropItem', (cmd, cx) => {
+        const p = playerOf(cx, cmd);
+        if (!p) return fail('Unknown player');
+        return dropFromSlot(cx, p, cmd.slot, cmd.count);
+      });
+      c.register('player/pickup', (cmd, cx) => {
+        const p = playerOf(cx, cmd);
+        if (!p) return fail('Unknown player');
+        return pickupDrop(cx, p, cmd.dropId);
+      });
     },
-    tick() {
-      /* All player state changes are command-driven. */
+    tick(ctx: GameContext) {
+      // Player state changes are command-driven; the tick only simulates dropped item stacks.
+      tickDrops(ctx);
     },
   };
 }

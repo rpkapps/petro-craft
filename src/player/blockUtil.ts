@@ -36,6 +36,33 @@ export function isReplaceable(id: number): boolean {
   return id === B.AIR || id === B.WATER || id === B.SNOW || isPlant(id);
 }
 
+/** Tree parts and cacti: solid vegetation that line runs (pipes/roads) clear out of their way. */
+const TREE_BLOCKS: ReadonlySet<number> = new Set<number>([
+  B.LOG_OAK, B.LEAVES_OAK, B.LOG_PINE, B.LEAVES_PINE, B.LEAVES_AUTUMN, B.BIRCH_LOG, B.BIRCH_LEAVES, B.CACTUS,
+]);
+/** Trunk-like blocks: when one is cleared, the column stacked on it is cleared too (no floating trunks). */
+const TRUNK_BLOCKS: ReadonlySet<number> = new Set<number>([B.LOG_OAK, B.LOG_PINE, B.BIRCH_LOG, B.CACTUS]);
+const LEAF_BLOCKS: ReadonlySet<number> = new Set<number>([B.LEAVES_OAK, B.LEAVES_PINE, B.LEAVES_AUTUMN, B.BIRCH_LEAVES]);
+
+/** Logs, leaves and cacti (solid vegetation cleared by line placement). */
+export function isTreeBlock(id: number): boolean {
+  return TREE_BLOCKS.has(id);
+}
+export function isTrunkBlock(id: number): boolean {
+  return TRUNK_BLOCKS.has(id);
+}
+export function isLeafBlock(id: number): boolean {
+  return LEAF_BLOCKS.has(id);
+}
+
+/**
+ * Anything that is not "ground" for pipe routing: trees, cacti, plants and snow cover. Pipes are laid on the
+ * ground below these (clearing them where the run passes).
+ */
+export function isVegetation(id: number): boolean {
+  return TREE_BLOCKS.has(id) || isPlant(id) || id === B.SNOW;
+}
+
 /** Plants that grow under water (become water again when removed). */
 export function isWaterPlant(id: number): boolean {
   return id === B.SEAGRASS || id === B.KELP;

@@ -88,6 +88,7 @@ src/
 * `RenderHost` (`core/client.ts`) is implemented by the renderer; entity layer, player and audio receive it.
 * Input split: **player** module handles movement, mouse look, hotbar (1–9, wheel), block break/place, tools,
   `X` x-ray overlay (sets `host.overlay` and emits `ui:overlay`), `V` drone camera, `G` fly, `R` rotate in build mode,
+  `Q` / `Ctrl+Q` drop one item / the stack (auto-pickup by walking over drops),
   build-mode ghost & placement (listens to `ui:buildMode`), pipe line mode (listens to `ui:pipeMode`), picking
   (emits `ui:select`, `player:target`). **UI** handles panel hotkeys (E, B, T, M, N, J, H, K, F, O, Esc, F1, F3, F5, F9,
   speed keys) and menus. When `app.uiCapturing` is true the player controller ignores gameplay input.

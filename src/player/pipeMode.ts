@@ -1,28 +1,30 @@
 // Pipe (line) mode: click a start cell, preview an L-shaped run to the cursor that follows the terrain (Shift keeps
 // a constant elevation for pipe racks, R flips the L), click again to lay it with 'world/placeLine'. Runs chain from
 // the last end point; RMB cancels the current run (or leaves the mode when no run is started).
+// Terrain-following runs lie on the ground beneath trees, plants and snow (cells that fell a tree are tinted green)
+// and an unsupported start cell (canopy top, mid-air beside a trunk) drops to the ground of its column.
 import * as THREE from 'three';
 import type { IWorld, Vec3 } from '../core/types';
 import { METERS_PER_BLOCK } from '../core/constants';
 import { formatMoney } from '../core/state';
-import { blockColor, blockName, isPlaceableBlock, isPlant, isReplaceable, linePrice } from './blockUtil';
+import { blockColor, blockName, isPlaceableBlock, isReplaceable, isTreeBlock, linePrice } from './blockUtil';
 import { LINE } from './config';
 import { Interaction } from './interaction';
-import { planLine } from './linePath';
+import { anchorLineCell, groundYBelowVegetation, planLine } from './linePath';
 import { quoteLine } from './sim';
 import type { Actions, PlayerRuntime, Target } from './runtime';
 
 const CAP = LINE.maxCells + 1;
 const BLOCKED = new THREE.Color(0xff3b30);
 const EXISTING = new THREE.Color(0xd8dde3);
+/** Cells that will fell a tree / clear foliage. */
+const CLEARING = new THREE.Color(0x7bd35a);
 const tmpM = new THREE.Matrix4();
 const tmpC = new THREE.Color();
 
-/** First free cell above the ground at a column, looking through plants (pipes lie on the grass, not on tufts). */
+/** First free cell above the ground at a column, looking through vegetation (pipes run under the trees). */
 function groundY(w: IWorld, x: number, z: number): number {
-  let y = w.getSurfaceY(x, z);
-  while (y > 1 && isPlant(w.getBlock(x, y - 1, z))) y--;
-  return y;
+  return groundYBelowVegetation((a, b, c) => w.getBlock(a, b, c), w.getSurfaceY(x, z), x, z);
 }
 
 export class PipeMode {
@@ -31,6 +33,7 @@ export class PipeMode {
   private xFirst = true;
   private cells: Vec3[] = [];
   private blocked = new Set<string>();
+  private clearing = new Set<string>();
   private truncated = false;
   private planKey = '';
   private infoKey = '';
@@ -92,8 +95,9 @@ export class PipeMode {
     if (this.block === null) return;
     this.t += dt;
     const rt = this.rt;
-    const cell = Interaction.placementCell(target);
     const w = rt.ctx.world;
+    const constantY = rt.input.shift();
+    const cell = this.anchor(Interaction.placementCell(target), constantY);
     const color = this.color.setHex(blockColor(this.block));
 
     if (act.secondaryPressed) {
@@ -121,9 +125,12 @@ export class PipeMode {
     if (!this.start) {
       // Single-cell preview at the cursor.
       const cur = w.getBlock(cell.x, cell.y, cell.z);
-      const ok = isReplaceable(cur) || cur === this.block;
+      const tree = isTreeBlock(cur);
+      const ok = isReplaceable(cur) || tree || cur === this.block;
+      const k = `${cell.x},${cell.y},${cell.z}`;
       this.cells = [cell];
-      this.blocked = ok ? new Set() : new Set([`${cell.x},${cell.y},${cell.z}`]);
+      this.blocked = ok ? new Set() : new Set([k]);
+      this.clearing = tree ? new Set([k]) : new Set();
       this.quote = null;
       this.writeInstances(color);
       this.startMarker.visible = false;
@@ -138,7 +145,6 @@ export class PipeMode {
       return;
     }
 
-    const constantY = rt.input.shift();
     const key = `${this.start.x},${this.start.y},${this.start.z}>${cell.x},${cell.y},${cell.z}:${this.xFirst}:${constantY}:${this.block}`;
     if (key !== this.planKey) {
       this.planKey = key;
@@ -150,6 +156,7 @@ export class PipeMode {
       this.truncated = plan.truncated;
       this.quote = quoteLine(rt.ctx, rt.player(), this.block, this.cells);
       this.blocked = new Set(this.quote.blocked.map((c) => `${c.x},${c.y},${c.z}`));
+      this.clearing = new Set(this.quote.clearing.map((c) => `${c.x},${c.y},${c.z}`));
     }
     this.writeInstances(color);
     this.startMarker.visible = true;
@@ -186,6 +193,16 @@ export class PipeMode {
     }
   }
 
+  /**
+   * Terrain-following runs never start in mid-air: an unsupported cell drops to the ground below it (through
+   * canopies). With constant elevation (Shift) the clicked cell is used as-is.
+   */
+  private anchor(cell: Vec3 | null, constantY: boolean): Vec3 | null {
+    const w = this.rt.ctx.world;
+    if (!cell || constantY || this.block === null || !w.inBounds(cell.x, cell.y, cell.z)) return cell;
+    return anchorLineCell((x, y, z) => w.getBlock(x, y, z), w.getSurfaceY(cell.x, cell.z), cell, this.block);
+  }
+
   private writeInstances(color: THREE.Color): void {
     const n = Math.min(this.cells.length, CAP);
     const w = this.rt.ctx.world;
@@ -196,6 +213,7 @@ export class PipeMode {
       this.mesh.setMatrixAt(i, tmpM);
       const k = `${c.x},${c.y},${c.z}`;
       if (this.blocked.has(k)) tmpC.copy(BLOCKED);
+      else if (this.clearing.has(k)) tmpC.copy(color).lerp(CLEARING, 0.6).multiplyScalar(pulse);
       else if (w.inBounds(c.x, c.y, c.z) && w.getBlock(c.x, c.y, c.z) === this.block) tmpC.copy(EXISTING);
       else tmpC.copy(color).multiplyScalar(pulse);
       this.mesh.setColorAt(i, tmpC);
@@ -221,6 +239,8 @@ export class PipeMode {
       if (q) {
         if (q.fromInventory > 0) lines.push(`From inventory: ${q.fromInventory}`);
         if (q.bought > 0) lines.push(`Purchase ${q.bought} × ${formatMoney(linePrice(this.block))} = ${formatMoney(q.cost)}`);
+        if (q.trees > 0) lines.push(`Clears ${q.trees} tree${q.trees === 1 ? '' : 's'} along the route`);
+        else if (q.clearing.length > 0) lines.push(`Clears ${q.clearing.length} foliage block${q.clearing.length === 1 ? '' : 's'}`);
         if (q.blocked.length > 0) lines.push(`✖ ${q.blocked.length} blocked cell${q.blocked.length > 1 ? 's' : ''}`);
       }
       lines.push('LMB lay run · R flip corner · Shift constant height · RMB cancel');
@@ -237,6 +257,8 @@ export class PipeMode {
     this.block = null;
     this.start = null;
     this.cells = [];
+    this.blocked.clear();
+    this.clearing.clear();
     this.quote = null;
     this.planKey = '';
     this.infoKey = '';

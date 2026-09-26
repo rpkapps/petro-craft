@@ -36,6 +36,18 @@ export function addItem(inv: Inventory, item: string, count: number): number {
   return left;
 }
 
+/** How many of `item` (up to `count`) the inventory can take without overflowing. */
+export function canAccept(inv: Inventory, item: string, count = Infinity): number {
+  const max = maxStack(item);
+  let room = 0;
+  for (const s of inv) {
+    if (!s) room += max;
+    else if (s.item === item && s.count < max) room += max - s.count;
+    if (room >= count) return count;
+  }
+  return Math.min(room, count);
+}
+
 /** Remove up to `count` items (preferring `preferSlot` first, then the last stacks). Returns the number removed. */
 export function removeItem(inv: Inventory, item: string, count: number, preferSlot = -1): number {
   let left = Math.max(0, Math.floor(count));

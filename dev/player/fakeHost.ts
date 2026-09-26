@@ -1,10 +1,13 @@
 // Minimal RenderHost for the player dev harness: plain three.js renderer with a naive vertex-coloured chunk mesher,
-// water surfaces, box stand-ins for buildings, a block highlight with break progress and a selection box.
+// water surfaces, box stand-ins for buildings and dropped item stacks, a block highlight with break progress and a
+// selection box.
 import * as THREE from 'three';
 import type { RenderHost } from '../../src/core/client';
 import type { MapOverlay } from '../../src/core/EventBus';
 import type { GameContext, Vec3 } from '../../src/core/types';
 import { B, BLOCKS, IS_SOLID } from '../../src/core/blocks';
+import { ITEMS } from '../../src/content/items';
+import { blockFromItem, blockColor } from '../../src/player/blockUtil';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../../src/core/constants';
 import { rotatedSize } from '../../src/core/buildingUtil';
 
@@ -35,6 +38,8 @@ export class FakeHost implements RenderHost {
   private readonly crack: THREE.Mesh;
   private readonly selection: THREE.LineSegments;
   private buildingMeshes = new Map<string, THREE.Mesh>();
+  private readonly dropMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshLambertMaterial(), 512);
+  private dropSpin = 0;
   private shakeT = 0;
   private shakeI = 0;
   readonly log: string[] = [];
@@ -103,6 +108,7 @@ export class FakeHost implements RenderHost {
       if (++n > 80) break;
     }
     this.syncBuildings();
+    this.syncDrops(dt);
     if (this.shakeT > 0) {
       this.shakeT -= dt;
       const i = this.shakeI * 0.05;
@@ -114,6 +120,31 @@ export class FakeHost implements RenderHost {
 
   render() {
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Spinning, bobbing little cubes for state.drops (the real game renders these in the entity layer). */
+  private syncDrops(dt: number) {
+    const drops = this.ctx.state.drops ?? [];
+    const m = this.dropMesh;
+    if (!m.parent) {
+      m.frustumCulled = false;
+      this.scene.add(m);
+    }
+    this.dropSpin += dt * 1.6;
+    const mat = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
+    const n = Math.min(drops.length, 512);
+    for (let i = 0; i < n; i++) {
+      const d = drops[i];
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.dropSpin + i);
+      mat.compose(new THREE.Vector3(d.x, d.y + Math.sin(this.dropSpin * 2 + i) * 0.05, d.z), q, new THREE.Vector3(1, 1, 1));
+      m.setMatrixAt(i, mat);
+      const b = blockFromItem(d.item);
+      c.set(b !== null ? blockColor(b) : ITEMS[d.item]?.color ?? '#ff8a1f');
+      m.setColorAt(i, c);
+    }
+    m.count = n;
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
   }
 
   private syncBuildings() {

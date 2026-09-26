@@ -1,5 +1,6 @@
 // Player controller (client side): input, walk/fly/swim physics, first-person & drone cameras, picking,
-// block breaking/placing, tools, build & pipe modes, health, viewmodel and state sync.
+// block breaking/placing, tools, build & pipe modes, item drop (Q / Ctrl+Q) & auto-pickup, health, viewmodel and
+// state sync.
 //
 // Conventions: body position = feet (centre of the 0.6-wide AABB). yaw 0 looks towards −Z, positive yaw turns left
 // (three.js 'YXZ' Euler); pitch > 0 looks up. Compass north = −Z, east = +X.
@@ -21,6 +22,7 @@ import { Interaction } from './interaction';
 import { BuildMode } from './buildMode';
 import { PipeMode } from './pipeMode';
 import { HealthModel } from './health';
+import { DropController } from './dropsClient';
 import { NO_ACTIONS, type Actions, type PlayerRuntime, type Target } from './runtime';
 
 export interface PlayerController {
@@ -58,6 +60,7 @@ export class PlayerControllerImpl implements PlayerController, PlayerRuntime {
   readonly build: BuildMode;
   readonly pipe: PipeMode;
   readonly health: HealthModel;
+  readonly drops: DropController;
 
   private readonly query: VoxelQuery;
   private readonly offs: (() => void)[] = [];
@@ -108,6 +111,7 @@ export class PlayerControllerImpl implements PlayerController, PlayerRuntime {
     this.build = new BuildMode(this);
     this.pipe = new PipeMode(this);
     this.health = new HealthModel(this);
+    this.drops = new DropController(this);
     this.health.onDeath = () => this.handleDeath();
     this.health.onRespawn = (at) => this.handleRespawn(at);
     this.health.onDamage = (a) => host.shake(Math.min(0.5, 0.08 + a / 40), 0.25);
@@ -192,6 +196,7 @@ export class PlayerControllerImpl implements PlayerController, PlayerRuntime {
     this.updateCamera(dt, inputOn, ev);
     this.updatePick();
     this.updateInteraction(dt, inputOn);
+    this.drops.update(dt, inputOn, this.mode !== 'drone');
     this.tools.passive(dt);
     this.health.update(dt);
     this.viewmodel.update(dt, this.host.camera, {

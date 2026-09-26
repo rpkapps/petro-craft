@@ -152,3 +152,43 @@ export const LINE = {
   /** Hard cap enforced by the authoritative handler. */
   maxCellsAuthoritative: 600,
 } as const;
+
+/** Dropped item stacks (Q / Ctrl+Q, full-inventory mining) and pickup. Distances in blocks, times in real seconds. */
+export const DROP = {
+  /** Horizontal distance in front of the eyes where a dropped stack appears (shortened in front of walls). */
+  spawnDistance: 1.2,
+  /** How far below eye level the stack appears. */
+  spawnBelowEye: 0.35,
+  /** Toss velocity along the look direction and the extra upward kick (blocks/s) — gives the throw its arc. */
+  tossSpeed: 2.4,
+  tossUp: 2.2,
+  gravity: 24,
+  terminalVelocity: 30,
+  /** Sinking speed and horizontal drag (1/s) in water. */
+  liquidSinkSpeed: 1.2,
+  liquidDrag: 4,
+  /** Height of an item's centre above the surface it rests on. */
+  restHeight: 0.25,
+  /** Collision half-size used against walls while flying. */
+  radius: 0.15,
+  /** Same-item stacks closer than this merge (up to one full stack). */
+  mergeRadius: 0.8,
+  /** Authoritative pickup range from the player's body (plus sync slack). */
+  pickupReach: 2.5,
+  /** Client auto-pickup radius from the player's body. */
+  autoPickupRadius: 1.5,
+  /** A player's own drops are not auto-picked up for this long. */
+  selfPickupDelay: 1.5,
+  /** Game minutes before a stack despawns (5 game days). */
+  despawnMinutes: 5 * 1440,
+  /** Maximum stacks in the world; the oldest are removed first. */
+  maxDrops: 400,
+  /** Minimum time between two Q drops, hold-to-repeat delay and interval. */
+  dropCooldown: 0.15,
+  repeatDelay: 0.45,
+  repeatInterval: 0.12,
+  /** Retry delay for auto-pickup of the same stack after a dispatch. */
+  pickupRetry: 0.3,
+  /** Maximum auto-pickup dispatches per frame. */
+  pickupsPerFrame: 4,
+} as const;
