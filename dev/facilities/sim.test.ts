@@ -121,6 +121,15 @@ let oilH: Harness;
   check('excess gas flared at wellhead (no gas line)', env.flaredToday > 5000 && (wh.data.flareRate as number) > 2500, `flared ${f0(env.flaredToday)} mcf, rate ${wh.data.flareRate}`);
   check('flaring counted as emissions', env.emissionsTotal > 200, f0(env.emissionsTotal));
   check('water with no outlet stays in wellhead (≤ cap)', (wh.storage.produced_water ?? 0) <= 400.001 && (wh.storage.produced_water ?? 0) > 390);
+  {
+    // With water hauling enabled (the default), trucks drain the wellhead at a cost.
+    wh.config.truckWater = true;
+    const m0 = h.ctx.state.company.money;
+    run(h, sph * 6, (d) => produce(wh, d, { ...rates, produced_water: 800 }));
+    const spent = m0 - h.ctx.state.company.money;
+    check('water hauled by truck when no water line', (wh.storage.produced_water ?? 0) <= 200 && spent > 0, `water ${f0(wh.storage.produced_water)}, spent ${f0(spent)}`);
+    wh.config.truckWater = false;
+  }
   check('tank io shows inflow', (tank.io.crude_oil ?? 0) > 100, JSON.stringify(tank.io));
   check('tank utilization = fill', Math.abs(tank.utilization - (tank.storage.crude_oil ?? 0) / 10000) < 0.01, tank.utilization.toFixed(3));
   // economy emulation: sell 3,000 bbl/d from the rack → tank discharges to terminal

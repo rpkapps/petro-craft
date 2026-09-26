@@ -15,9 +15,9 @@ page.on('console', (m) => {
   const k = t.slice(0, 120); const n = (seen.get(k) ?? 0) + 1; seen.set(k, n); if (n <= 2) console.log(`[${m.type()}]`, t.slice(0, 600));
 });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message, e.stack?.split('\n').slice(0, 4).join(' | ')));
-await page.goto(base);
+await page.goto(base + (process.env.SOAK ? '?soak=' + process.env.SOAK : ''));
 await page.waitForTimeout(1500);
-await page.evaluate((seed) => window.petrocraft.newGame({ saveName: 'Scenario', companyName: 'Scenario Oil', seed: Number(seed), worldSize: 'small', difficulty: 'normal', tutorial: true, hazards: false, creative: false }), seed);
+await page.evaluate((seed) => window.petrocraft.newGame({ saveName: 'Scenario', companyName: 'Scenario Oil', seed: Number(seed), worldSize: 'small', difficulty: 'normal', tutorial: true, hazards: true, creative: false }), seed);
 await page.waitForTimeout(500);
 
 const result = await page.evaluate(async () => {
@@ -27,7 +27,7 @@ const result = await page.evaluate(async () => {
   const s = ctx.state;
   const L = (...a) => console.log('[sc]', ...a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))));
   const d = (cmd) => { const r = ctx.commands.dispatch(cmd); if (!r.ok) L('CMD FAIL', cmd.type, r.error); return r; };
-  const run = (hours) => { const steps = Math.ceil((hours * 60) / 0.24); for (let i = 0; i < steps; i++) session.step(); };
+  const run = (hours) => { const steps = Math.ceil((hours * 60) / (0.24 * s.time.speed)); for (let i = 0; i < steps; i++) session.step(); };
   const runUntil = (pred, maxHours, chunkH = 1) => { let h = 0; while (!pred() && h < maxHours) { run(chunkH); h += chunkH; } return h; };
   const money = () => Math.round(s.company.money);
   const P = 32;
@@ -104,6 +104,16 @@ const result = await page.evaluate(async () => {
   L('objectives', s.objectives.list.map((o) => `${o.title} ${o.progress}/${o.target}${o.done ? ' ✓' : ''}`));
   L('notifications', s.notifications.slice(-12).map((n) => n.title));
   L('power', s.power, 'env', { score: s.environment.score, flared: s.environment.flaredToday });
+  const soak = Number(new URLSearchParams(location.search).get('soak') ?? 0);
+  if (soak > 0) {
+    const t0 = performance.now();
+    d({ type: 'time/setSpeed', speed: 25 });
+    for (let day = 0; day < soak; day++) {
+      run(24);
+      if (day % 10 === 9) L(`soak day ${s.time.day}`, 'money', money(), 'oil', Math.round(w().rates.oil), 'res', ctx.state.research.current, 'fires', s.hazards.fires.length, 'incidents', s.hazards.incidents.length, 'env', Math.round(s.environment.score), 'weather', s.weather.current, 'contracts', s.contracts.active.length);
+    }
+    L('soak ms/day', ((performance.now() - t0) / soak).toFixed(1), 'incidents', s.hazards.incidents.slice(-5).map((i) => i.text), 'market events', s.market.events.map((e) => e.title));
+  }
   const before = { day: s.time.day, money: Math.round(s.company.money), b: Object.keys(s.buildings).length, w: Object.keys(s.wells).length, nets: Object.keys(s.networks).length, pipe: ctx.world.getBlock(pts[0].x, pts[0].y, pts[0].z) };
   await app.saveGame('scenario-test');
   await app.loadGame('scenario-test');

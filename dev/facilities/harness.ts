@@ -99,6 +99,8 @@ export function addWellhead(h: Harness, x: number, z: number, purpose: WellPurpo
   ctx.state.wells[wellId] = well;
   const b = createBuildingState(ctx, 'wellhead', x, y, z, 0, { prebuilt: true });
   b.wellId = wellId;
+  // Tests exercise pipeline/pit water handling; water hauling has its own dedicated test.
+  b.config.truckWater = false;
   well.wellheadId = b.id;
   addBuilding(ctx, b);
   return b;

@@ -27,7 +27,10 @@ const TERMINAL: Record<string, ConfigSpec> = {
 
 /** Known config keys per building type. Unknown keys are still stored (other modules may use them). */
 export const CONFIG_SCHEMA: Record<string, Record<string, ConfigSpec>> = {
-  wellhead: FLARE,
+  wellhead: {
+    ...FLARE,
+    truckWater: { kind: 'bool', default: true, label: 'Haul produced water by truck when there is no water line ($2.50/bbl)' },
+  },
   production_platform: FLARE,
   fpso: FLARE,
   gas_turbine_power: SELL_POWER,

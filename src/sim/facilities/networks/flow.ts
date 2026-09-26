@@ -316,6 +316,8 @@ export class FlowEngine {
    * offshore produced water beyond half the tank is treated and discharged overboard.
    */
   private handleProducerExcess(step: SimStep): void {
+    const WATER_HAUL_CAPACITY = 2_500; // bbl/day of vacuum-truck capacity per wellhead
+    const WATER_HAUL_COST = 2.5; // USD/bbl
     const rt = this.rt;
     const ctx = rt.ctx;
     const alpha = emaAlpha(step.minutes);
@@ -352,6 +354,24 @@ export class FlowEngine {
         else if (b.data.flareRate !== undefined) delete b.data.flareRate;
         if (nv > 0.5) b.data.ventRate = Math.round(nv * 10) / 10;
         else if (b.data.ventRate !== undefined) delete b.data.ventRate;
+      }
+      if (b.type === 'wellhead' && b.config.truckWater !== false) {
+        // Early-game fallback: vacuum trucks haul produced water that has no pipeline outlet (costly).
+        let hasWaterNet = false;
+        for (const id of rt.rtOf(b).networks) if (rt.topology.byId.get(id)?.cat === 'water') hasWaterNet = true;
+        const wcap = capacityOf(ctx, b, 'water');
+        const w = b.storage.produced_water ?? 0;
+        const keep = wcap * (hasWaterNet ? 0.9 : 0.4);
+        if (w > keep) {
+          const out = Math.min(w - keep, WATER_HAUL_CAPACITY * step.days);
+          takeStorage(b, 'produced_water', out);
+          rt.io(b, 'produced_water', -out);
+          const due = ((b.data.waterHaulDue as number | undefined) ?? 0) + out * WATER_HAUL_COST * ctx.modifier('transport_cost');
+          if (due >= 2_000) {
+            ctx.transact(-Math.round(due), 'transport', 'Produced-water hauling (build a water line & disposal to save)');
+            b.data.waterHaulDue = 0;
+          } else b.data.waterHaulDue = due;
+        }
       }
       if (OFFSHORE_HUB_TYPES.has(b.type)) {
         const wcap = capacityOf(ctx, b, 'water');
