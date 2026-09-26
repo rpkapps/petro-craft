@@ -12,6 +12,19 @@ import { ClipMaterialSet } from './clipSet';
 const scaffoldCache = new Map<string, ModelTemplate>();
 const craneCache = new Map<number, ModelTemplate>();
 
+/** Free cached scaffold/crane templates (layer dispose). */
+export function clearConstructionTemplates(): void {
+  for (const t of [...scaffoldCache.values(), ...craneCache.values()]) {
+    const walk = (n: ModelTemplate['root']) => {
+      for (const m of n.meshes) m.geometry.dispose();
+      n.children.forEach(walk);
+    };
+    walk(t.root);
+  }
+  scaffoldCache.clear();
+  craneCache.clear();
+}
+
 function scaffoldTemplate(w: number, d: number, h: number): ModelTemplate {
   const key = `${w}x${d}x${h}`;
   let t = scaffoldCache.get(key);

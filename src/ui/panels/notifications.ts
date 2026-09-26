@@ -27,7 +27,7 @@ export class NotificationsPanel extends Panel {
     this.tabsEl.appendChild(seg.el);
     const box = h('div.nt-list');
     this.list = new KeyedList<Notification>(box, (n) => n.id, (n) => {
-      const node = h(`div.nt-row.${n.level}`,
+      const node = h(`div.nt-row.lv-${n.level}`,
         h('div.nt-ic', icon(LEVEL_ICON[n.level])),
         h('div.col.grow', { style: 'gap:.1rem;min-width:0' }, h('b', n.title), n.text ? h('span.small.dim', n.text) : null),
         h('div.col', { style: 'gap:.2rem;align-items:flex-end' },

@@ -341,7 +341,7 @@ const helipad: ModelDef = {
     // raised deck on stub columns
     for (const x of [-2, 0, 2]) for (const z of [-2, 0, 2]) b.box(x, 0.15, z, 0.3, 0.3, 0.3, C.STEEL_DARK, 'paint');
     b.slab(-2.45, 0.3, -2.45, 2.45, 0.5, 2.45, C.GUNMETAL, 'rough');
-    b.noShadow(() => {
+    b.at(0, 0, 0, 0, () => {
       // touchdown circle, H, border
       b.ring(0, 0.51, 0, 1.75, 0.09, C.HAZARD, 'paint', 32);
       b.slab(-0.6, 0.5, -0.8, -0.35, 0.525, 0.8, C.WHITE, 'paint');
@@ -398,4 +398,3 @@ export const SUPPORT_MODELS: Record<string, ModelDef> = {
   helipad,
 };
 
-export { prng };

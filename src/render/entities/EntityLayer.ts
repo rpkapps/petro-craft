@@ -12,6 +12,10 @@ import { createGhost } from './ghost';
 import { MaterialLib } from './materials';
 import { RIG_BUSY } from './models/rigSpecs';
 import { registerAllModels } from './models';
+import { clearTemplates } from './models/registry';
+import { clearConstructionTemplates } from './status/construction';
+import { clearRuinTemplates } from './status/ruin';
+import { clearVehicleTemplates } from './vehicles/templates';
 import { WorkerCrowd } from './npc/Workers';
 import { TrafficManager } from './vehicles/TrafficManager';
 import { WeatherFx } from './weather/WeatherFx';
@@ -47,6 +51,7 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
   private readonly dirty = new Set<string>();
   private readonly rigWells = new Map<string, WellState>();
   private readonly frustum = new THREE.Frustum();
+  private readonly burning = new Set<string>();
   private readonly projScreen = new THREE.Matrix4();
   private time = 0;
   private simTime = 0;
@@ -167,13 +172,16 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
     this.projScreen.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
 
-    const burning = new Set<string>();
+    const burning = this.burning;
+    burning.clear();
     for (const f of s.hazards.fires) if (f.buildingId) burning.add(f.buildingId);
     const night = this.lib.night;
+    const fog = this.host.scene.fog;
+    const cull = fog instanceof THREE.Fog ? fog.far + 12 : Infinity;
     for (const v of this.views.values()) {
       const b = s.buildings[v.id];
       if (!b) continue;
-      v.update(sdt, this.simTime, b, cam, this.frustum);
+      v.update(sdt, this.simTime, b, cam, this.frustum, cull);
       v.mem.hazardFire = burning.has(v.id) ? 1 : 0;
       this.fx.buildingFx(v, b, dt, night);
     }
@@ -196,5 +204,9 @@ export class EntityLayerImpl implements EntityLayer, EntityLayerDebug {
     this.root.removeFromParent();
     if (this.host.buildingPreview) this.host.buildingPreview = null;
     this.lib.dispose();
+    clearTemplates();
+    clearConstructionTemplates();
+    clearRuinTemplates();
+    clearVehicleTemplates();
   }
 }

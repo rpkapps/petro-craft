@@ -2,7 +2,7 @@
 // occupancy blocks of buildings (vehicles drive "through" footprints rather than over roofs),
 // with a small per-cell cache refreshed every couple of seconds.
 import { B } from '../../../core/blocks';
-import { SEA_LEVEL } from '../../../core/constants';
+import { CHUNK_SIZE, SEA_LEVEL } from '../../../core/constants';
 import type { GameContext } from '../../../core/types';
 
 export class Terrain {
@@ -29,7 +29,10 @@ export class Terrain {
     const w = this.ctx.world;
     let y: number;
     if (ix < 0 || iz < 0 || ix >= w.sizeX || iz >= w.sizeZ) y = SEA_LEVEL + 1;
-    else {
+    else if (!w.isChunkGenerated(Math.floor(ix / CHUNK_SIZE), Math.floor(iz / CHUNK_SIZE))) {
+      // never force chunk generation for presentation: use the natural surface
+      y = this.ctx.geology.surfaceHeight(ix, iz);
+    } else {
       y = w.getSurfaceY(ix, iz);
       let guard = 48;
       while (y > 1 && guard-- > 0 && w.getBlock(ix, y - 1, iz) === B.STRUCTURE) y--;
@@ -53,7 +56,12 @@ export class Terrain {
     return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz;
   }
 
+  /** Open water at (x, z); beyond the map edge counts as open sea. */
   isWater(x: number, z: number): boolean {
-    return this.ctx.geology.waterDepth(Math.floor(x), Math.floor(z)) > 0.5 && this.ground(x, z) <= SEA_LEVEL;
+    const ix = Math.floor(x);
+    const iz = Math.floor(z);
+    const w = this.ctx.world;
+    if (ix < 0 || iz < 0 || ix >= w.sizeX || iz >= w.sizeZ) return true;
+    return this.ctx.geology.waterDepth(ix, iz) > 0.5 && this.ground(x, z) <= SEA_LEVEL;
   }
 }

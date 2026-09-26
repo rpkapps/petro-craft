@@ -285,7 +285,7 @@ export class MarketPanel extends Panel {
 export function eventCard(e: MarketEvent, day: number): HTMLElement {
   const left = Math.max(0, e.endDay - day);
   const sev = e.severity === 'crisis' ? 'danger' : e.severity === 'major' ? 'warn' : 'info';
-  return h(`div.mk-event.${sev}`,
+  return h(`div.mk-event.sev-${sev}`,
     h('div.row', h('div.mk-evtitle.grow', e.title), chip(e.severity, sev === 'warn' ? 'warn' : sev)),
     h('div.mk-evdesc', e.description),
     h('div.mk-effects', Object.entries(e.effects).map(([k, m]) => h(`span.mk-eff.${m >= 1 ? 'up' : 'down'}`, icon(m >= 1 ? 'tri-up' : 'tri-down'), `${ITEMS[k]?.name ?? k} ${m >= 1 ? '+' : '−'}${Math.abs(Math.round((m - 1) * 100))}%`))),

@@ -233,9 +233,11 @@ export class TopBar {
   }
 }
 
+let markSeq = 0;
 function logoMark(): SVGSVGElement {
+  const id = `lmg${++markSeq}`;
   const w = document.createElement('div');
-  w.innerHTML = `<svg viewBox="0 0 32 32" class="logo-mark"><defs><linearGradient id="lmg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc07a"/><stop offset="1" stop-color="#ff6a00"/></linearGradient></defs><path d="M16 2 28.1 9v14L16 30 3.9 23V9z" fill="#161c24" stroke="url(#lmg)" stroke-width="1.6"/><path d="M16 8c3.2 4 5.2 6.8 5.2 9.4a5.2 5.2 0 0 1-10.4 0C10.8 14.8 12.8 12 16 8z" fill="url(#lmg)"/><path d="M13.6 17.8a2.6 2.6 0 0 0 2.4 2.4" stroke="#fff" stroke-opacity=".7" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`;
+  w.innerHTML = `<svg viewBox="0 0 32 32" class="logo-mark"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc07a"/><stop offset="1" stop-color="#ff6a00"/></linearGradient></defs><path d="M16 2 28.1 9v14L16 30 3.9 23V9z" fill="#161c24" stroke="url(#${id})" stroke-width="1.6"/><path d="M16 8c3.2 4 5.2 6.8 5.2 9.4a5.2 5.2 0 0 1-10.4 0C10.8 14.8 12.8 12 16 8z" fill="url(#${id})"/><path d="M13.6 17.8a2.6 2.6 0 0 0 2.4 2.4" stroke="#fff" stroke-opacity=".7" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`;
   return w.firstChild as SVGSVGElement;
 }
 export { logoMark };

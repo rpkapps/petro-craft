@@ -169,7 +169,7 @@ function buildVehicleScene(): void {
   addBuilding(ctx, 'export_terminal', 110, LAND_Y, COAST_Z - 10, 0, { utilization: 1 });
   addBuilding(ctx, 'production_platform', 90, 63, COAST_Z + 30);
   for (const id of ['field_office', 'maintenance_depot', 'warehouse']) {
-    const b = addBuilding(ctx, id, 70 + Math.random() * 10, LAND_Y, 40 + Math.random() * 10);
+    const b = addBuilding(ctx, id, 64 + ['field_office', 'maintenance_depot', 'warehouse'].indexOf(id) * 9, LAND_Y, 40);
     b.workers = ['a', 'b', 'c', 'd', 'e'];
   }
   ctx.state.surveys.s1 = { id: 's1', kind: '2d', x0: 20, z0: 30, x1: 120, z1: 30, status: 'in_progress', progress: 0.4, quality: 1, fluidIndicators: false, startedDay: 1, cost: 0, name: 'Line 1' };

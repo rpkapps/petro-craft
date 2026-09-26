@@ -111,7 +111,7 @@ export class ToastStack {
       return;
     }
     const el = h(
-      `div.pc-toast.${level}${opts.onClick ? '.clickable' : ''}`,
+      `div.pc-toast.lv-${level}${opts.onClick ? '.clickable' : ''}`,
       h('div.t-icon', icon(opts.icon ?? LEVEL_ICON[level])),
       h('div.t-main', h('div.t-title', title, h('span.t-count')), text ? h('div.t-text', text) : null),
       h('div.t-timer'),

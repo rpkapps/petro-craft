@@ -166,8 +166,8 @@ export class MenuBackground {
       g.fillStyle = '#120d1c';
       g.fillRect(0, base, LW, H - base);
       const col = '#130e1d';
-      const x0 = LW * 0.56;
-      const span = LW * 0.4;
+      const x0 = LW * 0.5;
+      const span = LW * 0.38;
       const unit = H * 0.01;
       g.fillStyle = col;
       // distillation towers
@@ -213,7 +213,7 @@ export class MenuBackground {
         this.lights.push({ x: x - this.margin, y: base - unit * 42.5, r: unit * 0.45, color: '#ff3b30', phase: R() * 6, speed: 1.6, blink: true, layer: 1 });
       }
       // flare stack
-      const fxp = x0 + span * 0.99;
+      const fxp = x0 + span * 0.97;
       g.fillRect(fxp - unit * 0.5, base - unit * 36, unit * 1, unit * 36);
       for (let k = 0; k < 6; k++) {
         g.beginPath();
@@ -252,8 +252,8 @@ export class MenuBackground {
       for (let i = 0; i < 16; i++) this.lights.push({ x: rx - this.margin + (R() - 0.5) * H * 0.06, y: base - H * (0.02 + R() * 0.2), r: H * 0.0016, color: '#fff1c8', phase: R() * 6, speed: 0.4 + R(), layer: 2 });
       // small flare on the left
       g.fillStyle = col;
-      g.fillRect(LW * 0.035, base - H * 0.12, H * 0.006, H * 0.12);
-      this.flares.push({ x: LW * 0.035 + H * 0.003 - this.margin, y: base - H * 0.12, size: H * 0.02, layer: 2, phase: R() * 10 });
+      g.fillRect(LW * 0.2, base - H * 0.14, H * 0.006, H * 0.14);
+      this.flares.push({ x: LW * 0.2 + H * 0.003 - this.margin, y: base - H * 0.14, size: H * 0.022, layer: 2, phase: R() * 10 });
     }
     // layer 3: foreground ground + pipeline + pumpjack posts
     const l3 = mk();

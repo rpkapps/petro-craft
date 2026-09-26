@@ -16,7 +16,7 @@ export const PARTICLE_CAPACITY: Record<Quality, number> = { low: 3000, medium: 7
 /** Emission multiplier per quality. */
 export const EMISSION_SCALE: Record<Quality, number> = { low: 0.35, medium: 0.65, high: 1 };
 export const RAIN_DROPS: Record<Quality, number> = { low: 1800, medium: 4000, high: 8000 };
-export const SNOW_FLAKES: Record<Quality, number> = { low: 1500, medium: 3000, high: 6000 };
-/** Real point lights kept in the scene (constant count avoids shader recompiles). */
-export const MAX_POINT_LIGHTS = 8;
+export const SNOW_FLAKES: Record<Quality, number> = { low: 2500, medium: 5000, high: 9000 };
+/** Real point lights kept in the scene per quality (constant count avoids shader recompiles). */
+export const POINT_LIGHTS: Record<Quality, number> = { low: 3, medium: 5, high: 8 };
 export const MAX_WORKERS = 60;

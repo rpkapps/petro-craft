@@ -22,6 +22,10 @@ import { SelectionBox } from './helpers/SelectionBox';
 import { CameraShake } from './helpers/CameraShake';
 
 const UNDERWATER_FOG = new THREE.Color(0.018, 0.1, 0.12);
+const WATER_SHALLOW = new THREE.Color(0.04, 0.26, 0.32);
+const WATER_DEEP = new THREE.Color(0.008, 0.05, 0.12);
+const WATER_SHALLOW_GREY = new THREE.Color(0.2, 0.26, 0.28);
+const WATER_DEEP_GREY = new THREE.Color(0.05, 0.07, 0.09);
 const MAX_PIXEL_RATIO = 1.5;
 
 export class RenderEngine implements Renderer {
@@ -64,6 +68,8 @@ export class RenderEngine implements Renderer {
   private disposed = false;
   private sunOnlyDir = new THREE.Vector3();
   private progressCache = 0;
+  private tmpColor = new THREE.Color();
+  private tmpVec = new THREE.Vector3();
 
   constructor(readonly canvas: HTMLCanvasElement, private ctx: GameContext) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false, preserveDrawingBuffer: false });
@@ -114,7 +120,7 @@ export class RenderEngine implements Renderer {
     this.offBus.push(
       ctx.bus.on('weather:lightning', (e) => this.onLightning(e.x, e.z)),
       ctx.bus.on('hazard:explosion', (e) => {
-        const d = this.camera.position.distanceTo(new THREE.Vector3(e.x, e.y, e.z));
+        const d = this.camera.position.distanceTo(this.tmpVec.set(e.x, e.y, e.z));
         const k = Math.max(0, 1 - d / (40 + e.power * 20));
         if (k > 0) this.shake(k * Math.min(3, 0.6 + e.power * 0.4), 0.4 + k * 0.8);
       }),
@@ -151,6 +157,18 @@ export class RenderEngine implements Renderer {
 
   shake(intensity: number, duration?: number) {
     this.shakeFx.add(intensity, duration);
+  }
+
+  // ---- extras (not part of RenderHost; duck-typed by other presentation modules) --------------
+
+  /** First y with open sky above at a world column (0 if the chunk is not loaded). E.g. rain occlusion. */
+  skyHeightAt(x: number, z: number): number {
+    return this.chunks.columnTop(Math.floor(x), Math.floor(z));
+  }
+
+  /** True when the camera is below a water surface (underwater post-processing is active). */
+  get isUnderwater(): boolean {
+    return this.underwater > 0.5;
   }
 
   // ---- frame ----------------------------------------------------------------------------------
@@ -338,8 +356,8 @@ export class RenderEngine implements Renderer {
     u.uEmissive.value = 2.4 + nightGlow * 1.6;
     u.uCaveAmbient.value.setRGB(0.012, 0.014, 0.02);
     // water tint follows the sky a little (overcast → greyer)
-    u.uWaterShallow.value.setRGB(0.04, 0.26, 0.32).lerp(new THREE.Color(0.2, 0.26, 0.28), a.overcast * 0.6);
-    u.uWaterDeep.value.setRGB(0.008, 0.05, 0.12).lerp(new THREE.Color(0.05, 0.07, 0.09), a.overcast * 0.5);
+    u.uWaterShallow.value.copy(WATER_SHALLOW).lerp(WATER_SHALLOW_GREY, a.overcast * 0.6);
+    u.uWaterDeep.value.copy(WATER_DEEP).lerp(WATER_DEEP_GREY, a.overcast * 0.5);
 
     const sk = this.sky.uniforms;
     sk.uSunGlow.value.copy(a.sunGlow);
@@ -357,8 +375,8 @@ export class RenderEngine implements Renderer {
     if (this.underwater > 0) {
       const k = this.underwater;
       const lightK = 0.25 + 0.75 * a.daylight;
-      const fog = UNDERWATER_FOG.clone().multiplyScalar(lightK);
-      u.uFogColor.value.lerp(fog, k);
+      this.tmpColor.copy(UNDERWATER_FOG).multiplyScalar(lightK);
+      u.uFogColor.value.lerp(this.tmpColor, k);
       u.uFogSunColor.value.multiplyScalar(1 - k);
       u.uFogNear.value = THREE.MathUtils.lerp(a.fogNear, 0.5, k);
       u.uFogFar.value = THREE.MathUtils.lerp(a.fogFar, 26, k);

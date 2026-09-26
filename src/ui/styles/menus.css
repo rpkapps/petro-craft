@@ -15,7 +15,7 @@
 .pc-root .mn-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .pc-root .mn-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 80% 70% at 60% 45%, transparent 40%, rgba(0, 0, 0, 0.55) 100%), linear-gradient(90deg, rgba(3, 4, 8, 0.82) 0%, rgba(3, 4, 8, 0.45) 32%, transparent 55%); }
 .pc-root .mn-vignette.strong { background: radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.7) 100%), linear-gradient(0deg, rgba(3, 4, 8, 0.9) 0%, transparent 45%); }
-.pc-root .mn-grain { position: absolute; inset: -50%; pointer-events: none; background-image: var(--noise); opacity: 0.06; animation: pc-grain 1.2s steps(6) infinite; mix-blend-mode: overlay; }
+.pc-root .mn-grain { position: absolute; inset: -50%; pointer-events: none; background-image: var(--noise); opacity: 0.035; animation: pc-grain 1.2s steps(6) infinite; }
 @keyframes pc-grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -3%); } 60% { transform: translate(-2%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(0, 0); } }
 
 .pc-root .mn-content { position: absolute; left: 6vw; top: 0; bottom: 3.5rem; display: flex; flex-direction: column; justify-content: center; gap: 2.6rem; width: min(40rem, 88vw); }
@@ -137,8 +137,8 @@
   text-align: left;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.75rem 0.8rem;
+  gap: 0.2rem;
+  padding: 0.6rem 0.75rem;
   border-radius: var(--r-md);
   border: 1px solid var(--line-2);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
@@ -153,7 +153,9 @@
 .pc-root .opt-card.on { border-color: var(--accent); background: linear-gradient(180deg, rgba(255, 138, 31, 0.2), rgba(255, 138, 31, 0.05)); box-shadow: 0 0 0 1px rgba(255, 138, 31, 0.35), 0 0 1.4rem rgba(255, 138, 31, 0.15); }
 .pc-root .opt-card.on::after { content: ''; position: absolute; top: 0.55rem; right: 0.55rem; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0.6rem var(--accent); }
 .pc-root .opt-card .oc-ic { color: var(--accent); }
-.pc-root .opt-card .oc-ic .ic { width: 1.5rem; height: 1.5rem; }
+.pc-root .opt-card .oc-ic { position: absolute; right: 0.8rem; top: 0.7rem; opacity: 0.85; }
+.pc-root .opt-card .oc-ic .ic { width: 1.3rem; height: 1.3rem; }
+.pc-root .opt-card.on .oc-ic { right: 1.7rem; }
 .pc-root .opt-card .oc-t { font-family: var(--f-head); font-weight: 700; font-size: 1.1rem; letter-spacing: 0.05em; text-transform: uppercase; }
 .pc-root .opt-card .oc-v { font-family: var(--f-mono); font-size: 0.8rem; color: var(--accent-2); }
 .pc-root .opt-card .oc-d { font-size: 0.72rem; color: var(--text-dim); line-height: 1.35; }
@@ -176,7 +178,7 @@
 .pc-root .sv-meta { display: flex; gap: 0.8rem; font-size: 0.72rem; color: var(--text-dim); flex-wrap: wrap; }
 .pc-root .sv-meta span { display: inline-flex; gap: 0.25rem; align-items: center; }
 .pc-root .sv-meta .ic { width: 0.8rem; height: 0.8rem; }
-.pc-root .sv-actions { display: flex; gap: 0.35rem; padding: 0 0.75rem 0.7rem; }
+.pc-root .sv-actions { display: flex; gap: 0.35rem; padding: 0 0.75rem 0.7rem; margin-top: auto; }
 
 .pc-root .credits { text-align: center; display: flex; flex-direction: column; gap: 1.2rem; align-items: center; padding: 1rem 0; }
 .pc-root .credits h4 { margin: 0; font-family: var(--f-head); font-size: 0.8rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--accent); }

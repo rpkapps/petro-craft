@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { RenderHost } from '../../../core/client';
 import type { GameContext } from '../../../core/types';
+import type { LightPool } from '../fx/LightPool';
 
 interface Bolt {
   mesh: THREE.Mesh;
@@ -78,20 +79,23 @@ function boltGeometry(path: Seg[], width: number): THREE.BufferGeometry {
 export class Lightning {
   readonly group = new THREE.Group();
   private readonly bolts: Bolt[] = [];
-  private readonly light: THREE.PointLight;
   private readonly flash: THREE.AmbientLight;
+  private readonly lightPos = new THREE.Vector3();
   private readonly coreMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xeef3ff).multiplyScalar(4), toneMapped: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   private readonly glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x8fb0ff), toneMapped: false, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending });
   private flashLevel = 0;
 
-  constructor(private readonly host: RenderHost, private readonly ctx: GameContext) {
-    this.light = new THREE.PointLight(0xdfe8ff, 0, 260, 1.4);
+  constructor(private readonly host: RenderHost, private readonly ctx: GameContext, private readonly lights: LightPool) {
     this.flash = new THREE.AmbientLight(0xcad6ff, 0);
-    this.group.add(this.light, this.flash);
+    this.group.add(this.flash);
   }
 
   strike(x: number, z: number): void {
-    const ground = this.ctx.world.getSurfaceY(Math.floor(x), Math.floor(z));
+    const w = this.ctx.world;
+    const ix = Math.floor(x);
+    const iz = Math.floor(z);
+    const inside = ix >= 0 && iz >= 0 && ix < w.sizeX && iz < w.sizeZ;
+    const ground = !inside ? 64 : w.isChunkGenerated(Math.floor(ix / 16), Math.floor(iz / 16)) ? w.getSurfaceY(ix, iz) : this.ctx.geology.surfaceHeight(ix, iz);
     const top = new THREE.Vector3(x + (Math.random() - 0.5) * 20, ground + 95, z + (Math.random() - 0.5) * 20);
     const bottom = new THREE.Vector3(x + 0.5, ground, z + 0.5);
     const path = boltPath(top, bottom);
@@ -126,12 +130,12 @@ export class Lightning {
       b.mesh.visible = b.glow.visible = on;
       if (on) {
         lightI = Math.max(lightI, 1 - k * 0.6);
-        this.light.position.copy(b.pos);
+        this.lightPos.copy(b.pos);
       }
     }
-    this.light.intensity = lightI * 60000;
+    if (lightI > 0) this.lights.offer(this.lightPos.x, this.lightPos.y, this.lightPos.z, 0xdfe8ff, lightI * 60000, 260, this.host.camera.position, 1000);
     this.flashLevel = Math.max(0, this.flashLevel - dt * 2.8);
-    this.flash.intensity = (lightI > 0 ? 1 : 0.35) * this.flashLevel * 2.2;
+    this.flash.intensity = (lightI > 0 ? 1 : 0.35) * this.flashLevel * 1.1;
   }
 
   dispose(): void {
@@ -141,7 +145,6 @@ export class Lightning {
     }
     this.coreMat.dispose();
     this.glowMat.dispose();
-    this.light.dispose();
     this.group.removeFromParent();
   }
 }

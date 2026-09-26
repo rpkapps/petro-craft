@@ -31,7 +31,7 @@ export function sparkline(w = 88, hgt = 24, color = '#ff8a1f', fill = true): Spa
       if (data.length < 2) {
         setAttr(line, 'd', '');
         setAttr(area, 'd', '');
-        setAttr(dot, 'cx', -10);
+        setAttr(dot, 'r', 0);
         return;
       }
       let min = Infinity;
@@ -43,6 +43,7 @@ export function sparkline(w = 88, hgt = 24, color = '#ff8a1f', fill = true): Spa
       const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join('');
       setAttr(line, 'd', d);
       setAttr(area, 'd', `${d}L${pts[pts.length - 1][0].toFixed(1)} ${hgt}L${pts[0][0].toFixed(1)} ${hgt}Z`);
+      setAttr(dot, 'r', 2);
       setAttr(dot, 'cx', pts[pts.length - 1][0].toFixed(1));
       setAttr(dot, 'cy', pts[pts.length - 1][1].toFixed(1));
     },

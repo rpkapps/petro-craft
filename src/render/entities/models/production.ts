@@ -1,6 +1,6 @@
 // Production facilities: flare stack, evaporation pit, disposal well, water treatment plant.
 import type { Builder } from '../geom/Builder';
-import { hVessel, ladder, lampPost, platform, pumpSkid, railing, shed, tank } from '../geom/parts';
+import { deckRing, hVessel, ladder, lampPost, platform, pumpSkid, railing, ringRail, shed, tank } from '../geom/parts';
 import { C } from '../palette';
 import { fence, fillFraction } from './common';
 import type { ModelDef } from './types';
@@ -16,8 +16,8 @@ export function flareTower(b: Builder, x: number, z: number, y0: number, top: nu
   b.cyl(x, top - 0.3, z, r * 0.95, 0.3, C.RUST, 'metal', 12, r * 1.05);
   b.pipe([x + r * 0.9, y0 + 0.5, z], [x + r * 0.9, top - 0.2, z], 0.04, C.STEEL, 'metal', 5);
   // platform & ladder near the top
-  b.ring(x, top - 1.6, z, r + 0.45, 0.35, C.STEEL_DARK, 'metal', 14);
-  b.detail(() => b.ring(x, top - 0.6, z, r + 0.75, 0.035, C.HAZARD, 'paint', 14));
+  deckRing(b, x, top - 1.6, z, r + 0.8, 0.7);
+  ringRail(b, x, top - 1.6, z, r + 0.75);
   ladder(b, x - r - 0.1, y0 + 0.4, z, h - 2.0, 0, true);
   b.box(x + r + 0.1, top - 0.9, z, 0.12, 0.12, 0.12, C.LAMP_RED, 'blink');
 }
@@ -156,4 +156,3 @@ const water_treatment: ModelDef = {
 };
 
 export const PRODUCTION_MODELS: Record<string, ModelDef> = { flare_stack, water_pit, disposal_well, water_treatment };
-export { platform };

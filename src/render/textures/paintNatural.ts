@@ -464,9 +464,9 @@ export const paintCoral: Painter = (p, pal) => {
     const c = pal[cell % pal.length];
     const [cx, cy] = v.pts[cell];
     const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
-    if (d < 2.4) p.set(x, y, shade(mixc(c, WHITE, 0.15), 1.1 - d * 0.12));
-    if (d < 0.9) p.set(x, y, shade(c, 0.45));
-    if (v.edge[i] < 0.6) p.blend(x, y, shade(base, 0.6), 0.5);
+    if (d < 2.6) p.set(x, y, shade(mixc(c, WHITE, 0.12), 1.12 - d * 0.14));
+    if (d < 1.0 && x + 0.5 < cx && y + 0.5 < cy) p.blend(x, y, WHITE, 0.45);
+    if (v.edge[i] < 0.6) p.blend(x, y, shade(base, 0.7), 0.4);
   });
 };
 

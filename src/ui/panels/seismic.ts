@@ -190,7 +190,7 @@ export class SeismicPanel extends Panel {
       d[i * 4] = r;
       d[i * 4 + 1] = gg;
       d[i * 4 + 2] = b;
-      d[i * 4 + 3] = img.data[i] === 0 && !f ? 60 : 255;
+      d[i * 4 + 3] = img.data[i] === 0 && !f ? 0 : 255;
     }
     g.putImageData(out, 0, 0);
   }
@@ -303,6 +303,22 @@ export class SeismicPanel extends Panel {
     }
     g.fillText(`Distance along line (${lengthUnit(units)})`, padL + gw / 2, padT + gh + 20);
     // wells projected onto the section
+    // ground / seabed profile
+    const geo = this.ui.game.geology;
+    const span = img.topY - img.bottomY || 1;
+    g.strokeStyle = '#7fc25a';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    const stepC = Math.max(1, Math.floor(img.columns.length / 300));
+    for (let i = 0; i < img.columns.length; i += stepC) {
+      const c = img.columns[i];
+      let sy = img.topY;
+      try { sy = geo.surfaceHeight(Math.floor(c.x), Math.floor(c.z)); } catch { /* ignore */ }
+      const x = padL + (i / Math.max(1, img.columns.length - 1)) * gw;
+      const y = padT + ((img.topY - sy) / span) * gh;
+      if (i) g.lineTo(x, y); else g.moveTo(x, y);
+    }
+    g.stroke();
     if (this.showWells) this.drawWells(g, img, padL, padT, gw, gh);
     // crosshair
     const hv = this.hover;

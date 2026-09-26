@@ -120,9 +120,8 @@ export class ShipTraffic {
     const leaving = bt.state === 'leave';
     const sign = leaving ? bt.leaveSign : bt.arriveSign;
     // position: arriving moves along arriveSign·dir; leaving along leaveSign·dir from the berth
-    const s = leaving ? bt.s : bt.s;
-    const x = bt.pos.x + bt.dir.x * s * sign;
-    const z = bt.pos.z + bt.dir.z * s * sign;
+    const x = bt.pos.x + bt.dir.x * bt.s * sign;
+    const z = bt.pos.z + bt.dir.z * bt.s * sign;
     bt.bob += dt;
     const y = bt.pos.y + Math.sin(bt.bob * 0.6) * 0.06;
     // bow points along arriveSign·dir; a reversing ship keeps its heading

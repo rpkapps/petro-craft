@@ -39,6 +39,7 @@ export class WellPanel extends Panel {
   private schematic!: HTMLCanvasElement;
   private logs!: HTMLCanvasElement;
   private logsCard!: HTMLElement;
+  private chartCard!: HTMLElement;
   private controls!: HTMLElement;
   private controlsSig = '';
   private patchers: (() => void)[] = [];
@@ -88,7 +89,7 @@ export class WellPanel extends Panel {
       this.limit,
       h('div.wl-grid',
         h('div.col', { style: 'gap:.8rem;min-width:0' },
-          h('div.card.wl-chartcard', h('div.row', h('div.section-title.grow', { style: 'margin:0' }, icon('chart'), 'Production history'), scale.el), h('div.wl-chart', this.chart.el)),
+          this.chartCard = h('div.card.wl-chartcard', h('div.row', h('div.section-title.grow', { style: 'margin:0' }, icon('chart'), 'Production history'), scale.el), h('div.wl-chart', this.chart.el)),
           this.logsCard),
         h('div.card.wl-schemcard', h('div.section-title', icon('wells'), 'Schematic'), h('div.wl-schembox', this.schematic)),
         h('div.wl-side', this.controls)));
@@ -137,7 +138,11 @@ export class WellPanel extends Panel {
       const opTxt = h('div.small.dim');
       const bit = bar(0, 'ok');
       const bitTxt = h('span.mono.small');
-      card.append(h('div.row.between', h('span.label', 'Measured depth'), progTxt), prog, opTxt, h('div.row.between', { style: 'margin-top:.6rem' }, h('span.label', 'Bit condition'), bitTxt), bit);
+      card.append(h('div.row.between', h('span.label', 'Depth (MD)'), progTxt), prog, opTxt, h('div.row.between', { style: 'margin-top:.6rem' }, h('span.label', 'Bit condition'), bitTxt), bit);
+      if (s === 'planned') card.appendChild(h('div', { style: 'margin-top:.7rem' }, button('Spud well', { icon: 'play', variant: 'primary', block: true, onClick: () => {
+        const r = this.ui.dispatch({ type: 'well/spud', wellId: this.wellId }, { successSound: 'success' });
+        if (r.ok) this.ui.toast('success', `Spudded ${w.name}`, undefined, { icon: 'rig' });
+      } })));
       this.patchers.push(() => {
         const x = this.w;
         if (!x) return;
@@ -161,7 +166,7 @@ export class WellPanel extends Panel {
         h('div.wl-mudbox', mw),
         h('div.wl-mudkey', h('span', h('i', { style: { background: '#4ea8ff' } }), 'Pore'), h('span', h('i', { style: { background: '#ff4d4f' } }), 'Fracture'), h('span', h('i', { style: { background: '#3ddc84' } }), 'Mud')),
         field('Mud weight', mwSlider.el),
-        h('div.row', { style: 'margin-top:.5rem' }, button('Run casing now', { icon: 'pipe', size: 'sm', disabled: s !== 'drilling', onClick: () => this.ui.dispatch({ type: 'well/runCasing', wellId: this.wellId }, { successSound: 'success' }) }), h('span.tiny.dim', 'Sets casing at the current depth.')));
+        h('div.col', { style: 'margin-top:.5rem;gap:.3rem' }, button('Run casing now', { icon: 'pipe', size: 'sm', block: true, disabled: s !== 'drilling', onClick: () => this.ui.dispatch({ type: 'well/runCasing', wellId: this.wellId }, { successSound: 'success' }) }), h('span.tiny.dim', 'Sets and cements a casing string at the current depth.')));
       let mwSig = '';
       this.patchers.push(() => {
         const x = this.w;
@@ -378,8 +383,9 @@ export class WellPanel extends Panel {
     const up = this.up();
     toggleClass(this.limit, 'hidden', !up.limit && !up.lostCirc);
     setText(this.limit.lastElementChild, up.lostCirc ? 'Lost circulation — mud weight exceeds the fracture gradient. Lower the mud weight.' : up.limit ?? '');
-    // chart
+    // chart (hidden until the well has produced)
     const hist = w.history;
+    toggleClass(this.chartCard, 'hidden', hist.length === 0 && !['producing', 'shut_in', 'injecting'].includes(w.status));
     this.chart.setData([
       { name: 'Oil (bbl/d)', color: '#ff9f43', data: hist.map((r) => r[1]), fill: true, format: (v) => oilRate(v, u) },
       { name: 'Gas (mcf/d)', color: '#6fc3ff', data: hist.map((r) => r[2]), format: (v) => gasRate(v, u) },

@@ -1,6 +1,7 @@
 // Procedural model builder. Models are authored with simple primitives in a local frame
 // (x ∈ [-w/2, w/2], z ∈ [-d/2, d/2], y = 0 at pad level, 1 unit = 1 block) and baked into one merged
-// geometry per (node, material kind, detail/shadow flag). Named nodes become separately transformable
+// geometry per (node, material bucket, detail flag). Paint, bare metal, rough and dark-glass parts
+// share one "solid" bucket (per-vertex roughness/metalness), so most nodes are a single draw call. Named nodes become separately transformable
 // Object3Ds for animation (pumpjack beams, rotors, travelling blocks ...).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -74,12 +75,19 @@ const _s = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _col = new THREE.Color();
 
+/** Authoring kinds merged into the 'solid' bucket: [roughness, metalness]. */
+const SURFACE: Partial<Record<MatKind, readonly [number, number]>> = {
+  paint: [0.72, 0.08],
+  metal: [0.4, 0.55],
+  rough: [0.95, 0],
+  glassDark: [0.14, 0.45],
+};
+
 export class Builder {
   private node: BNode;
   private readonly rootNode: BNode;
   private stack: THREE.Matrix4[] = [new THREE.Matrix4()];
   private detailDepth = 0;
-  private noShadowDepth = 0;
   private readonly anchors: AnchorDef[] = [];
   private readonly nodeWorld = new Map<BNode, THREE.Matrix4>();
   private readonly allNodes = new Map<string, BNode>();
@@ -150,13 +158,6 @@ export class Builder {
     this.detailDepth--;
     return this;
   }
-  /** Parts added inside fn do not cast shadows. */
-  noShadow(fn: () => void): this {
-    this.noShadowDepth++;
-    fn();
-    this.noShadowDepth--;
-    return this;
-  }
 
   /** Create a named, separately transformable node pivoting at (x,y,z) in the current frame. */
   group(name: string, x: number, y: number, z: number, fn: () => void): this {
@@ -178,11 +179,13 @@ export class Builder {
   // ---- core part insertion -----------------------------------------------------------------------
   private add(proto: THREE.BufferGeometry, local: THREE.Matrix4, color: number, kind: MatKind): void {
     const detail = this.detailDepth > 0;
-    const shadow = this.noShadowDepth === 0 && !detail && kind !== 'lamp' && kind !== 'blink' && kind !== 'hot' && kind !== 'liquid';
-    const key = `${kind}|${detail ? 1 : 0}|${shadow ? 1 : 0}`;
+    const surf = SURFACE[kind];
+    const bucketKind: MatKind = surf ? 'solid' : kind;
+    const shadow = !detail && (bucketKind === 'solid' || bucketKind === 'glass');
+    const key = `${bucketKind}|${detail ? 1 : 0}`;
     let b = this.node.buckets.get(key);
     if (!b) {
-      b = { kind, detail, shadow, geos: [] };
+      b = { kind: bucketKind, detail, shadow, geos: [] };
       this.node.buckets.set(key, b);
     }
     const g = proto.clone();
@@ -196,6 +199,14 @@ export class Builder {
       arr[i * 3 + 2] = _col.b;
     }
     g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    if (surf) {
+      const sa = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        sa[i * 2] = surf[0];
+        sa[i * 2 + 1] = surf[1];
+      }
+      g.setAttribute('surf', new THREE.BufferAttribute(sa, 2));
+    }
     b.geos.push(g);
   }
 

@@ -40,7 +40,7 @@ export class SettingsPanel extends Panel {
   private bindBtns = new Map<string, HTMLButtonElement>();
 
   constructor(ui: UIHost, args: PanelArgs) {
-    super(ui, args, 'Settings', 'settings', 'md');
+    super(ui, args, 'Settings', 'settings', 'lg');
     if (typeof args.tab === 'string') this.tab = args.tab as Tab;
   }
 

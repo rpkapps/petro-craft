@@ -197,4 +197,3 @@ const frac_spread: ModelDef = {
 };
 
 export const DRILLING_MODELS: Record<string, ModelDef> = { drilling_rig_land, drilling_rig_heavy, frac_spread };
-export { pumpSkid };

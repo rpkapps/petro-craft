@@ -51,6 +51,7 @@ export class EnvironmentPanel extends Panel {
 
   constructor(ui: UIHost, args: PanelArgs) {
     super(ui, args, 'Environment & Safety', 'leaf', 'lg');
+    this.el.classList.add('auto-h');
   }
 
   protected build() {
@@ -60,7 +61,7 @@ export class EnvironmentPanel extends Panel {
     this.trendTxt = h('div.small.dim');
     this.violations = h('div.env-viol');
     this.banner = h('div.banner.hidden', icon('ban'), h('span'));
-    const names: [string, IconName, string][] = [['Emissions today', 'co2', '#94a3b8'], ['Flared today', 'flare', '#ff8a1f'], ['Vented today', 'wind', '#ff4d4f'], ['Total emissions', 'globe', '#a78bfa'], ['Fines paid', 'bank', '#ff6a6a'], ['Carbon credits', 'leaf', '#3ddc84']];
+    const names: [string, IconName, string][] = [['Emitted today', 'co2', '#94a3b8'], ['Flared today', 'flare', '#ff8a1f'], ['Vented today', 'wind', '#ff4d4f'], ['Lifetime CO₂', 'globe', '#a78bfa'], ['Fines paid', 'bank', '#ff6a6a'], ['Credits', 'leaf', '#3ddc84']];
     this.k = names.map(([n, i, c]) => kpi(n, i, c));
     const spillBox = h('div.col', { style: 'gap:.4rem' });
     this.spills = new KeyedList<Spill>(spillBox, (s) => s.id, (s0) => {

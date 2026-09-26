@@ -135,6 +135,13 @@ export function latticeBoom(b: Builder, p0: V3, p1: V3, w: number, color: number
   });
 }
 
+/** Flat annular grating platform around a vertical cylinder (outer radius R, ring width wdt) at height y. */
+export function deckRing(b: Builder, x: number, y: number, z: number, R: number, wdt = 0.6, color: number = C.STEEL): void {
+  b.push().translate(x, y - 0.05, z).scale(1, 0.18, 1);
+  b.ring(0, 0, 0, R - wdt / 2, wdt / 2, color, 'metal', 18);
+  b.pop();
+}
+
 /** Circular guard rail (posts + top & knee rails) of radius R standing on height y; optional arc [a0, a1]. */
 export function ringRail(b: Builder, x: number, y: number, z: number, R: number, color: number = C.HAZARD, a0 = 0, a1 = Math.PI * 2): void {
   b.detail(() => {
@@ -317,7 +324,7 @@ export function column(b: Builder, x: number, z: number, y0: number, h: number, 
     for (let y = y0 + 1.5; y < y0 + h - 0.5; y += 0.8) b.ring(x, y, z, r + 0.01, 0.018, C.STEEL_LIGHT, 'metal', 16);
   });
   for (let y = y0 + platformEvery; y < y0 + h - 0.8; y += platformEvery) {
-    b.ring(x, y, z, r + 0.35, 0.3, C.STEEL_DARK, 'metal', 16);
+    deckRing(b, x, y, z, r + 0.65, 0.6);
     b.box(x + r + 0.5, y + 0.4, z + 0.2, 0.12, 0.12, 0.12, C.LAMP_WARM, 'lamp');
     ringRail(b, x, y, z, r + 0.62);
   }
@@ -433,7 +440,7 @@ export function shed(b: Builder, o: ShedOpts): void {
   if (o.door) {
     const cx = (o.x0 + o.x1) / 2;
     const cz = (o.z0 + o.z1) / 2;
-    const dh = 1.9;
+    const dh = Math.max(1.1, Math.min(1.9, o.h - 0.75));
     if (o.door === 'n') door(b, cx, y0, o.z0 - 0.03, 0, dh);
     if (o.door === 's') door(b, cx, y0, o.z1 + 0.03, Math.PI, dh);
     if (o.door === 'w') door(b, o.x0 - 0.03, y0, cz, Math.PI / 2, dh);
@@ -478,7 +485,8 @@ export function stack(b: Builder, x: number, z: number, y0: number, h: number, r
   }
   b.ring(x, y0 + h, z, r * 0.86, 0.05, C.GUNMETAL, 'metal', 14);
   b.box(x + r * 0.9, y0 + h - 0.3, z, 0.14, 0.14, 0.14, C.LAMP_RED, 'blink');
-  b.ring(x, y0 + h * 0.6, z, r * 0.95 + 0.3, 0.2, C.STEEL_DARK, 'metal', 14);
+  deckRing(b, x, y0 + h * 0.6, z, r + 0.55, 0.5);
+  ringRail(b, x, y0 + h * 0.6, z, r + 0.5);
 }
 
 /** Fin-fan (air cooler) bank: raised box with `n` fan shrouds on top. Fans are named nodes `${prefix}${i}`. */

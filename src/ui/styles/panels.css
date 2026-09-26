@@ -12,10 +12,14 @@
 }
 .pc-root .pc-panels.open {
   pointer-events: auto;
-  background: radial-gradient(ellipse at center, rgba(5, 7, 10, 0.35), rgba(5, 7, 10, 0.62));
-  backdrop-filter: blur(2px);
+  background: radial-gradient(ellipse at center, rgba(5, 7, 10, 0.42), rgba(5, 7, 10, 0.7));
 }
 
+.pc-root .pc-panel.glass {
+  background: linear-gradient(180deg, rgba(30, 36, 47, 0.97) 0%, rgba(15, 19, 26, 0.98) 40%, rgba(10, 13, 18, 0.985) 100%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 .pc-root .pc-panel {
   position: absolute;
   display: flex;
@@ -31,6 +35,7 @@
 .pc-root .pc-panel.size-lg { width: 64rem; height: min(46rem, calc(100% - 4.8rem)); }
 .pc-root .pc-panel.size-xl { width: 80rem; height: min(52rem, calc(100% - 4.8rem)); }
 .pc-root .pc-panel.size-full { width: calc(100% - 2.4rem); height: calc(100% - 4.8rem); }
+.pc-root .pc-panel.auto-h { height: auto; }
 .pc-root .pc-panel.covered { visibility: hidden; }
 .pc-root .pc-panel.closing { animation: pc-fade-out 0.16s ease forwards; pointer-events: none; }
 @keyframes pc-fade-out { to { opacity: 0; transform: scale(0.97); } }
@@ -213,7 +218,7 @@
 .pc-root .pc-toasts {
   position: absolute;
   right: 1rem;
-  top: 15.5rem;
+  top: 19rem;
   width: 21rem;
   display: flex;
   flex-direction: column;
@@ -238,9 +243,9 @@
   overflow: hidden;
   animation: pc-slide-in-r 0.35s var(--ease-out);
 }
-.pc-root .pc-toast.success { --tc: var(--ok); }
-.pc-root .pc-toast.warning { --tc: var(--warn); }
-.pc-root .pc-toast.danger { --tc: var(--danger); }
+.pc-root .pc-toast.lv-success { --tc: var(--ok); }
+.pc-root .pc-toast.lv-warning { --tc: var(--warn); }
+.pc-root .pc-toast.lv-danger { --tc: var(--danger); }
 .pc-root .pc-toast.clickable { cursor: pointer; }
 .pc-root .pc-toast.clickable:hover { filter: brightness(1.15); }
 .pc-root .pc-toast.leaving { animation: pc-toast-out 0.26s ease forwards; }

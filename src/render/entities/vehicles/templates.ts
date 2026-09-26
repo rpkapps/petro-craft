@@ -1,9 +1,23 @@
 // Moving-vehicle model templates (built once per company colour, instanced per vehicle).
 import { Builder, type ModelTemplate } from '../geom/Builder';
 import { C } from '../palette';
-import { cab, locomotive, tankCar, tankerTruck, vibroseisBody } from './props';
+import { locomotive, tankCar, tankerTruck, vibroseisBody } from './props';
 
 const cache = new Map<string, ModelTemplate>();
+
+function disposeTemplate(t: ModelTemplate): void {
+  const walk = (n: ModelTemplate['root']) => {
+    for (const m of n.meshes) m.geometry.dispose();
+    n.children.forEach(walk);
+  };
+  walk(t.root);
+}
+
+/** Free every cached vehicle template (layer dispose). */
+export function clearVehicleTemplates(): void {
+  for (const t of cache.values()) disposeTemplate(t);
+  cache.clear();
+}
 
 function cached(key: string, company: string, build: (b: Builder) => void): ModelTemplate {
   const k = `${key}|${company}`;
@@ -122,4 +136,3 @@ export const vibroTemplate = (company: string) =>
     });
   });
 
-export { cab };

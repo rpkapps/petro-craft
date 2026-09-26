@@ -208,7 +208,7 @@ export class ResearchPanel extends Panel {
   private scrollTo(id: string) {
     const n = this.nodes.get(id);
     if (!n) return;
-    n.el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    n.el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
   }
 
   private chain(id: string, acc = new Set<string>()): Set<string> {

@@ -28,7 +28,6 @@ interface Entry {
   version: number;
   meshedVersion: number;
   inflight: number; // job id or 0
-  inflightVersion: number;
   urgent: boolean;
   distSq: number;
 }
@@ -96,7 +95,7 @@ export class ChunkManager {
     return total === 0 ? 1 : done / total;
   }
 
-  /** Highest sky-blocking block + 1 at a world column (0 if unknown). Used by precipitation. */
+  /** Highest sky-blocking block + 1 at a world column (0 if unknown), e.g. for rain occlusion. */
   columnTop(x: number, z: number): number {
     const cx = Math.floor(x / CS);
     const cz = Math.floor(z / CS);
@@ -175,7 +174,7 @@ export class ChunkManager {
         const k = key(cx, cz);
         let e = this.entries.get(k);
         if (!e) {
-          e = { cx, cz, meshes: null, version: 0, meshedVersion: -1, inflight: 0, inflightVersion: -1, urgent: false, distSq: 0 };
+          e = { cx, cz, meshes: null, version: 0, meshedVersion: -1, inflight: 0, urgent: false, distSq: 0 };
           this.entries.set(k, e);
         }
         const ox = cx + 0.5 - px;
@@ -199,9 +198,15 @@ export class ChunkManager {
       e.meshes?.dispose();
       if (e.inflight) this.jobs.delete(e.inflight);
       this.entries.delete(k);
-      const c = this.columns.get(k);
-      // keep column caches for a while only if still near; drop the rest to bound memory
-      if (c && dx * dx + dz * dz > (rd + 6) * (rd + 6)) this.columns.delete(k);
+    }
+    // column caches (heights/emitters) are cheap to keep around, but not forever
+    const far = (rd + 6) * (rd + 6);
+    for (const k of this.columns.keys()) {
+      const cx = Math.floor(k / 65536);
+      const cz = k - cx * 65536;
+      const dx = cx - this.center.cx;
+      const dz = cz - this.center.cz;
+      if (dx * dx + dz * dz > far) this.columns.delete(k);
     }
   }
 
@@ -264,7 +269,6 @@ export class ChunkManager {
     if (!job) return;
     if (!this.pool.submit(job)) return;
     e.inflight = job.id;
-    e.inflightVersion = e.version;
     e.urgent = false;
     this.jobs.set(job.id, { entry: e, version: e.version });
   }

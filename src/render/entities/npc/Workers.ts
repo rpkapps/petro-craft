@@ -87,7 +87,7 @@ export class WorkerCrowd {
       b.box(0, -0.56, 0, 0.11, 0.1, 0.12, C.SKIN, 'paint');
     });
     this.geos.push(torso, head, hat, leg, arm);
-    const mat = lib.get('paint');
+    const mat = lib.get('solid');
     const mk = (g: THREE.BufferGeometry, n: number, colored: boolean) => {
       const m = new THREE.InstancedMesh(g, mat, n);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

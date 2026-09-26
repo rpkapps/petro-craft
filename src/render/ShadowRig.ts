@@ -18,6 +18,8 @@ export class ShadowRig {
   private up = new THREE.Vector3();
   private center = new THREE.Vector3();
   private radius = 56;
+  private worldUp = new THREE.Vector3();
+  private fwd = new THREE.Vector3();
 
   constructor(private renderer: THREE.WebGLRenderer, private light: THREE.DirectionalLight, private uniforms: SharedUniforms) {
     renderer.shadowMap.enabled = true;
@@ -57,12 +59,12 @@ export class ShadowRig {
     if (this.dir.lengthSq() === 0 || this.dir.angleTo(lightDir) > 0.002) this.dir.copy(lightDir);
 
     const d = this.dir;
-    const worldUp = Math.abs(d.y) > 0.99 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+    const worldUp = Math.abs(d.y) > 0.99 ? this.worldUp.set(0, 0, 1) : this.worldUp.set(0, 1, 0);
     this.right.crossVectors(worldUp, d).normalize();
     this.up.crossVectors(d, this.right).normalize();
 
     // centre the map slightly ahead of the camera
-    const fwd = new THREE.Vector3();
+    const fwd = this.fwd;
     camera.getWorldDirection(fwd);
     fwd.y = 0;
     if (fwd.lengthSq() > 1e-6) fwd.normalize();

@@ -149,12 +149,10 @@ function pumpjack(b: Builder): void {
           b.cylZ(PJ.R, 0, z, 0.06, 0.12, C.STEEL_LIGHT, 'metal', 8);
         }
       });
-      // pitman arms (positioned each frame)
-      for (const [i, z] of [-PJ.zArm, PJ.zArm].entries()) {
-        b.group(`pitman${i}`, O.x + PJ.R, O.y, z, () => {
-          b.box(0, PJ.L / 2, 0, 0.07, PJ.L, 0.07, C.GUNMETAL, 'paint');
-        });
-      }
+      // pitman arms (both sides share one transform; positioned each frame)
+      b.group('pitman', O.x + PJ.R, O.y, 0, () => {
+        for (const z of [-PJ.zArm, PJ.zArm]) b.box(0, PJ.L / 2, z, 0.07, PJ.L, 0.07, C.GUNMETAL, 'paint');
+      });
       // bridle cables + carrier bar + polished rod
       b.group('bridle', PJ.P.x + PJ.A, PJ.P.y, 0, () => {
         for (const z of [-0.08, 0.08]) b.box(0, -0.5, z, 0.02, 1, 0.02, C.GUNMETAL, 'metal');
@@ -210,9 +208,8 @@ function animatePumpjack(a: AnimState): void {
   const kx = PJ.O.x + PJ.R * Math.cos(phi);
   const ky = PJ.O.y + PJ.R * Math.sin(phi);
   const ang = Math.atan2(ty - ky, tx - kx) - Math.PI / 2;
-  for (const n of ['pitman0', 'pitman1']) {
-    const p = a.node(n);
-    if (!p) continue;
+  const p = a.node('pitman');
+  if (p) {
     p.position.x = kx;
     p.position.y = ky;
     p.rotation.z = ang;
@@ -274,9 +271,60 @@ function injectorKit(b: Builder): void {
   b.box(-1.2, 1.0, 0.6, 0.3, 0.4, 0.1, C.CREAM, 'paint');
 }
 
+/** Offshore satellite well: caisson from the seabed, small deck with the tree, nav light, boat landing. */
+function wellCaisson(b: Builder, depth: number, plugged: boolean): void {
+  const deck = 2.3;
+  b.cyl(0, -depth - 0.3, 0, 0.5, depth + deck + 0.3, C.HAZARD, 'paint', 12);
+  b.cyl(0, -0.6, 0, 0.53, 1.4, C.GUNMETAL, 'paint', 12);
+  for (const a of [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3])
+    b.pipe([Math.cos(a) * 0.4, deck - 0.2, Math.sin(a) * 0.4], [Math.cos(a) * 1.3, deck - 1.4, Math.sin(a) * 1.3], 0.07, C.HAZARD, 'paint', 6);
+  b.slab(-1.35, deck, -1.35, 1.35, deck + 0.18, 1.35, C.GUNMETAL, 'metal');
+  railRectLocal(b, deck + 0.18);
+  if (!plugged) {
+    b.push().translate(0, deck + 0.18, 0);
+    xmasTree(b, C.RED);
+    b.pop();
+  } else b.cyl(0, deck + 0.18, 0, 0.25, 0.3, C.STEEL_DARK, 'metal', 10);
+  // navigation light mast & solar panel
+  b.cyl(-1.1, deck + 0.18, -1.1, 0.05, 1.8, C.STEEL_LIGHT, 'metal', 6);
+  b.box(-1.1, deck + 2.05, -1.1, 0.18, 0.18, 0.18, C.LAMP_AMBER, 'blink');
+  b.push().translate(1.0, deck + 0.9, -1.0).rotX(-0.5);
+  b.box(0, 0, 0, 0.6, 0.04, 0.45, C.PANEL, 'metal');
+  b.pop();
+  // boat landing at the waterline
+  b.slab(0.5, -0.3, -0.6, 1.3, 0.05, 0.6, C.GUNMETAL, 'metal');
+  ladderRungs(b, 0.55, 0.05, 0, deck);
+  b.anchor('light', 0, deck + 1.5, 0, { intensity: 0.4, range: 8 });
+}
+
+function railRectLocal(b: Builder, y: number): void {
+  b.detail(() => {
+    for (const [x0, z0, x1, z1] of [
+      [-1.35, -1.35, 1.35, -1.35],
+      [-1.35, 1.35, 1.35, 1.35],
+      [-1.35, -1.35, -1.35, 1.35],
+      [1.35, -1.35, 1.35, 1.35],
+    ])
+      railing(b, x0, z0, x1, z1, y, C.HAZARD);
+  });
+}
+
+function ladderRungs(b: Builder, x: number, y0: number, z: number, y1: number): void {
+  b.detail(() => {
+    for (const dz of [-0.2, 0.2]) b.box(x, (y0 + y1) / 2, z + dz, 0.05, y1 - y0, 0.05, C.STEEL_LIGHT, 'metal');
+    for (let y = y0 + 0.3; y < y1; y += 0.35) b.box(x, y, z, 0.04, 0.04, 0.4, C.STEEL_LIGHT, 'metal');
+  });
+}
+
 const wellhead: ModelDef = {
   variant(bs, ctx) {
     const w = bs.wellId ? ctx.state.wells[bs.wellId] : undefined;
+    const cx = Math.floor(bs.x + bs.size[0] / 2);
+    const cz = Math.floor(bs.z + bs.size[1] / 2);
+    if (w?.offshore || ctx.geology.waterDepth(cx, cz) > 0.5) {
+      const depth = Math.max(1, Math.min(90, Math.round(bs.y - ctx.geology.surfaceHeight(cx, cz))));
+      return `offshore:${depth}:${w && (w.status === 'plugged' || w.status === 'dry_hole') ? 1 : 0}`;
+    }
     if (!w) return 'natural';
     if (w.status === 'plugged' || w.status === 'dry_hole') return 'plugged';
     if (w.purpose.startsWith('injector') || w.purpose === 'disposal') return 'injector';
@@ -285,6 +333,11 @@ const wellhead: ModelDef = {
   ghostVariant: 'natural',
   build(b, p) {
     const v = p.variant || 'natural';
+    if (v.startsWith('offshore')) {
+      const [, dStr, plugged] = v.split(':');
+      wellCaisson(b, Number(dStr) || 10, plugged === '1');
+      return;
+    }
     if (v === 'plugged') {
       b.cyl(0, 0, 0, 0.6, 0.1, C.CONCRETE, 'rough', 14);
       b.cyl(0, 0.1, 0, 0.25, 0.25, C.STEEL_DARK, 'metal', 10);
@@ -318,4 +371,3 @@ const wellhead: ModelDef = {
 };
 
 export const WELLHEAD_MODELS: Record<string, ModelDef> = { wellhead };
-export { hVessel };

@@ -271,7 +271,7 @@ export class DevWorld implements IWorld {
         const biome = g.biomeAt(wx, wz);
         const h = hash3(wx, 1, wz);
         const treeP = biome === 'forest' || biome === 'birch_forest' ? 0.03 : biome === 'taiga' ? 0.028 : biome === 'plains' ? 0.004 : 0;
-        if (h < treeP) this.tree(set, get, x, s, z, biome, wx, wz);
+        if (h < treeP) this.tree(set, x, s, z, biome, wx, wz);
         else if (x >= 0 && z >= 0 && x < CS && z < CS && get(x, s, z) === B.AIR) {
           if (biome === 'desert') {
             if (h > 0.994) for (let k = 0; k < 3; k++) set(x, s + k, z, B.CACTUS);
@@ -284,7 +284,7 @@ export class DevWorld implements IWorld {
     return d;
   }
 
-  private tree(set: (x: number, y: number, z: number, id: number) => void, get: (x: number, y: number, z: number) => number, x: number, s: number, z: number, biome: BiomeId, wx: number, wz: number) {
+  private tree(set: (x: number, y: number, z: number, id: number) => void, x: number, s: number, z: number, biome: BiomeId, wx: number, wz: number) {
     const pine = biome === 'taiga';
     const birch = biome === 'birch_forest' || (!pine && hash3(wx, 3, wz) < 0.25);
     const autumn = !pine && !birch && hash3(wx, 4, wz) < 0.2;
@@ -308,7 +308,6 @@ export class DevWorld implements IWorld {
       }
     }
     for (let y = 0; y < th; y++) set(x, s + y, z, log);
-    void get;
   }
 
   /** Industrial test pad at the map centre: pipes, lamps, containers, glass, stripes, fire, spill. */

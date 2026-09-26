@@ -59,14 +59,14 @@ export class ObjectivesPanel extends Panel {
       const locked = id > o.chapter;
       const b = h(`button.obp-ch${id === this.chapter ? '.on' : ''}${locked ? '.locked' : ''}${id < o.chapter ? '.complete' : ''}`, { type: 'button' },
         h('span.obp-num', roman(id)),
-        h('div.col.grow', { style: 'gap:.1rem;min-width:0' }, h('b.ellipsis', info?.title ?? `Chapter ${roman(id)}`), h('span.tiny.dim.ellipsis', locked ? 'Locked' : info?.subtitle ?? `${done}/${list.length} complete`), !locked ? bar(list.length ? done / list.length : 0, id < o.chapter ? 'ok' : '', 'thin') : null),
+        h('div.col.grow', { style: 'gap:.1rem;min-width:0' }, h('b.ellipsis', info?.title ?? `Chapter ${roman(id)}`), h('span.tiny.dim.ellipsis', locked ? 'Locked' : `${done}/${list.length} objectives complete`), !locked ? bar(list.length ? done / list.length : 0, id < o.chapter ? 'ok' : '', 'thin') : null),
         locked ? icon('lock') : id < o.chapter ? icon('check') : null);
       b.addEventListener('click', () => { this.ui.sound('click'); this.chapter = id; this.sig = ''; this.update(); });
       nav.appendChild(b);
     }
     const info = this.chapterInfo(this.chapter);
     const main = h('div.obp-main.scroll');
-    main.appendChild(h('div.obp-hero', h('div.obp-heronum', roman(this.chapter)), h('div.col', { style: 'gap:.2rem' }, h('div.label', `Chapter ${roman(this.chapter)}`), h('h3.obp-title', info?.title ?? 'Objectives'), info?.subtitle ? h('div.dim', info.subtitle) : null)));
+    main.appendChild(h('div.obp-hero', h('div.obp-heronum', roman(this.chapter)), h('div.col', { style: 'gap:.2rem' }, h('div.label', `Chapter ${roman(this.chapter)}`), h('h3.obp-title', info?.title ?? 'Objectives'), info?.subtitle && !/^chapter/i.test(info.subtitle) ? h('div.dim', info.subtitle) : null)));
     if (info?.description) main.appendChild(h('p.obp-desc', info.description));
     const step = !o.tutorialDone ? TUTORIAL_STEPS[o.tutorialStep] : undefined;
     if (step && this.chapter === o.chapter) {

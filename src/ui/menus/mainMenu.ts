@@ -6,16 +6,19 @@ import type { UIHost } from '../core/host';
 import { money, timeAgo } from '../format';
 import type { MenuBackground } from './menuBackground';
 
+let logoSeq = 0;
+
 export function logoBlock(big = true): HTMLElement {
+  const u = `lg${++logoSeq}`;
   const drop = document.createElement('div');
   drop.className = 'lg-mark';
   drop.innerHTML = `<svg viewBox="0 0 64 72"><defs>
-    <linearGradient id="lgA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd29a"/><stop offset=".55" stop-color="#ff8a1f"/><stop offset="1" stop-color="#b54a00"/></linearGradient>
-    <linearGradient id="lgB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a4452"/><stop offset="1" stop-color="#11161d"/></linearGradient>
-    <radialGradient id="lgC" cx=".35" cy=".3" r=".7"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
-    <path d="M32 2 61 18.5v35L32 70 3 53.5v-35z" fill="url(#lgB)" stroke="url(#lgA)" stroke-width="2.5"/>
-    <path d="M32 14c7.5 9.4 12.3 16 12.3 22.3a12.3 12.3 0 0 1-24.6 0C19.7 30 24.5 23.4 32 14z" fill="url(#lgA)"/>
-    <path d="M32 14c7.5 9.4 12.3 16 12.3 22.3a12.3 12.3 0 0 1-24.6 0C19.7 30 24.5 23.4 32 14z" fill="url(#lgC)"/>
+    <linearGradient id="${u}A" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd29a"/><stop offset=".55" stop-color="#ff8a1f"/><stop offset="1" stop-color="#b54a00"/></linearGradient>
+    <linearGradient id="${u}B" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a4452"/><stop offset="1" stop-color="#11161d"/></linearGradient>
+    <radialGradient id="${u}C" cx=".35" cy=".3" r=".7"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+    <path d="M32 2 61 18.5v35L32 70 3 53.5v-35z" fill="url(#${u}B)" stroke="url(#${u}A)" stroke-width="2.5"/>
+    <path d="M32 14c7.5 9.4 12.3 16 12.3 22.3a12.3 12.3 0 0 1-24.6 0C19.7 30 24.5 23.4 32 14z" fill="url(#${u}A)"/>
+    <path d="M32 14c7.5 9.4 12.3 16 12.3 22.3a12.3 12.3 0 0 1-24.6 0C19.7 30 24.5 23.4 32 14z" fill="url(#${u}C)"/>
     <path d="M26 38.5a6 6 0 0 0 5.5 5.5" stroke="#fff" stroke-opacity=".75" stroke-width="2.2" fill="none" stroke-linecap="round"/>
     <path d="M14 58h36" stroke="#ff8a1f" stroke-opacity=".5" stroke-width="1.5"/></svg>`;
   return h(`div.pc-logo${big ? '.big' : ''}`,

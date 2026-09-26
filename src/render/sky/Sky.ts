@@ -105,6 +105,8 @@ void main() {
 }
 `;
 
+const STAR_AXIS = new THREE.Vector3(0.25, 0.9, 0.35).normalize();
+
 export class Sky {
   readonly mesh: THREE.Mesh;
   readonly uniforms: {
@@ -119,6 +121,7 @@ export class Sky {
     uSunDir: { value: THREE.Vector3 };
   };
   private material: THREE.ShaderMaterial;
+  private m4 = new THREE.Matrix4();
 
   constructor(shared: SharedUniforms) {
     this.uniforms = {
@@ -152,8 +155,8 @@ export class Sky {
 
   /** Stars rotate once per game day around a tilted polar axis. */
   setStarRotation(dayFraction: number) {
-    const m4 = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0.25, 0.9, 0.35).normalize(), dayFraction * Math.PI * 2);
-    this.uniforms.uStarRot.value.setFromMatrix4(m4);
+    this.m4.makeRotationAxis(STAR_AXIS, dayFraction * Math.PI * 2);
+    this.uniforms.uStarRot.value.setFromMatrix4(this.m4);
   }
 
   dispose() {

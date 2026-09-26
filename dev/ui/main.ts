@@ -147,6 +147,13 @@ function startGame() {
   if (params.get('build')) c.bus.emit('ui:buildMode', { type: params.get('build') });
   if (params.get('pipe')) c.bus.emit('ui:pipeMode', { block: B.PIPE_GAS });
   if (params.get('xray')) c.bus.emit('ui:overlay', { overlay: 'xray' });
+  if (params.get('toast')) {
+    c.notify('success', 'Discovery! Mesa Gas Sand', 'Mesa 1 encountered 18 m of gas pay.', { x: 150, y: 60, z: 330 });
+    c.notify('warning', 'Storage Tank #2 nearly full', 'Connect a terminal or build more storage.');
+    c.notify('danger', 'Blowout at Eagle 5', 'Uncontrolled flow — respond immediately.');
+    c.bus.emit('ui:error', { text: 'Not enough money ($650.0k)' });
+    c.transact(-48_000, 'drilling', 'Rig day rate');
+  }
 }
 
 // ---- boot ------------------------------------------------------------------------------------
@@ -172,6 +179,7 @@ if (screen === 'menu') {
     if (panel === 'map' && params.get('tool')) args.tool = params.get('tool');
     if (panel === 'map' && params.get('tool') === 'skid') args.rigId = firstOf('drilling_rig_land');
     if (params.get('tab')) args.tab = params.get('tab');
+    if (params.get('layer')) args.layer = params.get('layer');
     if (panel === 'newgame' || panel === 'load') id = panel as PanelId;
     setTimeout(() => ui.open(id, args), 50);
   }

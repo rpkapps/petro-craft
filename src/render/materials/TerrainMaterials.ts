@@ -111,8 +111,19 @@ void main() {
       col += uSunColor * (pow(rs, 380.0) * 10.0 + pow(rs, 42.0) * 0.22) * shadow * skyL;
       alpha = clamp(alpha + fres * 0.55, 0.0, 0.97);
       if (!gl_FrontFacing) {
-        col = mix(uWaterShallow * lightC * 1.6, refl * 0.8, pow(ndv, 3.0));
-        alpha = 0.7;
+        // seen from below: Snell's window onto the sky, total internal reflection outside it
+        vec3 up = refract(-V, n, 1.33);
+        float window = smoothstep(0.58, 0.74, ndv);
+        vec3 sky = skyColor(normalize(vec3(up.x, abs(up.y) + 0.05, up.z))) * 1.25;
+        vec3 tir = uFogColor * 1.6 + uWaterShallow * lightC * 0.4;
+        float shimmer = 0.8 + 0.4 * vnoise(vWorldPos.xz * 1.7 + uTime * 0.6);
+        col = mix(tir, sky, window) * shimmer;
+        col += uSunColor * pow(max(dot(up, uSunDir), 0.0), 60.0) * 2.0 * window;
+        float fogK = fogFactor(dist * 0.5, vWorldPos.y);
+        gl_FragColor = vec4(mix(col, uFogColor, fogK), 0.92);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        return;
       }
       outc = vec4(col, alpha);
     } else {

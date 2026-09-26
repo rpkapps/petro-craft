@@ -9,7 +9,7 @@ import { button, field, segmented, select, slider, type SegCtl, type SliderCtl }
 import type { BuildingState, SeismicImage, WellPlan, WellPurpose, WellState, Vec3 } from '../../core/types';
 import { COLORMAPS } from '../charts/colormap';
 import { drawWellSchematic } from '../render/wellViz';
-import { buildingName } from '../game';
+import { buildingName, isRig } from '../game';
 import { lengthBlocks, lengthValue, lengthUnit, money, mudWeight, int, titleCase } from '../format';
 import { niceTicks } from '../charts/LineChart';
 
@@ -60,6 +60,11 @@ export class PlannerPanel extends Panel {
     const st = ui.game.state;
     const rigId = typeof args.rigId === 'string' ? args.rigId : undefined;
     this.rig = rigId ? st.buildings[rigId] ?? null : null;
+    if (!this.rig) {
+      // Opened without a rig (e.g. from the tutorial): pick an idle, completed rig.
+      const rigs = Object.values(st.buildings).filter((b) => isRig(b.type) && b.constructionProgress >= 1);
+      this.rig = rigs.find((b) => !b.wellId) ?? rigs[0] ?? null;
+    }
   }
 
   protected build() {
@@ -130,7 +135,7 @@ export class PlannerPanel extends Panel {
     const nameIn = h<HTMLInputElement>('input.input', { value: this.name, maxLength: 28 });
     nameIn.addEventListener('input', () => (this.name = nameIn.value));
     this.quoteEl = h('div.pl-quote');
-    const suggest = button('Suggest program', { icon: 'sparkle', size: 'xs', onClick: () => {
+    const suggest = button(null, { icon: 'sparkle', size: 'xs', title: 'Suggest a casing program & mud weight', onClick: () => {
       const sp = ctx.services.wells.suggestPlan(this.cx, this.cz, this.plan.targetY, this.plan.kind);
       this.plan.casingPoints = sp.casingPoints;
       this.plan.mudWeight = sp.mudWeight;
@@ -384,7 +389,7 @@ export class PlannerPanel extends Panel {
     const { w, h: hh, ctx: g } = fitCanvas(this.depthCanvas);
     const geo = this.ui.game.geology;
     const u = this.ui.units;
-    const padL = 44;
+    const padL = 54;
     const padR = 8;
     const padT = 8;
     const padB = 22;
@@ -471,7 +476,7 @@ export class PlannerPanel extends Panel {
       g.beginPath(); g.moveTo(padL, y); g.lineTo(padL + gw, y); g.stroke();
     }
     g.save();
-    g.translate(9, padT + gh / 2);
+    g.translate(8, padT + gh / 2);
     g.rotate(-Math.PI / 2);
     g.textAlign = 'center';
     g.fillText(`TVD (${lengthUnit(u)})`, 0, 0);
@@ -496,12 +501,13 @@ export class PlannerPanel extends Panel {
       g.font = '700 10.5px "JetBrains Mono", monospace';
       const txt = `${label} ${lengthBlocks(this.surfaceY - y, u)}`;
       const tw = g.measureText(txt).width;
+      const lx = colX + colW + 6;
       g.fillStyle = 'rgba(8,11,15,0.9)';
-      g.fillRect(padL + 4, yy - 16, tw + 10, 14);
+      g.fillRect(lx, yy - 16, tw + 10, 14);
       g.fillStyle = col;
       g.textAlign = 'left';
       g.textBaseline = 'middle';
-      g.fillText(txt, padL + 9, yy - 9);
+      g.fillText(txt, lx + 5, yy - 9);
       g.beginPath(); g.arc(padL + gw - 8, yy, 5, 0, Math.PI * 2); g.fill();
     };
     if (this.plan.kind !== 'vertical' && this.plan.kickoffY !== undefined) line(this.plan.kickoffY, '#2ad0e0', 'KOP');

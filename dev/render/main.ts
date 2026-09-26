@@ -2,13 +2,11 @@
 //   scene=day|sunset|night|dawn|xray|underwater|storm|fog|pipes|leases (preset camera/time/weather)
 //   time=HH:MM  weather=<kind>  cover=0..1  overlay=xray|pipes|...  cam=x,y,z,yaw,pitch  rd=8
 //   post=0 (disable bloom/ssao)  ssao=1  shadows=0  quality=low|medium|high  speed=<game minutes / s>
-import * as THREE from 'three';
-import type { EventBus } from '../../src/core/EventBus';
+import type { EventBus, MapOverlay } from '../../src/core/EventBus';
 import { GameSession } from '../../src/core/Game';
 import { createInitialState } from '../../src/core/state';
 import { DEFAULT_SETTINGS } from '../../src/core/settings';
 import type { IGeology, IWorld, Vec3, WeatherKind, WellState, WellStatus, Settings } from '../../src/core/types';
-import type { MapOverlay } from '../../src/core/EventBus';
 import { B } from '../../src/core/blocks';
 import { SEA_LEVEL } from '../../src/core/constants';
 import { createRenderer } from '../../src/render';
@@ -28,7 +26,8 @@ interface Preset {
 const PRESETS: Record<string, Preset> = {
   day: { time: '10:30', cam: [-24, 17, 30, -0.72, -0.28] },
   sunset: { time: '17:48', cam: [20, 15, 10, 1.45, -0.1] },
-  dawn: { time: '05:55', cam: [22, 13, -18, 1.9, -0.12] },
+  dawn: { time: '05:55', cam: [22, 13, -18, -1.5, -0.1] },
+  moon: { time: '23:40', cam: [-16, 9, 14, -0.6, 1.25] },
   night: { time: '23:10', cam: [-16, 9, 14, -0.6, -0.22] },
   xray: { time: '14:00', overlay: 'xray', cam: [-32, 25, 42, -0.55, -0.42] },
   pressure: { time: '14:00', overlay: 'pressure', cam: [-32, 25, 42, -0.55, -0.42] },
@@ -197,13 +196,20 @@ async function main() {
   let last = performance.now();
   let acc = 0;
   let demoEdit = 0;
+  let upd = 0;
+  let ren = 0;
   const frame = (now: number) => {
     requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (speed) state.time.minuteOfDay = (state.time.minuteOfDay + speed * dt) % 1440;
+    const t0 = performance.now();
     r.update(dt);
+    const t1 = performance.now();
     r.render();
+    const t2 = performance.now();
+    upd = upd * 0.95 + (t1 - t0) * 0.05;
+    ren = ren * 0.95 + (t2 - t1) * 0.05;
     acc += dt;
     // exercise the edit path once terrain is in: dig a small pit & place a lamp
     if (demoEdit === 0 && r.loadProgress >= 1 && params.get('edit') === '1') {
@@ -214,11 +220,14 @@ async function main() {
       for (let dx = 0; dx < 3; dx++) for (let dz = 0; dz < 3; dz++) world.setBlock(ex + dx, ey, ez + dz, B.AIR, 'player');
       world.setBlock(ex + 1, ey - 1, ez + 1, B.LAMP, 'player');
     }
+    if (params.get('lightning') === '1' && Math.random() < dt * 3) {
+      ctx.bus.emit('weather:lightning', { x: r.camera.position.x + (Math.random() - 0.5) * 80, z: r.camera.position.z - 40 + (Math.random() - 0.5) * 40 });
+    }
     if (acc > 0.5) {
       acc = 0;
       const info = r.renderer.info;
       const cm = (r as unknown as { chunks: { stats: { lastMeshMs: number; pendingGen: number } } }).chunks.stats;
-      stats.textContent = `${source} · mesh ${cm.lastMeshMs.toFixed(1)}ms · gen-pending ${cm.pendingGen} · ${r.fps.toFixed(0)} fps · load ${(r.loadProgress * 100).toFixed(0)}% · calls ${info.render.calls} · tris ${(info.render.triangles / 1000).toFixed(0)}k · scene=${scene}`;
+      stats.textContent = `${source} · update ${upd.toFixed(1)}ms · render ${ren.toFixed(1)}ms · mesh ${cm.lastMeshMs.toFixed(1)}ms · gen-pending ${cm.pendingGen} · ${r.fps.toFixed(0)} fps · load ${(r.loadProgress * 100).toFixed(0)}% · calls ${info.render.calls} · tris ${(info.render.triangles / 1000).toFixed(0)}k · scene=${scene}`;
     }
   };
   requestAnimationFrame(frame);
@@ -229,4 +238,3 @@ void main().catch((e) => {
   document.getElementById('stats')!.textContent = String(e?.stack ?? e);
 });
 
-export { THREE };

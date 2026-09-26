@@ -7,14 +7,22 @@ import type { TerrainMaterialSet } from '../materials/TerrainMaterials';
 
 export type TerrainMode = 'normal' | 'xray';
 
-function buildGeometry(p: PassData, minY: number, maxY: number): THREE.BufferGeometry {
+function buildGeometry(p: PassData, minY: number, maxY: number, pivot: THREE.Vector3): THREE.BufferGeometry {
+  if (pivot.lengthSq() > 0) {
+    const pos = p.positions;
+    for (let i = 0; i < pos.length; i += 3) {
+      pos[i] -= pivot.x;
+      pos[i + 1] -= pivot.y;
+      pos[i + 2] -= pivot.z;
+    }
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(p.positions, 3));
   g.setAttribute('aNormal', new THREE.BufferAttribute(p.normals, 4, true));
   g.setAttribute('uv', new THREE.BufferAttribute(p.uvs, 2));
   g.setAttribute('aInfo', new THREE.BufferAttribute(p.info, 4, false));
   g.setIndex(new THREE.BufferAttribute(p.indices, 1));
-  g.boundingBox = new THREE.Box3(new THREE.Vector3(-0.5, minY - 0.5, -0.5), new THREE.Vector3(CHUNK_SIZE + 0.5, maxY + 1.5, CHUNK_SIZE + 0.5));
+  g.boundingBox = new THREE.Box3(new THREE.Vector3(-0.5, minY - 0.5, -0.5), new THREE.Vector3(CHUNK_SIZE + 0.5, maxY + 1.5, CHUNK_SIZE + 0.5)).translate(pivot.clone().negate());
   g.boundingSphere = g.boundingBox.getBoundingSphere(new THREE.Sphere());
   return g;
 }
@@ -29,6 +37,12 @@ export class ChunkMeshes {
   private order: Uint32Array | null = null;
   private lastSort = new THREE.Vector3(1e9, 1e9, 1e9);
   readonly origin: THREE.Vector3;
+  /**
+   * The translucent mesh is re-centred on its contents so three.js sorts it against other transparent
+   * objects (particles, clouds, entity glass) by a meaningful position instead of the chunk corner.
+   */
+  private pivot = new THREE.Vector3();
+  private static readonly ZERO = new THREE.Vector3();
 
   constructor(readonly cx: number, readonly cz: number, private parent: THREE.Object3D, private mats: TerrainMaterialSet) {
     this.origin = new THREE.Vector3(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
@@ -37,9 +51,25 @@ export class ChunkMeshes {
   apply(r: MeshResult, mode: TerrainMode) {
     this.opaque = this.replace(this.opaque, r.opaque, r, 'opaque', mode);
     this.cutout = this.replace(this.cutout, r.cutout, r, 'cutout', mode);
+    if (r.translucent) {
+      const pos = r.translucent.positions;
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let i = 1; i < pos.length; i += 3) {
+        if (pos[i] < lo) lo = pos[i];
+        if (pos[i] > hi) hi = pos[i];
+      }
+      this.pivot.set(CHUNK_SIZE / 2, Math.round((lo + hi) / 2), CHUNK_SIZE / 2);
+    }
     this.translucent = this.replace(this.translucent, r.translucent, r, 'translucent', mode);
     if (r.translucent && r.quadCenters) {
-      this.centers = r.quadCenters;
+      const c = r.quadCenters;
+      for (let i = 0; i < c.length; i += 3) {
+        c[i] -= this.pivot.x;
+        c[i + 1] -= this.pivot.y;
+        c[i + 2] -= this.pivot.z;
+      }
+      this.centers = c;
       this.baseIndex = r.translucent.indices.slice();
       const q = r.quadCenters.length / 3;
       this.sortKeys = new Float32Array(q);
@@ -61,15 +91,18 @@ export class ChunkMeshes {
       }
       return null;
     }
-    const geo = buildGeometry(data, r.minY, r.maxY);
+    const pivot = pass === 'translucent' ? this.pivot : ChunkMeshes.ZERO;
+    const geo = buildGeometry(data, r.minY, r.maxY, pivot);
     if (mesh) {
       mesh.geometry.dispose();
       mesh.geometry = geo;
+      mesh.position.copy(this.origin).add(pivot);
+      mesh.updateMatrix();
       return mesh;
     }
     const m = new THREE.Mesh(geo, this.mats.opaque);
     m.name = `chunk-${pass}-${this.cx},${this.cz}`;
-    m.position.copy(this.origin);
+    m.position.copy(this.origin).add(pivot);
     m.matrixAutoUpdate = false;
     m.updateMatrix();
     m.userData.pass = pass;
@@ -110,9 +143,10 @@ export class ChunkMeshes {
   /** Re-sort translucent quads back-to-front for a camera position (world). Returns true if sorted. */
   sortTranslucent(cam: THREE.Vector3): boolean {
     if (!this.translucent || !this.centers || !this.baseIndex || !this.sortKeys || !this.order) return false;
-    const lx = cam.x - this.origin.x;
-    const ly = cam.y;
-    const lz = cam.z - this.origin.z;
+    const p = this.translucent.position;
+    const lx = cam.x - p.x;
+    const ly = cam.y - p.y;
+    const lz = cam.z - p.z;
     if (Math.abs(lx - this.lastSort.x) < 0.75 && Math.abs(ly - this.lastSort.y) < 0.75 && Math.abs(lz - this.lastSort.z) < 0.75) return false;
     this.lastSort.set(lx, ly, lz);
     const c = this.centers;

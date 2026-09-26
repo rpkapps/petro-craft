@@ -26,7 +26,6 @@ export interface ViewEnv {
   wellFor(b: BuildingState): WellState | undefined;
 }
 
-const _v = new THREE.Vector3();
 const _sphere = new THREE.Sphere();
 
 export function statusMode(status: string): MatMode {
@@ -133,11 +132,9 @@ export class BuildingView {
     });
     // status looks depend on world placement
     if (this.site || this.ruin) {
-      const st = this.status;
       this.clearStatusLooks();
       this.status = '';
       this.mode = null;
-      void st;
     }
   }
 
@@ -208,12 +205,15 @@ export class BuildingView {
   }
 
   /** Per-frame: LOD, animation. */
-  update(dt: number, t: number, b: BuildingState, cam: THREE.Camera, frustum: THREE.Frustum): void {
+  update(dt: number, t: number, b: BuildingState, cam: THREE.Camera, frustum: THREE.Frustum, cullDistance = Infinity): void {
     if (this.hidden) return;
     this.distance = cam.position.distanceTo(this.center);
+    // beyond the fog nothing is visible: skip rendering entirely
+    const inRange = this.distance - this.radius < cullDistance;
+    if (inRange !== this.group.visible) this.group.visible = inRange;
     _sphere.center.copy(this.center);
     _sphere.radius = this.radius;
-    this.visible = frustum.intersectsSphere(_sphere);
+    this.visible = inRange && frustum.intersectsSphere(_sphere);
     const wantDetails = this.distance < DETAIL_DISTANCE + this.radius * DETAIL_RADIUS_FACTOR;
     if (wantDetails !== this.detailsOn) {
       this.detailsOn = wantDetails;
@@ -247,4 +247,3 @@ export class BuildingView {
   }
 }
 
-export { _v as _scratchVec };

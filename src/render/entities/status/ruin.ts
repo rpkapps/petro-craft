@@ -9,6 +9,18 @@ import { ClipMaterialSet } from './clipSet';
 
 const rubbleCache = new Map<string, ModelTemplate>();
 
+/** Free cached rubble templates (layer dispose). */
+export function clearRuinTemplates(): void {
+  for (const t of rubbleCache.values()) {
+    const walk = (n: ModelTemplate['root']) => {
+      for (const m of n.meshes) m.geometry.dispose();
+      n.children.forEach(walk);
+    };
+    walk(t.root);
+  }
+  rubbleCache.clear();
+}
+
 function rubbleTemplate(w: number, d: number, h: number): ModelTemplate {
   const key = `${w}x${d}x${Math.round(h)}`;
   let t = rubbleCache.get(key);
@@ -51,7 +63,7 @@ export class Ruin {
     const a = r() * Math.PI * 2;
     const tilt = 0.35 + r() * 0.35;
     const normal = new THREE.Vector3(Math.cos(a) * tilt, -1, Math.sin(a) * tilt).normalize();
-    const cutY = center.y + Math.max(1.2, h * (0.38 + r() * 0.2));
+    const cutY = center.y + Math.max(1.0, h * (0.28 + r() * 0.17));
     const p = new THREE.Vector3(center.x, cutY, center.z);
     this.plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, p);
     this.mats = new ClipMaterialSet(lib, 'charred', [this.plane]);

@@ -32,6 +32,16 @@ const SUN_KEYS: { e: number; c: number }[] = [
 
 const tmpA = new THREE.Color();
 const tmpB = new THREE.Color();
+// constant palette entries (linear, pre-scaled) — never mutated
+const SKY_DAY = new THREE.Color(0x9cc4f2).multiplyScalar(1.45);
+const SKY_NIGHT = new THREE.Color(0x3a4c7c);
+const GOLDEN = new THREE.Color(0xd8a080).multiplyScalar(0.6);
+const GROUND_DAY = new THREE.Color(0x8a7a62).multiplyScalar(1.25);
+const GROUND_NIGHT = new THREE.Color(0x1a2233).multiplyScalar(0.8);
+const FLASH_ZENITH = new THREE.Color(0.75, 0.8, 1.0);
+const FLASH_HORIZON = new THREE.Color(0.8, 0.82, 0.95);
+const WHITE = new THREE.Color(1, 1, 1);
+const HEAT_HAZE = new THREE.Color(0xe8d8b8);
 
 function keyColor(keys: { e: number }[], get: (k: any) => number, e: number, out: THREE.Color) {
   if (e <= keys[0].e) return out.setHex(get(keys[0]));
@@ -157,7 +167,8 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   a.windDir.set(Math.cos(w.windDir), Math.sin(w.windDir));
   a.windStrength = clamp(w.windSpeed / 18, 0, 1.5);
   const oc = a.overcast;
-  const dark = 1 - a.storm * 0.62;
+  // storms darken the day a lot, the night only a little (it is already dark)
+  const dark = 1 - a.storm * lerp(0.2, 0.62, smoothstep(-0.15, 0.2, e));
 
   // ---- sky gradient -----------------------------------------------------------------------------
   keyColor(SKY_KEYS, (k: Key) => k.zenith, e, a.zenith);
@@ -196,26 +207,22 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
   // ambient: sky dome irradiance
   const dayF = smoothstep(-0.18, 0.3, e);
   a.daylight = clamp(smoothstep(-0.12, 0.25, e) * (1 - 0.45 * oc) * dark, 0, 1);
-  const skyDay = new THREE.Color(0x9cc4f2).multiplyScalar(1.45);
-  const skyNight = new THREE.Color(0x3a4c7c).multiplyScalar(0.22 + 0.14 * a.moonBright);
-  a.skyAmbient.copy(skyNight).lerp(skyDay, dayF);
+  a.skyAmbient.copy(SKY_NIGHT).multiplyScalar(0.22 + 0.14 * a.moonBright).lerp(SKY_DAY, dayF);
   // warm the ambient during golden hour
   const golden = smoothstep(-0.08, 0.05, e) * (1 - smoothstep(0.08, 0.3, e));
-  a.skyAmbient.lerp(new THREE.Color(0xd8a080).multiplyScalar(0.6), golden * 0.35);
+  a.skyAmbient.lerp(GOLDEN, golden * 0.35);
   desaturate(a.skyAmbient, oc * 0.6);
   a.skyAmbient.multiplyScalar(lerp(1, 1.12, oc * dayF) * dark);
-  const gDay = new THREE.Color(0x8a7a62).multiplyScalar(1.25);
-  const gNight = new THREE.Color(0x1a2233).multiplyScalar(0.8);
-  a.groundAmbient.copy(gNight).lerp(gDay, dayF).multiplyScalar(dark);
+  a.groundAmbient.copy(GROUND_NIGHT).lerp(GROUND_DAY, dayF).multiplyScalar(dark);
 
   if (flash > 0) {
     a.skyAmbient.addScalar(flash * 0.9);
-    a.zenith.lerp(new THREE.Color(0.75, 0.8, 1.0), flash * 0.7);
-    a.horizon.lerp(new THREE.Color(0.8, 0.82, 0.95), flash * 0.6);
+    a.zenith.lerp(FLASH_ZENITH, flash * 0.7);
+    a.horizon.lerp(FLASH_HORIZON, flash * 0.6);
   }
 
   // clouds: lit tops / shaded bellies
-  a.cloudLit.copy(a.horizon).lerp(new THREE.Color(1, 1, 1), 0.55 * dayF).multiplyScalar(0.55 + 0.6 * dayF);
+  a.cloudLit.copy(a.horizon).lerp(WHITE, 0.55 * dayF).multiplyScalar(0.55 + 0.6 * dayF);
   a.cloudLit.add(tmpA.copy(sunCol).multiplyScalar(0.28));
   a.cloudShade.copy(a.zenith).lerp(a.horizon, 0.6).multiplyScalar(0.8);
   desaturate(a.cloudLit, oc * 0.7).multiplyScalar(lerp(1, 0.5, oc) * dark);
@@ -245,7 +252,7 @@ export function updateAtmosphere(a: Atmosphere, minuteOfDay: number, day: number
     density += 0.005 * inten;
   } else if (kind === 'heatwave') {
     density += 0.002;
-    a.horizon.lerp(new THREE.Color(0xe8d8b8), 0.25);
+    a.horizon.lerp(HEAT_HAZE, 0.25);
   }
   a.fogNear = near;
   a.fogFar = Math.max(near + 8, far);

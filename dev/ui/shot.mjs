@@ -9,7 +9,7 @@ const [w, h] = size.split('x').map(Number);
 const base = process.env.BASE ?? 'http://localhost:5209/dev/ui/';
 mkdirSync(outDir, { recursive: true });
 const exe = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(existsSync);
-const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: exe, args: process.env.GL ? ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : ['--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: w, height: h } });
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) console.log(`[${m.type()}]`, m.text().slice(0, 400)); });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message, e.stack?.split('\n').slice(0, 3).join(' | ')));
@@ -18,7 +18,10 @@ for (const pair of pairs) {
   const name = pair.slice(0, i);
   const q = pair.slice(i + 1);
   await page.goto(`${base}?${q}`, { waitUntil: 'load' });
+  if (process.env.NOBLUR) await page.addStyleTag({ content: '*, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }' });
   await page.waitForTimeout(Number(wait));
+  await page.evaluate(() => { for (let i = 0; i < 12; i++) window.ui?.update(0.1); });
+  await page.waitForTimeout(250);
   const overflow = await page.evaluate(() => {
     const out = [];
     for (const el of document.querySelectorAll('#ui-root *')) {
@@ -27,7 +30,12 @@ for (const pair of pairs) {
       const cs = getComputedStyle(el);
       if (cs.visibility === 'hidden' || cs.display === 'none') continue;
       if (el.closest('.pc-panel.covered')) continue;
-      if (r.right > innerWidth + 1 || r.bottom > innerHeight + 1 || r.left < -1) {
+      let clipped = false;
+      for (let a = el.parentElement; a && a.id !== 'ui-root'; a = a.parentElement) {
+        const o = getComputedStyle(a);
+        if (o.overflow !== 'visible' || o.overflowX !== 'visible' || o.overflowY !== 'visible') { clipped = true; break; }
+      }
+      if (!clipped && (r.right > innerWidth + 1 || r.bottom > innerHeight + 1 || r.left < -1)) {
         if (el.closest('.mn-bghost, .mn-grain, .pc-tooltip, .tb-pops')) continue;
         out.push(`${el.tagName.toLowerCase()}.${String(el.className).slice(0, 40)} ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}`);
       }

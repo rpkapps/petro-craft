@@ -197,4 +197,3 @@ export function animateRig(a: AnimState, floorY: number, travel: [number, number
   if (spin > 0) str.rotation.y = (str.rotation.y + dt * spin * Math.PI * 2) % (Math.PI * 2);
 }
 
-export { ladder };

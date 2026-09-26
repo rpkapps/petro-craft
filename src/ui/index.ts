@@ -83,6 +83,7 @@ class Controller implements UIController {
   constructor(host: HTMLElement, readonly app: AppShell, readonly audio: AudioEngine) {
     this.root = host;
     host.classList.add('pc-root');
+    installNoiseTexture(host);
     this.hudLayer = h('div.pc-hud-layer');
     host.appendChild(this.hudLayer);
     this.panels = new PanelManager(this, host);
@@ -326,6 +327,10 @@ class Controller implements UIController {
     let id = PANEL_ALIASES[panel];
     if (!id) return;
     if (panel === 'wells' && typeof args.wellId === 'string') id = 'well';
+    if (panel === 'seismic' && typeof args.surveyId !== 'string' && this.session && !Object.values(this.session.state.surveys).some((s) => s.progress > 0.02)) {
+      id = 'map';
+      args = { ...args, tool: 'seismic2d' };
+    }
     if (panel === 'leases') args = { ...args, layer: 'leases' };
     this.open(id, args);
   }
@@ -433,6 +438,25 @@ class Controller implements UIController {
         return;
       }
     }
+  }
+}
+
+/** Small tiling grain texture generated once on a canvas (cheap to rasterise, unlike SVG turbulence). */
+function installNoiseTexture(host: HTMLElement) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 96;
+    const g = c.getContext('2d')!;
+    const img = g.createImageData(96, 96);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = Math.random() * 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 140;
+    }
+    g.putImageData(img, 0, 0);
+    host.style.setProperty('--noise', `url(${c.toDataURL('image/png')})`);
+  } catch {
+    host.style.setProperty('--noise', 'none');
   }
 }
 

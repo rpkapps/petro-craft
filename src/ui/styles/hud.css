@@ -40,7 +40,7 @@
 
 .pc-root .tb-brand { padding-left: 0.4rem; }
 .pc-root .tb-logo .logo-mark { width: 2rem; height: 2rem; display: block; filter: drop-shadow(0 0 6px rgba(255, 138, 31, 0.35)); }
-.pc-root .tb-brand-txt { display: flex; flex-direction: column; min-width: 0; max-width: 11rem; }
+.pc-root .tb-brand-txt { display: flex; flex-direction: column; min-width: 0; max-width: 14rem; }
 .pc-root .tb-company { font-family: var(--f-head); font-weight: 700; font-size: 1.02rem; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.1; }
 .pc-root .tb-rep { font-size: 0.62rem; color: var(--text-dim); letter-spacing: 0.06em; }
 
@@ -49,8 +49,9 @@
 .pc-root .tb-money-val { font-family: var(--f-head); font-weight: 700; font-size: 1.35rem; letter-spacing: 0.02em; line-height: 1.05; color: #fff; text-shadow: 0 0 12px rgba(255, 138, 31, 0.25); min-width: 7.5rem; }
 .pc-root .tb-money.neg .tb-money-val { color: var(--danger); text-shadow: 0 0 12px rgba(255, 77, 79, 0.5); }
 .pc-root .tb-money.neg > .ic { color: var(--danger); }
-.pc-root .tb-pops { position: absolute; left: 2.6rem; top: 100%; pointer-events: none; }
-.pc-root .tb-pop { position: absolute; left: 0; top: 0.2rem; font-size: 0.85rem; font-weight: 700; white-space: nowrap; animation: pc-float-up 1.9s var(--ease-out) forwards; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
+.pc-root .tb-pops { position: absolute; right: 0.7rem; top: 1.25rem; pointer-events: none; }
+.pc-root .tb-pop { position: absolute; right: 0; top: 0; font-size: 0.78rem; font-weight: 700; white-space: nowrap; animation: pc-money-pop 1.9s var(--ease-out) forwards; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); padding: 0 0.3rem; border-radius: 0.2rem; background: rgba(8, 11, 15, 0.75); }
+@keyframes pc-money-pop { 0% { opacity: 0; transform: translateY(0.4rem) scale(0.9); } 12% { opacity: 1; transform: translateY(0) scale(1.06); } 25% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-1.1rem); } }
 .pc-root .tb-pop.up { color: var(--ok); }
 .pc-root .tb-pop.down { color: var(--danger); }
 
@@ -251,11 +252,11 @@
 /* ---- scanner card ------------------------------------------------------------------------------ */
 .pc-root .pc-scan { position: absolute; left: 0.6rem; bottom: 1rem; width: 17.5rem; padding: 0.6rem 0.75rem; border-radius: var(--r-lg); opacity: 0; visibility: hidden; transform: translateX(-1rem); transition: opacity 0.25s, transform 0.25s var(--ease-out), visibility 0.25s; overflow: hidden; border-color: rgba(42, 208, 224, 0.5); }
 .pc-root .pc-scan.show { opacity: 1; transform: none; visibility: visible; }
-.pc-root .pc-scan.warning { border-color: rgba(255, 194, 51, 0.6); }
-.pc-root .pc-scan.danger { border-color: rgba(255, 77, 79, 0.7); box-shadow: 0 0 1.5rem rgba(255, 77, 79, 0.3); }
+.pc-root .pc-scan.lv-warning { border-color: rgba(255, 194, 51, 0.6); }
+.pc-root .pc-scan.lv-danger { border-color: rgba(255, 77, 79, 0.7); box-shadow: 0 0 1.5rem rgba(255, 77, 79, 0.3); }
 .pc-root .sc-head { display: flex; align-items: center; gap: 0.45rem; font-family: var(--f-head); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.9rem; color: var(--teal); }
-.pc-root .pc-scan.warning .sc-head { color: var(--warn); }
-.pc-root .pc-scan.danger .sc-head { color: var(--danger); }
+.pc-root .pc-scan.lv-warning .sc-head { color: var(--warn); }
+.pc-root .pc-scan.lv-danger .sc-head { color: var(--danger); }
 .pc-root .sc-head .mono { font-size: 0.66rem; text-transform: none; letter-spacing: 0; }
 .pc-root .sc-lines { margin-top: 0.35rem; font-family: var(--f-mono); font-size: 0.72rem; color: var(--text-2); display: flex; flex-direction: column; gap: 0.12rem; }
 .pc-root .sc-scan { position: absolute; left: 0; right: 0; top: 0; height: 100%; background: linear-gradient(180deg, transparent, rgba(42, 208, 224, 0.12), transparent); transform: translateY(-100%); animation: pc-scanline 2.4s linear infinite; pointer-events: none; }
@@ -327,10 +328,10 @@
 .pc-root .ms-status { display: none; align-items: center; gap: 0.5rem; padding: 0.35rem 0.7rem; border-radius: var(--r-md); background: rgba(10, 13, 18, 0.85); border: 1px solid rgba(61, 220, 132, 0.45); font-size: 0.74rem; color: var(--text-2); backdrop-filter: blur(8px); }
 .pc-root .ms-status.show { display: inline-flex; animation: pc-fade-up 0.2s ease; }
 .pc-root .ms-status .ic { color: var(--ok); flex: none; }
-.pc-root .ms-status.warning { border-color: rgba(255, 194, 51, 0.55); }
-.pc-root .ms-status.warning .ic { color: var(--warn); }
-.pc-root .ms-status.danger { border-color: rgba(255, 77, 79, 0.6); color: #ffd0d0; }
-.pc-root .ms-status.danger .ic { color: var(--danger); }
+.pc-root .ms-status.lv-warning { border-color: rgba(255, 194, 51, 0.55); }
+.pc-root .ms-status.lv-warning .ic { color: var(--warn); }
+.pc-root .ms-status.lv-danger { border-color: rgba(255, 77, 79, 0.6); color: #ffd0d0; }
+.pc-root .ms-status.lv-danger .ic { color: var(--danger); }
 .pc-root .ob-tut-title { display: flex; align-items: center; gap: 0.35rem; font-family: var(--f-head); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.04em; color: #e6fbff; margin-bottom: 0.15rem; }
 .pc-root .ob-tut-title .ic { color: var(--teal); width: 0.95rem; height: 0.95rem; }
 .pc-root .ob-tut-title .kbd { margin-left: auto; }

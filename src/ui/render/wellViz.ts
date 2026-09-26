@@ -38,7 +38,7 @@ export function drawWellSchematic(canvas: HTMLCanvasElement, geo: IGeology, w: W
   const minD = Math.min(0, ...all.map((p) => p.d));
   const maxD = Math.max(0, ...all.map((p) => p.d));
   const spanD = Math.max(10, maxD - minD);
-  const padL = 44;
+  const padL = 54;
   const padR = 12;
   const padT = 10;
   const padB = 10;
@@ -98,7 +98,7 @@ export function drawWellSchematic(canvas: HTMLCanvasElement, geo: IGeology, w: W
     g.beginPath(); g.moveTo(padL, y); g.lineTo(padL + gw, y); g.stroke();
   }
   g.save();
-  g.translate(10, padT + gh / 2);
+  g.translate(8, padT + gh / 2);
   g.rotate(-Math.PI / 2);
   g.textAlign = 'center';
   g.fillText(`TVD (${lengthUnit(o.units)})`, 0, 0);

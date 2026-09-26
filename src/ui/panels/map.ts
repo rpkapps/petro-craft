@@ -194,8 +194,7 @@ export class MapPanel extends Panel {
       this.dirty = true;
     }, 0);
     this.setTool(this.tool);
-    this.ui.notifyView('map', {});
-    if (layerState.leases) this.ui.notifyView('leases', {});
+    if (layerState.leases && this.args.layer !== 'leases') this.ui.notifyView('leases', {});
   }
 
   // ---- view control ---------------------------------------------------------------------------
@@ -512,7 +511,7 @@ export class MapPanel extends Panel {
         h('div.row', h('span.map-sk', s.kind.toUpperCase()), h('b.grow.ellipsis', s.name), done ? chip('Ready', 'ok') : chip(s.status === 'processing' ? 'Processing' : `${Math.round(s.progress * 100)}%`, 'teal')),
         !done ? bar(s.progress, 'teal', 'thin') : null,
         h('div.row', h('span.tiny.dim', `Day ${s.startedDay} · ${money(s.cost)}`), h('span.sp'),
-          button('Locate', { size: 'xs', icon: 'crosshair', onClick: () => this.focusSurvey(s) }),
+          button(null, { size: 'xs', icon: 'crosshair', title: 'Locate on map', onClick: () => this.focusSurvey(s) }),
           button('View', { size: 'xs', icon: 'eye', variant: 'teal', disabled: s.progress <= 0.02, onClick: () => { this.ui.sound('open'); this.ui.open('seismic', { surveyId: s.id }, { stack: true }); } })));
       this.ui.tooltip.attach(row, () => tipBody(s.name, `${s.kind.toUpperCase()} · quality ×${s.quality.toFixed(1)}${s.fluidIndicators ? ' · fluid indicators' : ''}`));
       this.surveyList.appendChild(row);

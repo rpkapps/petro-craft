@@ -19,7 +19,7 @@ const truck_terminal: ModelDef = {
   build(b) {
     // two drive-through lanes along x (z = ±1.1) and a central loading island
     b.slab(-2.98, 0, -1.98, 2.98, 0.05, 1.98, C.ASPHALT, 'rough');
-    b.noShadow(() => {
+    b.at(0, 0, 0, 0, () => {
       for (const z of [-1.1, 1.1]) for (let x = -2.6; x < 2.8; x += 1.0) b.slab(x, 0.05, z - 0.03, x + 0.5, 0.06, z + 0.03, C.WHITE, 'paint');
       for (const z of [-1.95, -0.25, 0.25, 1.95]) b.slab(-2.95, 0.05, z - 0.03, 2.95, 0.06, z + 0.03, C.HAZARD, 'paint');
     });
@@ -101,6 +101,14 @@ const rail_terminal: ModelDef = {
 // ---- export terminal ---------------------------------------------------------------------------
 const JETTY_EXT = 10;
 
+/** Water depth with out-of-map samples treated as open sea. */
+function safeDepth(ctx: GameContext, x: number, z: number): number {
+  const ix = Math.floor(x);
+  const iz = Math.floor(z);
+  if (ix < 0 || iz < 0 || ix >= ctx.world.sizeX || iz >= ctx.world.sizeZ) return 12;
+  return ctx.geology.waterDepth(ix, iz);
+}
+
 /** Local direction index (0:+z, 1:+x, 2:-z, 3:-x) that faces the most water. */
 function waterDirection(bs: BuildingState, ctx: GameContext): number {
   const cx = bs.x + bs.size[0] / 2;
@@ -116,7 +124,7 @@ function waterDirection(bs: BuildingState, ctx: GameContext): number {
     const wz = -lx * Math.sin(yaw) + lz * Math.cos(yaw);
     const ext = (k % 2 === 0 ? d : w) / 2;
     let score = 0;
-    for (let s = 0; s <= 12; s += 3) score += ctx.geology.waterDepth(Math.floor(cx + wx * (ext + s)), Math.floor(cz + wz * (ext + s)));
+    for (let s = 0; s <= 12; s += 3) score += safeDepth(ctx, cx + wx * (ext + s), cz + wz * (ext + s));
     if (score > bestScore) {
       bestScore = score;
       best = k;
@@ -136,7 +144,7 @@ const export_terminal: ModelDef = {
     const wx = lx * Math.cos(yaw) + lz * Math.sin(yaw);
     const wz = -lx * Math.sin(yaw) + lz * Math.cos(yaw);
     const ext = (dir % 2 === 0 ? 14 : 10) / 2 + JETTY_EXT;
-    const depth = Math.round(Math.min(40, ctx.geology.waterDepth(Math.floor(cx + wx * ext), Math.floor(cz + wz * ext))));
+    const depth = Math.round(Math.min(40, safeDepth(ctx, cx + wx * ext, cz + wz * ext)));
     return `w${dir}:${depth}:${SEA_LEVEL + 1 - bs.y}`;
   },
   ghostVariant: 'w0:8:-1',

@@ -60,7 +60,7 @@ const snowVert = /* glsl */ `
     vec4 mv = viewMatrix * vec4(p, 1.0);
     float d = -mv.z;
     vA = (1.0 - smoothstep(uBox.x * 0.3, uBox.x * 0.5, d)) * smoothstep(0.3, 1.5, d);
-    gl_PointSize = clamp((0.09 + aRnd * 0.06) * uScale / max(d, 0.1), 1.0, 24.0);
+    gl_PointSize = clamp((0.13 + aRnd * 0.09) * uScale / max(d, 0.1), 1.0, 24.0);
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -172,7 +172,7 @@ export class WeatherFx {
       this.snow.renderOrder = 22;
       this.snow.visible = false;
     }
-    this.lightning = new Lightning(host, ctx);
+    this.lightning = new Lightning(host, ctx, fx.lights);
     this.group.add(this.rain, this.snow, this.lightning.group);
     this.off = ctx.bus.on('weather:lightning', (e) => this.lightning.strike(e.x, e.z));
   }
@@ -236,6 +236,7 @@ export class WeatherFx {
     for (let i = 0; i < n; i++) {
       const x = cam.x + (Math.random() - 0.5) * 36;
       const z = cam.z + (Math.random() - 0.5) * 36;
+      if (x < 0 || z < 0 || x >= world.sizeX || z >= world.sizeZ || !world.isChunkGenerated(Math.floor(x / 16), Math.floor(z / 16))) continue;
       const y = world.getSurfaceY(Math.floor(x), Math.floor(z));
       if (Math.abs(y - cam.y) > 30) continue;
       for (let k = 0; k < 3; k++)

@@ -6,9 +6,9 @@ import * as THREE from 'three';
 import type { RenderHost } from '../../../core/client';
 import type { BuildingState, Fire, GameContext, WellState } from '../../../core/types';
 import type { BuildingView } from '../BuildingView';
-import { EMISSION_SCALE, FX_DISTANCE, PARTICLE_CAPACITY, MAX_POINT_LIGHTS } from '../config';
+import { EMISSION_SCALE, FX_DISTANCE, PARTICLE_CAPACITY, POINT_LIGHTS } from '../config';
 import { RIG_FLOOR } from '../models/rigSpecs';
-import { COL, count, dust, dustRing, exhaust, flames, flare, gasJet, jet, smoke, sparks, steam } from './emitters';
+import { COL, count, dust, exhaust, flames, flare, gasJet, jet, smoke, sparks, steam } from './emitters';
 import { LightPool } from './LightPool';
 import { PK, ParticleSystem, rgb } from './ParticleSystem';
 import { Shockwaves } from './Shockwave';
@@ -42,12 +42,14 @@ export class FxManager {
   readonly wind = new THREE.Vector3();
   /** Emission multiplier from settings.particles. */
   q = 1;
+  /** FX culling distance (tightened to the scene fog). */
+  maxDist = FX_DISTANCE;
   time = 0;
 
   constructor(private readonly host: RenderHost, private readonly ctx: GameContext) {
     const quality = ctx.settings.particles ?? 'high';
     this.ps = new ParticleSystem(PARTICLE_CAPACITY[quality]);
-    this.lights = new LightPool(MAX_POINT_LIGHTS);
+    this.lights = new LightPool(POINT_LIGHTS[quality] ?? 8);
     this.group.name = 'fx';
     this.group.add(this.ps.mesh, this.lights.group, this.waves.group);
     this.offs.push(
@@ -64,7 +66,7 @@ export class FxManager {
     return this.host.camera.position;
   }
 
-  private near(x: number, y: number, z: number, dist = FX_DISTANCE): boolean {
+  private near(x: number, y: number, z: number, dist = this.maxDist): boolean {
     const c = this.cam;
     return (x - c.x) ** 2 + (y - c.y) ** 2 + (z - c.z) ** 2 < dist * dist;
   }
@@ -85,6 +87,11 @@ export class FxManager {
       ps.emit(PK.FIRE, x + _v.x * 0.6, y + 0.5 + _v.y * 0.6, z + _v.z * 0.6, _v.x * v, _v.y * v, _v.z * v, 0.8 + rnd() * 0.9, s, s * 1.8, COL.FIRE, 1, 1.5, 3.2, 0.3, sr(1));
     }
     ps.emit(PK.GLOW, x, y + 1, z, 0, 0, 0, 0.45, 8 * sp, 22 * sp, COL.GLOW_WHITE, 1, 0, 1, 0);
+    // rolling fireball core
+    for (let i = 0; i < Math.round(22 * Math.max(0.6, this.q)); i++) {
+      const s = (3 + rnd() * 3) * sp;
+      ps.emit(PK.FIRE, x + sr(1.5 * sp), y + 1 + rnd() * 2 * sp, z + sr(1.5 * sp), sr(2), 2 + rnd() * 4, sr(2), 1.2 + rnd() * 0.8, s, s * 1.5, COL.FIRE, 1, 3, 1.5, 0.4, sr(1));
+    }
     ps.emit(PK.GLOW, x, y + 1, z, 0, 2, 0, 1.2, 10 * sp, 16 * sp, COL.GLOW_FIRE, 0.6, 0, 1, 0);
     for (let i = 0; i < Math.round(50 * p * this.q + 10); i++) {
       const a = rnd() * Math.PI * 2;
@@ -106,6 +113,8 @@ export class FxManager {
     this.time = time;
     const s = this.ctx.state;
     this.q = EMISSION_SCALE[this.ctx.settings.particles ?? 'high'] ?? 1;
+    const fog = this.host.scene.fog;
+    this.maxDist = fog instanceof THREE.Fog ? Math.max(60, Math.min(FX_DISTANCE, fog.far + 30)) : FX_DISTANCE;
     const w = s.weather;
     const ws = Math.min(25, w?.windSpeed ?? 0) * 0.45;
     this.wind.set(Math.cos(w?.windDir ?? 0) * ws, 0, Math.sin(w?.windDir ?? 0) * ws);
@@ -113,13 +122,15 @@ export class FxManager {
     // ---- fires
     for (const f of s.hazards.fires) this.fireFx(f, views, dt);
     // ---- wells
-    for (const well of Object.values(s.wells)) {
+    for (const id in s.wells) {
+      const well = s.wells[id];
       if (well.status === 'blowout') this.blowoutFx(well, dt);
       else if (well.status === 'kick') this.kickFx(well, dt);
       else if (well.status === 'fracking') this.fracFx(well, dt);
     }
     // ---- pipeline leaks
-    for (const n of Object.values(s.networks)) {
+    for (const id in s.networks) {
+      const n = s.networks[id];
       if (!n.leak) continue;
       const L = n.leak;
       const x = L.x + 0.5;
@@ -298,13 +309,13 @@ export class FxManager {
     const n = count(150 * Math.max(0.5, this.q), dt);
     for (let i = 0; i < n; i++) {
       const s = 0.07 + rnd() * 0.08;
-      this.ps.emit(PK.FOAM, _v.x, _v.y, _v.z, (_v2.x + sr(0.1)) * speed, (_v2.y + sr(0.1)) * speed + 1.5, (_v2.z + sr(0.1)) * speed, 0.7 + rnd() * 0.5, s, 0.6 + rnd() * 0.5, COL.FOAM, 0.75, -6, 0.9, 0.05, sr(2));
+      this.ps.emit(PK.FOAM, _v.x, _v.y, _v.z, (_v2.x + sr(0.1)) * speed, (_v2.y + sr(0.1)) * speed + 1.5, (_v2.z + sr(0.1)) * speed, 0.7 + rnd() * 0.5, s, 0.35 + rnd() * 0.35, COL.FOAM, 0.7, -6, 0.9, 0.05, sr(2));
     }
   }
 
   /** Emitters declared on a building model (called for nearby views each frame). */
   buildingFx(v: BuildingView, b: BuildingState, dt: number, night: number): void {
-    if (v.hidden || v.distance > FX_DISTANCE + v.radius) return;
+    if (v.hidden || v.distance > this.maxDist + v.radius) return;
     const ps = this.ps;
     const act = v.speed;
     const lit = v.lightsOn;
@@ -364,4 +375,3 @@ function ps_emitMud(ps: ParticleSystem, x: number, y: number, z: number, vx: num
   ps.emit(PK.DROP, x, y, z, vx, vy, vz, 1.4 + Math.random() * 0.6, s, s * 1.3, COL.MUD, 0.95, -11, 0.2, 0.2);
 }
 
-export { dustRing };

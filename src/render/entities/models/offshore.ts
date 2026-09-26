@@ -22,7 +22,7 @@ const depthOf = (v: string, def = 12) => Math.max(2, Number(v.slice(1)) || def);
 /** Octagonal helideck at (x, y, z) with radius r (+ anchor for helicopters). */
 function helideck(b: Builder, x: number, y: number, z: number, r: number): void {
   b.cyl(x, y - 0.25, z, r, 0.25, C.GUNMETAL, 'metal', 8);
-  b.noShadow(() => {
+  b.at(0, 0, 0, 0, () => {
     b.ring(x, y + 0.01, z, r * 0.62, 0.08, C.HAZARD, 'paint', 24);
     b.slab(x - 0.55, y, z - 0.75, x - 0.32, y + 0.02, z + 0.75, C.WHITE, 'paint');
     b.slab(x + 0.32, y, z - 0.75, x + 0.55, y + 0.02, z + 0.75, C.WHITE, 'paint');

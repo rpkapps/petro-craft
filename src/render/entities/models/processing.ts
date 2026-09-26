@@ -1,5 +1,5 @@
 // Processing: gas plant, crude distillation (refinery), FCC, hydrotreater & lube plant, LNG train.
-import { column, controlRoom, exchanger, finFan, frame, furnace, hVessel, lampPost, pipeRackX, shed, stack, tank, vVessel } from '../geom/parts';
+import { column, controlRoom, deckRing, ringRail, exchanger, finFan, frame, furnace, hVessel, lampPost, pipeRackX, shed, stack, tank, vVessel } from '../geom/parts';
 import { C } from '../palette';
 import { spinY } from './common';
 import { flareTower } from './production';
@@ -59,7 +59,10 @@ const refinery: ModelDef = {
     b.cyl(-1.0, 6.1, -3.3, 1.1, 1.0, C.STEEL_LIGHT, 'paint', 18, 0.7);
     b.cyl(-1.0, 7.1, -3.3, 0.7, 3.4, C.STEEL_LIGHT, 'paint', 16);
     b.dome(-1.0, 10.5, -3.3, 0.7, C.STEEL_LIGHT, 'paint', 16, 0.35);
-    for (const y of [3.2, 6.4, 9.2]) b.ring(-1.0, y, -3.3, y > 7 ? 1.1 : 1.45, 0.32, C.STEEL_DARK, 'metal', 16);
+    for (const y of [3.2, 6.4, 9.2]) {
+      deckRing(b, -1.0, y, -3.3, y > 7 ? 1.35 : 1.75, 0.65);
+      ringRail(b, -1.0, y, -3.3, y > 7 ? 1.3 : 1.7);
+    }
     b.box(-1.0 + 1.5, 3.6, -3.3, 0.12, 0.12, 0.12, C.LAMP_WARM, 'lamp');
     // crude heater with two stacks
     furnace(b, 0.8, -4.7, 4.5, -2.4, 3.2, 2, 7.5);

@@ -31,6 +31,7 @@ export class InspectorPanel extends Panel {
 
   constructor(ui: UIHost, args: PanelArgs) {
     super(ui, args, 'Inspector', 'building', 'lg');
+    this.el.classList.add('auto-h');
     this.bid = String(args.buildingId ?? '');
   }
 
@@ -284,7 +285,7 @@ export class InspectorPanel extends Panel {
   private rigCard(b: BuildingState): HTMLElement {
     const ctx = this.ui.game;
     const box = h('div.col', { style: 'gap:.5rem' });
-    const btns = h('div.row.wrap');
+    const btns = h('div.row.wrap', { style: 'margin-top:.7rem' });
     const plan = button('Plan new well', { icon: 'ruler', variant: 'primary', size: 'sm', onClick: () => this.ui.open('planner', { rigId: this.bid }, { stack: true }) });
     const skid = button('Skid rig', { icon: 'map', size: 'sm', onClick: () => this.ui.open('map', { tool: 'skid', rigId: this.bid }, { stack: true }) });
     btns.append(plan, skid);

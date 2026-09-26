@@ -282,18 +282,33 @@ export const paintOilPool: Painter = (p, pal) => {
 
 export const paintFire: Painter = (p, pal) => {
   p.clear();
-  const core = mixc(pal[2], WHITE, 0.3);
-  for (let x = 0; x < TEX; x++) {
-    const edge = 1 - Math.abs(x - 7.5) / 8;
-    const h = 5 + edge * 9 + p.n(x, 0, 2, 1) * 5;
-    for (let yb = 0; yb < h; yb++) {
-      const t = 1 - yb / h;
-      const hole = p.f(x, yb, 4, 2, 3) + (1 - t) * 0.5;
-      if (hole > 0.95) continue;
-      const c = t > 0.72 && edge > 0.45 ? core : t > 0.5 ? pal[2] : t > 0.28 ? pal[0] : pal[1];
+  const core = mixc(pal[2], WHITE, 0.45);
+  // three licking tongues that taper towards the tips, with a hot core near the base
+  const tongues = [
+    { cx: 4.2, h: 11 + p.r() * 2, w: 3.2 },
+    { cx: 8.0, h: 15, w: 4.2 },
+    { cx: 11.8, h: 10 + p.r() * 2, w: 3.0 },
+  ];
+  for (let yb = 0; yb < TEX; yb++)
+    for (let x = 0; x < TEX; x++) {
+      let best = 0;
+      for (const t of tongues) {
+        const k = yb / t.h;
+        if (k >= 1) continue;
+        const sway = Math.sin(k * 3.2 + t.cx) * k * 1.2;
+        const halfW = t.w * Math.pow(1 - k, 0.7);
+        const d = Math.abs(x + 0.5 - t.cx - sway) / Math.max(0.01, halfW);
+        best = Math.max(best, (1 - d) * (1 - k * 0.35));
+      }
+      if (best <= 0) continue;
+      const lick = p.n(x, yb, 4, 3) * 0.25;
+      const v = best - lick * (yb / TEX);
+      if (v <= 0.02) continue;
+      const c = v > 0.62 && yb < 9 ? core : v > 0.42 ? pal[2] : v > 0.22 ? pal[0] : pal[1];
       p.set(x, TEX - 1 - yb, c, 1);
     }
-  }
+  // embers
+  for (let i = 0; i < 4; i++) p.set(2 + p.ri(12), p.ri(5), pal[0], 1);
 };
 
 export const paintMissing: Painter = (p) => {

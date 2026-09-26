@@ -13,7 +13,7 @@ interface Wave {
 export class Shockwaves {
   readonly group = new THREE.Group();
   private readonly waves: Wave[] = [];
-  private readonly ringGeo = new THREE.RingGeometry(0.82, 1, 56).rotateX(-Math.PI / 2);
+  private readonly ringGeo = new THREE.RingGeometry(0.9, 1, 64).rotateX(-Math.PI / 2);
   private readonly shellGeo = new THREE.SphereGeometry(1, 24, 12);
 
   constructor(count = 4) {
@@ -53,9 +53,9 @@ export class Shockwaves {
       const e = 1 - Math.pow(1 - k, 3);
       const s = 0.5 + e * w.size;
       w.ring.scale.setScalar(s);
-      (w.ring.material as THREE.MeshBasicMaterial).opacity = (1 - k) * 0.9;
+      (w.ring.material as THREE.MeshBasicMaterial).opacity = (1 - k) * (1 - k) * 0.55;
       w.shell.scale.setScalar(s * 0.55);
-      (w.shell.material as THREE.MeshBasicMaterial).opacity = (1 - k) * (1 - k) * 0.35;
+      (w.shell.material as THREE.MeshBasicMaterial).opacity = (1 - k) * (1 - k) * 0.16;
     }
   }
 

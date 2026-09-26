@@ -51,7 +51,10 @@ export class GeoFeatures {
   private faultMat: THREE.ShaderMaterial;
   private builtAquifers = false;
   private faultKey = '';
-  private ringKey = '';
+  private ringUnits: 'imperial' | 'metric' | null = null;
+  private ringStep = 12.5;
+  private ringX = NaN;
+  private ringZ = NaN;
   private readonly ringRadius = 44;
 
   constructor(private ctx: GameContext, shared: Shared) {
@@ -152,40 +155,51 @@ export class GeoFeatures {
     }
   }
 
-  private updateRings(camera: THREE.Camera, units: 'imperial' | 'metric') {
-    const cx = Math.round(camera.position.x / 4) * 4;
-    const cz = Math.round(camera.position.z / 4) * 4;
-    let surface = Math.floor(camera.position.y - 1.6);
-    try {
-      surface = Math.min(surface, this.ctx.geology.surfaceHeight(cx, cz));
-    } catch {
-      /* geology unavailable: use the camera */
-    }
-    const key = `${cx},${cz},${surface},${units}`;
-    if (key === this.ringKey) return;
-    this.ringKey = key;
-    for (const c of [...this.rings.children]) {
-      this.rings.remove(c);
-      if (c instanceof THREE.Mesh) c.geometry.dispose();
-    }
+  /** Build the ring stack once per unit system; afterwards it only follows the camera. */
+  private buildRings(units: 'imperial' | 'metric') {
+    const old = this.rings.children[0]?.children[0];
+    if (old instanceof THREE.Mesh) old.geometry.dispose();
+    this.rings.clear();
     for (const l of this.ringLabels) disposeLabel(l);
     this.ringLabels = [];
-    const stepBlocks = units === 'imperial' ? 1000 / FEET_PER_METER / METERS_PER_BLOCK * 2 : 500 / METERS_PER_BLOCK; // 2,000 ft or 500 m
+    // every 2,000 ft or 500 m
+    this.ringStep = units === 'imperial' ? (2000 / FEET_PER_METER) / METERS_PER_BLOCK : 500 / METERS_PER_BLOCK;
+    const geo = new THREE.PlaneGeometry(this.ringRadius * 2 + 4, this.ringRadius * 2 + 4);
+    geo.rotateX(-Math.PI / 2);
     for (let k = 1; k <= 8; k++) {
-      const y = surface - stepBlocks * k;
-      if (y < 2) break;
-      const geo = new THREE.PlaneGeometry(this.ringRadius * 2 + 4, this.ringRadius * 2 + 4);
-      geo.rotateX(-Math.PI / 2);
+      const ring = new THREE.Group();
+      ring.position.y = -this.ringStep * k;
       const m = new THREE.Mesh(geo, this.ringMat);
-      m.position.set(cx, y, cz);
       m.renderOrder = 16;
-      this.rings.add(m);
-      const depthM = stepBlocks * k * METERS_PER_BLOCK;
-      const text = units === 'imperial' ? `${Math.round((depthM * FEET_PER_METER) / 100) * 100} ft` : `${Math.round(depthM)} m`;
+      ring.add(m);
+      const depthM = this.ringStep * k * METERS_PER_BLOCK;
+      const text = units === 'imperial' ? `${(Math.round((depthM * FEET_PER_METER) / 100) * 100).toLocaleString()} ft` : `${Math.round(depthM).toLocaleString()} m`;
       const label = createLabel([`▼ ${text}`], '#4fd8ff', 0.6);
-      label.position.set(cx + this.ringRadius, y, cz);
-      this.rings.add(label);
+      label.position.set(this.ringRadius, 0, 0);
+      ring.add(label);
       this.ringLabels.push(label);
+      this.rings.add(ring);
+    }
+  }
+
+  private updateRings(camera: THREE.Camera, units: 'imperial' | 'metric') {
+    if (units !== this.ringUnits) {
+      this.ringUnits = units;
+      this.buildRings(units);
+    }
+    const cx = Math.round(camera.position.x / 4) * 4;
+    const cz = Math.round(camera.position.z / 4) * 4;
+    if (cx !== this.ringX || cz !== this.ringZ) {
+      this.ringX = cx;
+      this.ringZ = cz;
+      let surface = Math.floor(camera.position.y - 1.6);
+      try {
+        surface = Math.min(surface, this.ctx.geology.surfaceHeight(cx, cz));
+      } catch {
+        /* geology unavailable: use the camera */
+      }
+      this.rings.position.set(cx, surface, cz);
+      for (const ring of this.rings.children) ring.visible = surface + ring.position.y >= 2;
     }
   }
 
@@ -198,7 +212,8 @@ export class GeoFeatures {
   dispose() {
     if (this.aquifers.children[0]) (this.aquifers.children[0] as THREE.Mesh).geometry.dispose();
     for (const c of this.faults.children) (c as THREE.Mesh).geometry.dispose();
-    for (const c of this.rings.children) if (c instanceof THREE.Mesh) c.geometry.dispose();
+    const ringMesh = this.rings.children[0]?.children[0];
+    if (ringMesh instanceof THREE.Mesh) ringMesh.geometry.dispose();
     for (const l of this.ringLabels) disposeLabel(l);
     this.aquiferMat.dispose();
     this.faultMat.dispose();

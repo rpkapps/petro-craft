@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { C } from './palette';
 
 export type MatKind =
+  | 'solid' // merged bucket: paint/metal/rough/glassDark with per-vertex roughness & metalness
   | 'paint' // painted steel, cladding
   | 'metal' // bare / galvanised steel, pipes
   | 'rough' // concrete, gravel, rubber, dirt
@@ -22,7 +23,7 @@ export type MatMode = 'normal' | 'off' | 'broken' | 'charred';
 
 export const LIGHT_KINDS: ReadonlySet<MatKind> = new Set(['lamp', 'blink', 'hot', 'glass']);
 
-const ALL_KINDS: MatKind[] = ['paint', 'metal', 'rough', 'glass', 'glassDark', 'lamp', 'blink', 'hot', 'liquid', 'flag', 'sign'];
+const ALL_KINDS: MatKind[] = ['solid', 'paint', 'metal', 'rough', 'glass', 'glassDark', 'lamp', 'blink', 'hot', 'liquid', 'flag', 'sign'];
 
 function std(p: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ vertexColors: true, ...p });
@@ -138,8 +139,17 @@ export class MaterialLib {
   private create(kind: MatKind, mode: MatMode): THREE.Material {
     const dim = mode === 'broken' ? 0.52 : 1;
     const charred = mode === 'charred';
-    const charColor = new THREE.Color(0.075, 0.066, 0.06);
+    const charColor = new THREE.Color(0.1, 0.088, 0.078);
     switch (kind) {
+      case 'solid': {
+        const m = std({
+          color: charred ? charColor : new THREE.Color(dim, dim, dim),
+          roughness: 1,
+          metalness: charred ? 0.15 : 1,
+        });
+        patchSurface(m, charred);
+        return m;
+      }
       case 'paint':
         return charred ? std({ color: charColor, roughness: 1, metalness: 0 }) : std({ color: new THREE.Color(dim, dim, dim), roughness: 0.72, metalness: 0.08 });
       case 'metal':
@@ -244,10 +254,9 @@ export class MaterialLib {
     const m = base.clone();
     m.clippingPlanes = planes;
     m.clipShadows = true;
-    if (kind === 'flag') {
-      (m as THREE.MeshStandardMaterial).onBeforeCompile = (base as THREE.MeshStandardMaterial).onBeforeCompile;
-      m.customProgramCacheKey = base.customProgramCacheKey;
-    }
+    // Material.clone() does not carry shader patches
+    m.onBeforeCompile = base.onBeforeCompile;
+    m.customProgramCacheKey = base.customProgramCacheKey;
     m.userData = { ...base.userData, clonedFrom: key(kind, mode) };
     this.clones.set(m, base);
     return m;
@@ -271,6 +280,20 @@ export class MaterialLib {
 }
 
 const key = (k: MatKind, m: MatMode) => `${k}|${m}`;
+
+/** Per-vertex roughness/metalness (attribute `surf`) for the merged 'solid' material. */
+function patchSurface(m: THREE.MeshStandardMaterial, charred: boolean): void {
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec2 surf;\nvarying vec2 vSurf;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSurf = surf;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vSurf;')
+      .replace('#include <roughnessmap_fragment>', charred ? 'float roughnessFactor = 1.0;' : 'float roughnessFactor = roughness * vSurf.x;')
+      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = metalness * vSurf.y;');
+  };
+  m.customProgramCacheKey = () => (charred ? 'pc-solid-charred' : 'pc-solid');
+}
 
 /** Translucent material used for build ghosts (one per mesh; the player module tints them). */
 export function makeGhostMaterial(): THREE.MeshStandardMaterial {

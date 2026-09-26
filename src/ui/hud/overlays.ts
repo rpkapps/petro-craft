@@ -141,7 +141,7 @@ export class ModeStrip {
     const show = !!p && p.lines.length > 0 && (!!this.build || this.pipe !== null);
     toggleClass(this.status, 'show', show);
     if (!p || !show) return;
-    this.status.className = `ms-status show ${p.level ?? 'info'}`;
+    this.status.className = `ms-status show lv-${p.level ?? 'info'}`;
     this.status.append(icon(p.level === 'danger' ? 'ban' : p.level === 'warning' ? 'warning' : 'check'), h('div.col', { style: 'gap:0' }, p.lines.map((l) => h('span', l))));
   }
 
@@ -199,7 +199,7 @@ export class ScanCard {
   show(p: GameEvents['player:scan']) {
     clear(this.el);
     const ic: IconName = p.tool.includes('detector') ? 'detector' : 'scanner';
-    this.el.className = `pc-scan glass flat show ${p.level ?? 'info'}`;
+    this.el.className = `pc-scan glass flat show lv-${p.level ?? 'info'}`;
     this.el.append(
       h('div.sc-head', icon(ic), h('span', p.tool.includes('detector') ? 'Gas Detector' : 'Geo Scanner'), h('span.sp'), h('span.mono.dim', `${Math.floor(p.at.x)}, ${Math.floor(p.at.y)}, ${Math.floor(p.at.z)}`)),
       h('div.sc-lines', p.lines.map((l) => h('div.sc-line', l))),

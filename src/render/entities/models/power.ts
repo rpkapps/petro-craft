@@ -22,7 +22,7 @@ const diesel_generator: ModelDef = {
   build(b) {
     b.slab(-1.45, 0, -0.95, 1.45, 0.3, 0.95, C.STEEL_DARK, 'paint'); // fuel day-tank base
     b.slab(-1.4, 0.3, -0.85, 1.25, 2.3, 0.85, C.GREEN, 'paint');
-    b.slab(-1.42, 2.1, -0.87, 1.27, 2.3, 0.87, b.company, 'paint');
+    b.slab(-1.42, 1.95, -0.87, 1.27, 2.2, 0.87, b.company, 'paint');
     b.detail(() => {
       for (let x = -1.3; x < 1.2; x += 0.22) {
         b.box(x, 1.3, 0.86, 0.04, 1.7, 0.03, C.GREEN, 'paint');
