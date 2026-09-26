@@ -23,6 +23,11 @@ export class BlockHighlight {
   private crack: THREE.Mesh;
   private crackMat: THREE.ShaderMaterial;
 
+  /** Swap the texture array the crack overlay samples (texture quality switch). */
+  setAtlas(atlas: THREE.Texture) {
+    this.crackMat.uniforms.uAtlas.value = atlas;
+  }
+
   constructor(atlas: THREE.Texture) {
     const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004));
     this.lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x0b0d10, transparent: true, opacity: 0.7, depthWrite: false }));

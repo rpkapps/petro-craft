@@ -20,4 +20,4 @@ export function createRenderer(canvas: HTMLCanvasElement, ctx: GameContext): Ren
 export { RenderEngine };
 export { createBlockAtlas, paintLayer } from './textures/atlas';
 export { LAYERS, layerOf } from './textures/layers';
-export { blockIconCanvas, blockIconDataURL } from './textures/icons';
+export { blockIconCanvas, blockIconDataURL, type IconQuality } from './textures/icons';

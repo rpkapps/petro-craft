@@ -3,6 +3,7 @@
 //   time=HH:MM  weather=<kind>  cover=0..1  overlay=xray|pipes|...  cam=x,y,z,yaw,pitch  rd=8
 //   post=0 (disable bloom/ssao/AA)  ssao=1  shadows=0  quality=low|medium|high  speed=<game minutes / s>
 //   scale=0.5..1 (render scale)  aa=0  brightness=0.6..1.6  auto=1 (auto quality; off by default so shots are stable)
+//   tex=classic|high|ultra (block texture quality)
 //   lighttest=1 (stone hut with 1-block walls & doorway, lamp behind a wall, floating STRUCTURE deck and a
 //   STRUCTURE "tank" volume near the focus point — checks sky-light leakage and building shading)
 import type { EventBus, MapOverlay } from '../../src/core/EventBus';
@@ -48,6 +49,11 @@ const PRESETS: Record<string, Preset> = {
   lightday: { time: '13:30', cam: [-3, 9, 26, 0.05, -0.3], lighttest: true },
   lightnight: { time: '22:40', cam: [-3, 9, 26, 0.05, -0.3], lighttest: true },
   lightinside: { time: '13:30', cam: [-7.5, 1.6, 7.6, 0.4, -0.3], lighttest: true },
+  // close-range material checks (1–4 blocks) around the light-test props: grass, stone hut, deck
+  close: { time: '10:40', cam: [-4, 1.7, 13, -0.35, -0.42], lighttest: true },
+  closenight: { time: '22:40', cam: [-4, 1.7, 13, -0.35, -0.42], lighttest: true },
+  closewall: { time: '15:20', cam: [-6.5, 1.7, 13.2, 0.1, -0.12], lighttest: true },
+  mid: { time: '10:40', cam: [-14, 7, 26, -0.5, -0.3], lighttest: true },
 };
 const preset = PRESETS[scene] ?? PRESETS.day;
 
@@ -172,6 +178,7 @@ async function main() {
   if (params.get('scale')) settings.renderScale = Number(params.get('scale'));
   if (params.get('aa') === '0') settings.antialias = false;
   if (params.get('brightness')) settings.brightness = Number(params.get('brightness'));
+  if (params.get('tex')) settings.textureQuality = params.get('tex') as Settings['textureQuality'];
   if (params.get('ssao') === '1') settings.ssao = true;
   if (params.get('shadows') === '0') settings.shadows = false;
   if (params.get('quality')) settings.shadowQuality = params.get('quality') as Settings['shadowQuality'];

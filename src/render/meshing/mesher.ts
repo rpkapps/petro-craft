@@ -68,6 +68,18 @@ for (const f of FACES) {
 
 const AO_LEVEL = [112, 158, 206, 255];
 
+/**
+ * Per face: neighbour strides of the four in-plane directions (+a1, -a1, +a2, -a2; a1 < a2 are the world
+ * axes other than the normal axis). An edge is exposed (convex) when the cell beside the block and the
+ * cell diagonally in front are both open; the HD shader rounds those edges. Bits are packed as a negative
+ * sway value (sway < 0 never animates).
+ */
+const EDGE_DIRS: number[][] = FACES.map((f) => {
+  const axes = [0, 1, 2].filter((a) => a !== f.nAxis);
+  const unit = (a: number, sgn: number) => [a === 0 ? sgn : 0, a === 1 ? sgn : 0, a === 2 ? sgn : 0];
+  return [stride(unit(axes[0], 1)), stride(unit(axes[0], -1)), stride(unit(axes[1], 1)), stride(unit(axes[1], -1))];
+});
+
 /** Face-pair index (a < b) → bit of the section visibility mask. */
 const PAIR_BIT: number[][] = [];
 {
@@ -380,14 +392,27 @@ export class Mesher {
         const sk = this.fSky;
         const bl = this.fBlk;
         if (ao[0] === ao[1] && ao[0] === ao[2] && ao[0] === ao[3] && sk[0] === sk[1] && sk[0] === sk[2] && sk[0] === sk[3] && bl[0] === bl[1] && bl[0] === bl[2] && bl[0] === bl[3]) {
-          this.greedy[d][GI(x, y - y0, z)] = layer + 1 + ao[0] * 256 + sk[0] * 65536 + bl[0] * 16777216;
+          this.greedy[d][GI(x, y - y0, z)] = layer + 1 + ao[0] * 256 + sk[0] * 65536 + bl[0] * 16777216 + this.edgeBits(i, d) * 4294967296;
           this.greedyAny[d] = true;
           continue;
         }
       }
-      this.emitBoxFace(buf, f, x, y, z, hy, layer, sway, -1);
+      const eb = mergeable ? this.edgeBits(i, d) : 0;
+      this.emitBoxFace(buf, f, x, y, z, hy, layer, eb ? -(eb + 1) / 127 : sway, -1);
     }
     if (emitted) this.track(y, y + hy);
+  }
+
+  private edgeBits(i: number, d: number): number {
+    const ext = this.ext;
+    const dirs = EDGE_DIRS[d];
+    const fwd = NOFF[d];
+    let bits = 0;
+    for (let k = 0; k < 4; k++) {
+      const side = i + dirs[k];
+      if (!OPAQUE[ext[side]] && !OPAQUE[ext[side + fwd]]) bits |= 1 << k;
+    }
+    return bits;
   }
 
   /** Merge the section's uniformly lit opaque faces into maximal rectangles per slice and emit them. */
@@ -459,6 +484,8 @@ export class Mesher {
     const ao = Math.floor(key / 256) % 256;
     const sky = Math.floor(key / 65536) % 256;
     const blk = Math.floor(key / 16777216) % 256;
+    const edges = Math.floor(key / 4294967296) % 16;
+    const sway = edges ? -(edges + 1) / 127 : 0;
     // start cell: the rectangle corner that the face's (u=0, v=0) vertex belongs to
     const sx = [lo[0], lo[1] + y0, lo[2]];
     if (f.uSign < 0) sx[f.uAxis] += len[f.uAxis] - 1;
@@ -473,7 +500,7 @@ export class Mesher {
         sx[0] + f.o[0] + f.u[0] * su + f.v[0] * sv,
         sx[1] + f.o[1] + f.u[1] * su + f.v[1] * sv,
         sx[2] + f.o[2] + f.u[2] * su + f.v[2] * sv,
-        f.n[0], f.n[1], f.n[2], 0, CORNER_UV[k][0] * W, CORNER_UV[k][1] * Hh, layer, ao, sky, blk,
+        f.n[0], f.n[1], f.n[2], sway, CORNER_UV[k][0] * W, CORNER_UV[k][1] * Hh, layer, ao, sky, blk,
       );
     }
     buf.quad(false);

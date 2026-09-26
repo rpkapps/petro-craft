@@ -2,6 +2,13 @@
 // objects, so the environment updates them once per frame.
 import * as THREE from 'three';
 
+/** 1×1×1 placeholder for array samplers that are bound before HD textures exist. */
+const EMPTY_ARRAY = (() => {
+  const t = new THREE.DataArrayTexture(new Uint8Array([128, 128, 200, 255]), 1, 1, 1);
+  t.needsUpdate = true;
+  return t;
+})();
+
 export function createSharedUniforms(atlas: THREE.DataArrayTexture, props: THREE.Texture) {
   return {
     uAtlas: { value: atlas as THREE.Texture },
@@ -37,6 +44,12 @@ export function createSharedUniforms(atlas: THREE.DataArrayTexture, props: THREE
     uWaterShallow: { value: new THREE.Color(0.1, 0.42, 0.45) },
     uWaterDeep: { value: new THREE.Color(0.02, 0.1, 0.2) },
     uXray: { value: 0 },
+    // HD textures ('high' / 'ultra')
+    uMatTex: { value: EMPTY_ARRAY as THREE.Texture },
+    uPom: { value: 1 },
+    uWet: { value: 0 },
+    uSeaLevel: { value: 62 },
+    uWaterLayer: { value: 0 },
   };
 }
 

@@ -7,6 +7,7 @@ import * as N from './paintNatural';
 import * as R from './paintRock';
 import * as I from './paintIndustrial';
 import type { Painter } from './paintNatural';
+import { hdLayerProps } from './hd/props';
 
 const PAINTERS: Record<string, Painter> = {
   missing: I.paintMissing,
@@ -99,7 +100,10 @@ const fallback: Painter = (p, pal) => R.paintStoneBase(p, [pal[0], pal[1] ?? pal
 
 export interface BlockAtlas {
   texture: THREE.DataArrayTexture;
-  /** 256×2 RGBA8: row 0 = (emissive, specular, kind, 0), row 1 = average colour (sRGB). */
+  /**
+   * 256×4 RGBA8: row 0 = (emissive, specular, kind, crack flag), row 1 = average colour (sRGB),
+   * row 2 = HD (bomb mode, parallax depth / 0.1, sparkle, porosity), row 3 = HD (metal, translucency, macro, 0).
+   */
   props: THREE.DataTexture;
   layerCount: number;
   /** Average linear-ish sRGB colour per layer (0..1) for overlays / LOD tints. */
@@ -124,7 +128,7 @@ export function createBlockAtlas(maxAnisotropy: number): BlockAtlas {
   const count = LAYERS.length;
   const bytes = new Uint8Array(TEX * TEX * 4 * count);
   const average = new Float32Array(count * 3);
-  const props = new Uint8Array(256 * 2 * 4);
+  const props = new Uint8Array(256 * 4 * 4);
   LAYERS.forEach((layer, i) => {
     const pix = paintLayer(layer.key, layer.source?.palette ?? []);
     pix.toBytes(bytes, i * TEX * TEX * 4);
@@ -154,6 +158,16 @@ export function createBlockAtlas(maxAnisotropy: number): BlockAtlas {
     props[o2 + 1] = Math.round((g / n));
     props[o2 + 2] = Math.round((b / n));
     props[o2 + 3] = 255;
+    const hp = hdLayerProps(layer.key);
+    const o3 = (512 + i) * 4;
+    props[o3] = hp.bomb;
+    props[o3 + 1] = Math.round(Math.min(1, hp.pom / 0.1) * 255);
+    props[o3 + 2] = Math.round(hp.sparkle * 255);
+    props[o3 + 3] = Math.round(hp.porosity * 255);
+    const o4 = (768 + i) * 4;
+    props[o4] = Math.round(hp.metal * 255);
+    props[o4 + 1] = Math.round(hp.translucency * 255);
+    props[o4 + 2] = Math.round(hp.macro * 255);
   });
 
   const texture = new THREE.DataArrayTexture(bytes, TEX, TEX, count);
@@ -168,7 +182,7 @@ export function createBlockAtlas(maxAnisotropy: number): BlockAtlas {
   texture.anisotropy = Math.min(4, maxAnisotropy);
   texture.needsUpdate = true;
 
-  const propTex = new THREE.DataTexture(props, 256, 2, THREE.RGBAFormat, THREE.UnsignedByteType);
+  const propTex = new THREE.DataTexture(props, 256, 4, THREE.RGBAFormat, THREE.UnsignedByteType);
   propTex.magFilter = THREE.NearestFilter;
   propTex.minFilter = THREE.NearestFilter;
   propTex.generateMipmaps = false;

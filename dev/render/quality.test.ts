@@ -12,7 +12,7 @@ const check = (name: string, ok: boolean, info = '') => {
 };
 
 const settings: Settings = { ...structuredClone(DEFAULT_SETTINGS), ssao: true, shadows: true, bloom: true, renderScale: 1, renderDistance: 8, autoQuality: true };
-const eff: EffectiveQuality = { renderScale: 1, ssao: false, shadowDegrade: 0, bloomScale: 0.5, renderDistance: 8 };
+const eff: EffectiveQuality = { pom: true, renderScale: 1, ssao: false, shadowDegrade: 0, bloomScale: 0.5, renderDistance: 8 };
 /** Run `seconds` of frames at a fixed interval/cost; returns the levels seen at each change. */
 function run(q: AutoQuality, seconds: number, intervalMs: number, costMs: number, gpuKnown = true, ignore = false) {
   const changes: number[] = [];

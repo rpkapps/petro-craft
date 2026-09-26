@@ -82,6 +82,8 @@ flat varying float vLayer;
 varying float vAo;
 varying float vSky;
 varying float vBlock;
+/** Exposed (convex) edge bits of opaque cube faces, packed as a negative sway value by the mesher. */
+flat varying float vEdge;
 #ifndef HAS_NORMAL
 #define HAS_NORMAL
 #endif
@@ -107,6 +109,7 @@ void main() {
   vAo = aInfo.y / 255.0;
   vSky = aInfo.z / 255.0;
   vBlock = aInfo.w / 255.0;
+  vEdge = sway < -0.001 ? floor(-sway * 127.0 + 0.5) - 1.0 : 0.0;
 }
 `;
 

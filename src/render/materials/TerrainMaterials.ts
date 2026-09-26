@@ -5,13 +5,18 @@ import type { SharedUniforms } from './uniforms';
 import {
   COMMON_UNIFORMS_GLSL, FOG_GLSL, NOISE_GLSL, SKY_FN_GLSL, TERRAIN_LIGHTING_GLSL, TERRAIN_VERTEX_GLSL, SHADOW_FRAG_PARS_GLSL,
 } from './shaderLib';
+import { HD_PARS_GLSL, HD_WATER_GLSL } from './hdShading';
+
+export type TextureQuality = 'classic' | 'high' | 'ultra';
 
 const SOLID_FRAGMENT = /* glsl */ `
 ${SHADOW_FRAG_PARS_GLSL}
 ${COMMON_UNIFORMS_GLSL}
 ${NOISE_GLSL}
 ${FOG_GLSL}
+${SKY_FN_GLSL}
 ${TERRAIN_LIGHTING_GLSL}
+${HD_PARS_GLSL}
 #ifdef CUTOUT
 uniform vec2 uPlantFade;
 #endif
@@ -33,16 +38,27 @@ void main() {
     uv.x += sin(uTime * 11.0 + uv.y * 9.0 + vWorldPos.x * 3.0) * 0.05 * lift;
     uv.y += sin(uTime * 7.0 + vWorldPos.z * 5.0) * 0.035 * lift;
   }
-  vec4 tex = texture(uAtlas, vec3(uv, layer));
-  #ifdef CUTOUT
-  if (tex.a < 0.5) discard;
-  #endif
   vec3 N = normalize(vNormal);
   #ifdef CUTOUT
   if (!gl_FrontFacing && abs(N.y) < 0.5) N = -N;
   #endif
+  #ifdef TEX_HD
+  HDSample hs = hdSample(layer, uv, N);
+  vec4 tex = hs.albedo;
+  #else
+  vec4 tex = texture(uAtlas, vec3(uv, layer));
+  #endif
+  #ifdef CUTOUT
+  if (tex.a < 0.5) discard;
+  #endif
   float direct;
+  #ifdef TEX_HD
+  vec3 Np = hdNormal(hs, layer, N);
+  vec3 col = hdShade(hs, hs.albedo.rgb, N, Np, props, direct);
+  tex.rgb = hs.albedo.rgb;
+  #else
   vec3 col = shadeSurface(tex.rgb, N, props, vAo, vSky, vBlock, direct);
+  #endif
   if (kind == 5.0) col = tex.rgb * (uEmissive * 1.3 + 0.8) * (0.85 + 0.15 * sin(uTime * 17.0 + vWorldPos.x * 5.0));
   col = overlayTint(col, tex.rgb, N, props);
   col = applyFog(col, vWorldPos);
@@ -59,6 +75,7 @@ ${NOISE_GLSL}
 ${FOG_GLSL}
 ${SKY_FN_GLSL}
 ${TERRAIN_LIGHTING_GLSL}
+${HD_WATER_GLSL}
 uniform vec3 uWaterShallow;
 uniform vec3 uWaterDeep;
 
@@ -94,6 +111,9 @@ void main() {
     if (top) {
       float fade = 1.0 - smoothstep(24.0, 110.0, dist);
       vec2 g = waveGrad(vWorldPos.xz, uTime) * (kind == 2.0 ? 0.2 : 1.0) * (0.35 + 0.65 * fade);
+      #ifdef TEX_HD
+      if (kind == 1.0) g += hdWaterDetail(vWorldPos, uTime, dist);
+      #endif
       n = normalize(vec3(-g.x, 1.0, -g.y)) * facing;
     }
     float depth = vAo * 15.0;
@@ -256,6 +276,8 @@ void main() {
 `;
 
 export interface TerrainMaterialSet {
+  /** Switch the shader variants for a texture quality (recompiles the terrain programs once). */
+  setTextureQuality(q: TextureQuality): void;
   opaque: THREE.ShaderMaterial;
   cutout: THREE.ShaderMaterial;
   /** (fade start, fade end) distance of plants (cut-out vertices with the plant layer flag), blocks. */
@@ -339,7 +361,20 @@ export function createTerrainMaterials(u: SharedUniforms): TerrainMaterialSet {
     side: THREE.DoubleSide,
   });
 
+  let quality: TextureQuality = 'classic';
   return {
+    setTextureQuality(q: TextureQuality) {
+      if (q === quality) return;
+      quality = q;
+      for (const m of [opaque, cutout, translucent]) {
+        const d = m.defines as Record<string, unknown>;
+        delete d.TEX_HD;
+        delete d.TEX_ULTRA;
+        if (q !== 'classic') d.TEX_HD = 1;
+        if (q === 'ultra') d.TEX_ULTRA = 1;
+        m.needsUpdate = true;
+      }
+    },
     opaque,
     cutout,
     plantFade,

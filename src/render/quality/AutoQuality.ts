@@ -4,9 +4,11 @@
 // the effective values from `effective()`.
 import type { Settings } from '../../core/types';
 
-export type QualityStep = 'scale75' | 'scale60' | 'ssao' | 'shadow' | 'bloom' | 'rd1' | 'rd2';
+export type QualityStep = 'pom' | 'scale75' | 'scale60' | 'ssao' | 'shadow' | 'bloom' | 'rd1' | 'rd2';
 
 export interface EffectiveQuality {
+  /** Parallax occlusion mapping (ultra textures only). */
+  pom: boolean;
   renderScale: number;
   ssao: boolean;
   /** Shadow tiers below the user's shadow quality. */
@@ -46,7 +48,7 @@ export class AutoQuality {
   /** Index into `ladder` of the next step to apply; 0 = user's settings unchanged. */
   level = 0;
   private ladder: QualityStep[] = [];
-  private last = { auto: false, scale: NaN, ssao: false, shadows: false, shadowQuality: '', bloom: false, rd: NaN };
+  private last = { auto: false, scale: NaN, ssao: false, shadows: false, shadowQuality: '', bloom: false, rd: NaN, tex: '' };
   private enabled = true;
   private time = 0;
   private graceUntil = 0;
@@ -71,7 +73,8 @@ export class AutoQuality {
   configure(s: Settings): boolean {
     const rd = Math.round(s.renderDistance || 8);
     const L = this.last;
-    if (L.auto === !!s.autoQuality && L.scale === s.renderScale && L.ssao === !!s.ssao && L.shadows === !!s.shadows && L.shadowQuality === s.shadowQuality && L.bloom === !!s.bloom && L.rd === rd) return false;
+    if (L.auto === !!s.autoQuality && L.scale === s.renderScale && L.ssao === !!s.ssao && L.shadows === !!s.shadows && L.shadowQuality === s.shadowQuality && L.bloom === !!s.bloom && L.rd === rd && L.tex === (s.textureQuality ?? 'classic')) return false;
+    L.tex = s.textureQuality ?? 'classic';
     L.auto = !!s.autoQuality;
     L.scale = s.renderScale;
     L.ssao = !!s.ssao;
@@ -81,6 +84,8 @@ export class AutoQuality {
     L.rd = rd;
     this.enabled = !!s.autoQuality;
     const l: QualityStep[] = [];
+    // ultra textures: parallax is the first thing to go (the most expensive per-pixel feature)
+    if (s.textureQuality === 'ultra') l.push('pom');
     const scale = clampScale(s.renderScale);
     if (scale > 0.75) l.push('scale75');
     if (scale > 0.6) l.push('scale60');
@@ -172,6 +177,7 @@ export class AutoQuality {
     if (on('scale75')) scale = Math.min(scale, 0.75);
     if (on('scale60')) scale = Math.min(scale, 0.6);
     const rd = Math.max(2, Math.min(16, Math.round(s.renderDistance || 8)));
+    out.pom = !on('pom');
     out.renderScale = scale;
     out.ssao = s.ssao && !on('ssao');
     out.shadowDegrade = on('shadow') ? 1 : 0;

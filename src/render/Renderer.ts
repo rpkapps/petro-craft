@@ -10,6 +10,8 @@ import { B } from '../core/blocks';
 import { CHUNK_SIZE } from '../core/constants';
 import type { Renderer } from './index';
 import { createBlockAtlas, type BlockAtlas } from './textures/atlas';
+import { layerOf } from './textures/layers';
+import { HDTextureManager, type HDTextureSet, type TextureQuality } from './textures/hd/HDTextures';
 import { createSharedUniforms, type SharedUniforms } from './materials/uniforms';
 import { createTerrainMaterials, type TerrainMaterialSet } from './materials/TerrainMaterials';
 import { ChunkManager } from './chunks/ChunkManager';
@@ -69,6 +71,11 @@ export class RenderEngine implements Renderer {
 
   private hemi: THREE.HemisphereLight;
   private atlas: BlockAtlas;
+  private hd: HDTextureManager;
+  private hdSet: HDTextureSet | null = null;
+  /** True until the texture set requested at startup is in place (feeds loadProgress). */
+  private hdStartup = true;
+  private wet = 0;
   private uniforms: SharedUniforms;
   private materials: TerrainMaterialSet;
   private chunks: ChunkManager;
@@ -101,7 +108,7 @@ export class RenderEngine implements Renderer {
   private tmpColor = new THREE.Color();
   private tmpVec = new THREE.Vector3();
   private auto = new AutoQuality();
-  private eff: EffectiveQuality = { renderScale: 1, ssao: false, shadowDegrade: 0, bloomScale: 0.5, renderDistance: 8 };
+  private eff: EffectiveQuality = { pom: true, renderScale: 1, ssao: false, shadowDegrade: 0, bloomScale: 0.5, renderDistance: 8 };
   private postCfg: PostSettings = { bloom: true, ssao: false, antialias: true, bloomScale: 0.5 };
   private gpuTimer: GpuTimer;
   private pixelRatio = 1;
@@ -156,6 +163,10 @@ export class RenderEngine implements Renderer {
     this.scene.add(this.overlays.group);
 
     this.highlight = new BlockHighlight(this.atlas.texture);
+    this.uniforms.uWaterLayer.value = layerOf('water');
+    this.hd = new HDTextureManager(this.renderer.capabilities.getMaxAnisotropy(), (set) => this.applyTextureSet(set));
+    this.hd.request(s.textureQuality ?? 'classic');
+    if (!this.hd.busy) this.hdStartup = false;
     this.selection = new SelectionBox();
     this.scene.add(this.highlight.group, this.selection.group);
 
@@ -187,7 +198,20 @@ export class RenderEngine implements Renderer {
   }
 
   get loadProgress() {
-    return this.progressCache;
+    // while the startup texture set is being generated/loaded the loading screen waits for it too
+    return this.hdStartup ? Math.min(this.progressCache, this.hd.progress * 0.999) : this.progressCache;
+  }
+
+  /** Texture quality currently shown and the state of the HD texture set (diagnostics / UI). */
+  get textureStatus() {
+    return {
+      quality: (this.hdSet?.quality ?? 'classic') as TextureQuality,
+      pending: this.hd.busy,
+      progress: this.hd.progress,
+      gpuMB: this.hdSet ? this.hdSet.gpuBytes / 1048576 : 0,
+      lastMs: this.hd.lastMs,
+      source: this.hd.lastSource,
+    };
   }
 
   onFrame(fn: (dt: number) => void): () => void {
@@ -276,6 +300,8 @@ export class RenderEngine implements Renderer {
     pc.antialias = s.antialias !== false;
     pc.bloomScale = this.eff.bloomScale;
     this.post.configure(pc);
+    this.hd.request(s.textureQuality ?? 'classic');
+    this.uniforms.uPom.value = this.eff.pom ? 1 : 0;
 
     // environment
     this.lightning.update(dt);
@@ -283,6 +309,10 @@ export class RenderEngine implements Renderer {
     updateAtmosphere(this.atmosphere, st.time.minuteOfDay, st.time.day, st.weather, rd * CHUNK_SIZE, flash);
     this.detectUnderwater(dt);
     this.applyAtmosphere(flash);
+    // surface wetness for ultra textures: builds up in rain within ~20 s, dries over ~2 min
+    const raining = this.atmosphere.precipitation > 0.05 && !this.atmosphere.snow ? Math.min(1, this.atmosphere.precipitation * 1.4) : 0;
+    this.wet += (raining - this.wet) * Math.min(1, dt * (raining > this.wet ? 0.05 : 0.008));
+    this.uniforms.uWet.value = this.wet;
 
     // world
     const loading = this.progressCache < 1;
@@ -380,6 +410,9 @@ export class RenderEngine implements Renderer {
     this.gpuTimer.dispose();
     this.materials.dispose();
     this.atlas.dispose();
+    this.hd.dispose();
+    this.hdSet?.dispose();
+    this.hdSet = null;
     this.sun.shadow.map?.dispose();
     this.scene.clear();
     this.renderer.renderLists.dispose();
@@ -387,6 +420,20 @@ export class RenderEngine implements Renderer {
   }
 
   // ---- internals ----------------------------------------------------------------------------
+
+  /** Install an HD texture set (or null = classic pixel art) and release the previous one. */
+  private applyTextureSet(set: HDTextureSet | null) {
+    const prev = this.hdSet;
+    this.hdSet = set;
+    const albedo = set ? set.albedo : this.atlas.texture;
+    this.uniforms.uAtlas.value = albedo;
+    this.uniforms.uMatTex.value = set ? set.material : this.uniforms.uMatTex.value;
+    this.highlight.setAtlas(albedo);
+    this.materials.setTextureQuality(set ? set.quality : 'classic');
+    if (prev && prev !== set) prev.dispose();
+    this.hdStartup = false;
+    this.auto.hold(3); // shader recompiles & texture upload are a one-off hitch, not slowness
+  }
 
   private onContextLost = (e: Event) => {
     e.preventDefault();
