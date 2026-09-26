@@ -233,8 +233,10 @@ export class BuildingView implements InstanceMember {
     // distant buildings in a plain look are drawn through the shared instanced batches
     const batcher = this.env.batcher;
     if (batcher) {
+      // small equipment switches closer than large plants (its detail is only noticeable up close)
+      const near = Math.min(INSTANCING.near, INSTANCING.minNear + this.radius * INSTANCING.nearPerRadius);
       const edge = this.distance - this.radius;
-      const far = edge > INSTANCING.near + (this.inst ? -INSTANCING.hysteresis : INSTANCING.hysteresis);
+      const far = edge > near + (this.inst ? -INSTANCING.hysteresis : INSTANCING.hysteresis);
       const want = INSTANCING.enabled && far && inRange && this.mode !== null && !this.site && !this.ruin;
       if (want && !this.inst) {
         batcher.add(this, this.mode!);

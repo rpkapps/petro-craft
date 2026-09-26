@@ -37,6 +37,8 @@ interface LaneEnd {
 
 interface Lane {
   bay: number;
+  /** nav.closures value the cached paths were last validated against. */
+  checked: number;
   pos: THREE.Vector3;
   dir: THREE.Vector3;
   /** Lane ends behind (−dir) and ahead (+dir) of the bay. */
@@ -150,7 +152,7 @@ export class TruckTraffic {
       const half = Math.abs(dir.x) * (b.size[0] / 2) + Math.abs(dir.z) * (b.size[1] / 2);
       const e = half + 3.5;
       const end = (sg: number): LaneEnd => ({ p: [pos.x + dir.x * e * sg, pos.z + dir.z * e * sg], open: false, pts: null, ver: -1, pending: null, failedAt: -Infinity });
-      out.push({ bay: a.def.data.i, pos, dir, ends: [end(-1), end(1)], openVer: -1, route: null, routeKey: '', exit: null, single: -1, sBay: 0, sIn: 0, sOut: 0 });
+      out.push({ bay: a.def.data.i, checked: -1, pos, dir, ends: [end(-1), end(1)], openVer: -1, route: null, routeKey: '', exit: null, single: -1, sBay: 0, sIn: 0, sOut: 0 });
     }
     return out;
   }
@@ -158,6 +160,16 @@ export class TruckTraffic {
   /** Re-evaluate which lane ends are usable and request stale paths (async). */
   private prepare(l: Lane): void {
     const nav = this.env.nav.land();
+    if (l.checked !== nav.closures) {
+      l.checked = nav.closures;
+      l.openVer = -1;
+      for (const e of l.ends)
+        if (e.pts && !nav.validate(e.pts, 3)) {
+          e.pts = null;
+          e.ver = -1;
+          l.route = null;
+        }
+    }
     if (l.openVer !== nav.version) {
       l.openVer = nav.version;
       // usable when the end cell is clear and there is room to turn away from the lane
@@ -165,7 +177,7 @@ export class TruckTraffic {
         const c = nav.cellOf(e.p[0], e.p[1]);
         let room = 0;
         for (const [ox, oz] of RING) if (nav.passable(nav.cellOf(e.p[0] + ox * nav.cell, e.p[1] + oz * nav.cell))) room++;
-        e.open = nav.passable(c) && room >= 3;
+        e.open = nav.passable(c) && room >= 2;
       }
     }
     for (const e of l.ends) {

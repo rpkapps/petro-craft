@@ -110,8 +110,10 @@ export abstract class GridNav {
   private bldgKey = '';
   private extra: { x0: number; z0: number; x1: number; z1: number; r: number }[] = [];
   private extraKey = '';
-  /** Bumped whenever routes should be recomputed (buildings, roads). */
+  /** Bumped whenever routes should be recomputed (buildings removed, roads changed). */
   version = 1;
+  /** Bumped when cells were only closed (buildings added): existing routes need re-validation. */
+  closures = 0;
 
   constructor(
     protected readonly ctx: GameContext,
@@ -208,7 +210,9 @@ export abstract class GridNav {
       key += `${id}:${b.x},${b.z},${b.size[0]},${b.size[1]};`;
     }
     if (key === this.bldgKey) return;
+    const first = this.bldgKey === '';
     this.bldgKey = key;
+    const prev = this.bldg.slice();
     this.bldg.fill(0);
     const c = this.clearance;
     for (const id in bs) {
@@ -238,7 +242,18 @@ export abstract class GridNav {
           if (qx * qx + qz * qz <= rr) this.bldg[cx + cz * this.W] = 1;
         }
     }
-    this.version++;
+    // cells that opened up may allow better routes (full invalidation); cells that only closed need
+    // existing routes re-validated
+    let opened = false;
+    let closed = false;
+    for (let i = 0; i < prev.length; i++) {
+      if (prev[i] === this.bldg[i]) continue;
+      if (prev[i]) opened = true;
+      else closed = true;
+      if (opened) break;
+    }
+    if (first || opened) this.version++;
+    else if (closed) this.closures++;
   }
 
   /** Queue a search from (x, z) to the nearest reachable goal on the map border. */

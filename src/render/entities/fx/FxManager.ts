@@ -8,7 +8,7 @@ import type { BuildingState, Fire, GameContext, WellState } from '../../../core/
 import type { BuildingView } from '../BuildingView';
 import { EMISSION_SCALE, FX_DISTANCE, PARTICLE_CAPACITY, POINT_LIGHTS } from '../config';
 import { RIG_FLOOR } from '../models/rigSpecs';
-import { COL, count, dust, exhaust, flames, flare, gasJet, jet, smoke, sparks, steam } from './emitters';
+import { COL, count, dust, exhaust, flames, flare, gasJet, jet, smoke, sparks, steam, vent } from './emitters';
 import { LightPool } from './LightPool';
 import { PK, ParticleSystem, rgb } from './ParticleSystem';
 import { Shockwaves } from './Shockwave';
@@ -349,11 +349,11 @@ export class FxManager {
         if (small) f = rateAct(num(b.data?.flareRate), 4000);
         else if (RATE_FLARES.has(v.type)) f = Math.max(a.def.data.pilot ?? 0.12, rateAct(num(b.data?.flareRate), 30000));
         else f = Math.max(act, a.def.data.pilot ?? 0.12);
-        const vent = num(b.data?.ventRate);
-        if (vent > 0) {
+        const ventRate = num(b.data?.ventRate);
+        if (ventRate > 0) {
           // cold vent: a shimmering grey-white plume (worse for the environment than flaring)
-          const vr = Math.min(1, 0.25 + Math.sqrt(vent / (small ? 3000 : 20000)));
-          gasJet(ps, p.x, p.y, p.z, 0, 1, 0, small ? 3.2 : 5, (small ? 14 : 30) * vr, dt, this.q, COL.GAS_DIRTY);
+          const vr = Math.min(1, 0.2 + Math.sqrt(ventRate / (small ? 3000 : 20000)));
+          vent(ps, p.x, p.y, p.z, vr, dt, this.q, small ? 1 : 1.8);
         }
         if (f <= 0) continue;
         const sc = small ? 0.42 : (a.def.data.scale ?? 1);

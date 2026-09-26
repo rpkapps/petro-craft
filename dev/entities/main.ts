@@ -120,15 +120,18 @@ function water(): void {
 }
 
 function pads(): void {
-  const padMat = new THREE.MeshStandardMaterial({ color: 0xa29d92, roughness: 1 });
-  for (const b of Object.values(ctx.state.buildings)) {
-    if (BUILDINGS[b.type]?.placement === 'water') continue;
+  // one instanced draw call for every pad (keeps the harness's own draw calls out of the measurements)
+  const list = Object.values(ctx.state.buildings).filter((b) => BUILDINGS[b.type]?.placement !== 'water');
+  if (!list.length) return;
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xa29d92, roughness: 1 }), list.length);
+  const m = new THREE.Matrix4();
+  list.forEach((b, i) => {
     const depth = Math.max(1, b.y - SEABED_Y);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(b.size[0], depth, b.size[1]), padMat);
-    m.position.set(b.x + b.size[0] / 2, b.y - depth / 2 + 0.001, b.z + b.size[1] / 2);
-    m.receiveShadow = true;
-    host.scene.add(m);
-  }
+    m.compose(new THREE.Vector3(b.x + b.size[0] / 2, b.y - depth / 2 + 0.001, b.z + b.size[1] / 2), new THREE.Quaternion(), new THREE.Vector3(b.size[0], depth, b.size[1]));
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.receiveShadow = true;
+  host.scene.add(mesh);
 }
 
 function label(b: BuildingState, text: string): void {
@@ -309,12 +312,14 @@ function buildStressScene(): void {
   const n = Number(P.get('n') ?? 20);
   for (let i = 0; i < n; i++)
     for (let j = 0; j < n; j++) {
-      const wh = addBuilding(ctx, 'wellhead', 10 + i * 6, LAND_Y, 10 + j * 6);
+      const wh = addBuilding(ctx, 'wellhead', 10 + i * 6, LAND_Y, 4 + j * 5.5);
+      wh.x = Math.round(wh.x);
+      wh.z = Math.round(wh.z);
       wh.wellId = addWell(ctx, wh.x + 1, LAND_Y, wh.z + 1, { lift: 'pumpjack', choke: 0.3 + ((i * 7 + j * 3) % 10) / 14 }).id;
     }
-  for (let i = 0; i < 10; i++) for (let j = 0; j < 10; j++) addBuilding(ctx, 'oil_tank_small', 140 + i * 6, LAND_Y, 10 + j * 6);
-  for (let i = 0; i < 12; i++) addBuilding(ctx, 'wind_turbine', 10 + i * 10, LAND_Y, 135 - 30);
-  for (let i = 0; i < 6; i++) addBuilding(ctx, 'solar_farm', 140 + (i % 3) * 10, LAND_Y, 75 + Math.floor(i / 3) * 10);
+  for (let i = 0; i < 10; i++) for (let j = 0; j < 10; j++) addBuilding(ctx, 'oil_tank_small', 140 + i * 6, LAND_Y, 4 + j * 6);
+  for (let i = 0; i < 6; i++) addBuilding(ctx, 'solar_farm', 140 + (i % 3) * 10, LAND_Y, 66 + Math.floor(i / 3) * 10);
+  for (let i = 0; i < 12; i++) addBuilding(ctx, 'wind_turbine', 210 + (i % 3) * 12, LAND_Y, 8 + Math.floor(i / 3) * 16);
 }
 
 /** Players: the local body parked in drone view, remote players walking, running, flying, idling. */
@@ -522,7 +527,7 @@ function frame(now: number): void {
   host.update(dt);
   controls.update();
   tick(dt);
-  if (P.get('paths') === '1' && Math.floor(tAcc) !== Math.floor(tAcc - dt)) drawRoutes();
+  if (P.get('paths') === '1' && (stats.frames === 0 || Math.floor(tAcc) !== Math.floor(tAcc - dt))) drawRoutes();
   host.camera.position.add(host.shakeOffset);
   host.renderer.render(host.scene, host.camera);
   host.camera.position.sub(host.shakeOffset);

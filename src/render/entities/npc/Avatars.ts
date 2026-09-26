@@ -59,7 +59,9 @@ function avatarTemplate(vest: string, company: string): ModelTemplate {
       b.box(0, 0.03, 0, 0.29, 0.07, 0.47, 0x2a2e36, 'rough');
       b.box(0.14, 0.03, 0, 0.02, 0.06, 0.07, C.STEEL_LIGHT, 'metal');
       b.box(-0.02, 0.0, 0.25, 0.1, 0.14, 0.05, C.HAZARD, 'paint');
-      b.box(-0.1, 0.33, 0, 0.1, 0.36, 0.3, 0x3a3f46, 'rough');
+      // radio pack on the back
+      b.box(-0.19, 0.36, 0.06, 0.1, 0.26, 0.2, 0x3a3f46, 'rough');
+      b.box(-0.19, 0.52, 0.12, 0.03, 0.12, 0.03, 0x1d1e20, 'paint');
       b.group('head', 0, 0.64, 0, () => {
         b.box(0, 0.15, 0, 0.27, 0.29, 0.27, C.SKIN, 'paint');
         b.box(0.136, 0.18, -0.06, 0.005, 0.04, 0.04, 0x1d1e20, 'paint');
@@ -113,7 +115,7 @@ function nameTag(name: string, color: string): THREE.Sprite {
   tex.anisotropy = 2;
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false, opacity: 0.9 });
   const s = new THREE.Sprite(mat);
-  s.scale.set(1.9, 0.475, 1);
+  s.scale.set(1.3, 0.325, 1);
   s.renderOrder = 10;
   return s;
 }

@@ -175,6 +175,7 @@ const _e = new THREE.Euler();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
+const _white = new THREE.Color(1, 0.95, 0.85);
 
 export class DropLayer {
   readonly group = new THREE.Group();
@@ -352,8 +353,8 @@ export class DropLayer {
       const ss = (0.55 - Math.min(0.25, h * 0.12)) * k;
       _q.identity();
       this.shadows.push(_m.compose(_p.set(v.pos.x, floor + 0.015, v.pos.z), _q, _s.set(ss, 1, ss)));
-      const gs = (0.9 + 0.08 * Math.sin(t * 3 + v.phase)) * k;
-      const glowCol = pool ? _c.setRGB(0.55, 0.5, 0.38) : _c.multiplyScalar(0.6);
+      const gs = (0.75 + 0.06 * Math.sin(t * 3 + v.phase)) * k;
+      const glowCol = pool ? _c.setRGB(0.26, 0.22, 0.16) : _c.lerp(_white, 0.3).multiplyScalar(0.3);
       this.glows.push(_m.compose(_p.set(v.pos.x, floor + 0.02, v.pos.z), _q, _s.set(gs, 1, gs)), glowCol);
     }
     for (const b of this.blockPools.values()) b.pool.end();

@@ -74,7 +74,15 @@ export class TrainTraffic {
       const key = `${b.x},${b.y},${b.z},${b.rotation}`;
       seen.add(v.id);
       let line = this.lines.get(v.id);
-      if (line && (line.key !== key || (line.structVersion !== sv && line.state === 'wait'))) {
+      if (line && line.structVersion !== sv && line.state === 'wait' && line.key === key) {
+        // buildings changed somewhere: rebuild only if the corridor's extent actually changed
+        line.structVersion = sv;
+        const halfT = Math.abs(line.dir.x) * (b.size[0] / 2) + Math.abs(line.dir.z) * (b.size[1] / 2);
+        const [sMax, openMax] = this.extent(b, line.center, line.dir, 1, halfT);
+        const [negMax, openMin] = this.extent(b, line.center, line.dir, -1, halfT);
+        if (Math.abs(sMax - line.sMax) > 0.5 || Math.abs(-negMax - line.sMin) > 0.5 || openMax !== line.openMax || openMin !== line.openMin) line.key = '';
+      }
+      if (line && line.key !== key) {
         this.disposeLine(line);
         line = undefined;
       }

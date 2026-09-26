@@ -77,11 +77,12 @@ function padFlare(b: Builder): void {
   const x = 1.12;
   const z = -1.12;
   b.slab(x - 0.22, 0, z - 0.22, x + 0.22, 0.1, z + 0.22, C.CONCRETE, 'rough');
-  b.cyl(x, 0.1, z, 0.07, 2.1, C.STEEL_LIGHT, 'metal', 8);
-  b.cyl(x, 0.1, z, 0.1, 0.25, C.STEEL_DARK, 'metal', 8);
-  b.cyl(x, 2.2, z, 0.09, 0.14, C.GUNMETAL, 'metal', 8);
-  b.pipe([x, 0.35, z], [0.45, 0.35, -0.45], 0.04, C.STEEL, 'metal', 6);
-  b.anchor('wellFlare', x, 2.36, z, {});
+  b.cyl(x, 0.1, z, 0.055, 1.75, C.STEEL, 'metal', 8);
+  b.cyl(x, 0.1, z, 0.09, 0.22, C.STEEL_DARK, 'metal', 8);
+  b.cyl(x, 1.25, z, 0.058, 0.12, C.RED, 'paint', 8);
+  b.cyl(x, 1.82, z, 0.08, 0.12, C.GUNMETAL, 'metal', 8, 0.06);
+  b.pipe([x, 0.3, z], [0.45, 0.3, -0.45], 0.035, C.STEEL, 'metal', 6);
+  b.anchor('wellFlare', x, 1.96, z, {});
 }
 
 function guardRail(b: Builder): void {

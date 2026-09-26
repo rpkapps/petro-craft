@@ -35,6 +35,7 @@ interface Berth {
   inPts: Pt[] | null;
   outPts: Pt[] | null;
   ver: number;
+  checked: number;
   pending: SearchHandle[];
   failedAt: number;
   v: Vehicle | null;
@@ -125,7 +126,7 @@ export class ShipTraffic {
     const arriveSign = back >= fwd ? 1 : -1;
     const forwardExit = (arriveSign > 0 ? fwd : back) >= 5;
     return {
-      key, pos, dir, arriveSign, forwardExit, a: null, d: null, inPts: null, outPts: null, ver: -1, pending: [], failedAt: -Infinity,
+      key, pos, dir, arriveSign, forwardExit, a: null, d: null, inPts: null, outPts: null, ver: -1, checked: -1, pending: [], failedAt: -Infinity,
       v: null, route: null, s: 0, sEnd: 0, speed: 0, phase: 'idle', timer: 5 + Math.random() * 10, bob: Math.random() * 10, x: pos.x, z: pos.z, yaw: 0,
     };
   }
@@ -154,6 +155,10 @@ export class ShipTraffic {
     const nav = this.env.nav.water();
     nav.refreshBuildings();
     if (bt.pending.length) return false;
+    if (bt.checked !== nav.closures) {
+      bt.checked = nav.closures;
+      if ((bt.inPts && !nav.validate(bt.inPts, 2)) || (bt.outPts && !nav.validate(bt.outPts, 2))) bt.ver = -1;
+    }
     if (bt.ver === nav.version && bt.inPts && bt.outPts) return true;
     if (bt.ver === nav.version && this.clock - bt.failedAt < RETRY) return false;
     bt.ver = nav.version;

@@ -225,8 +225,14 @@ export class InstanceBatcher {
     if (!inst) return;
     const { nodes, worlds } = inst;
     const parent = inst.batch.info.parent;
-    worlds[0].multiplyMatrices(v.group.matrixWorld, updateLocal(nodes[0]));
-    for (let i = 1; i < nodes.length; i++) worlds[i].multiplyMatrices(worlds[parent[i]], updateLocal(nodes[i]));
+    let changed = false;
+    for (let i = 0; i < nodes.length; i++) {
+      _m.multiplyMatrices(i === 0 ? v.group.matrixWorld : worlds[parent[i]], updateLocal(nodes[i]));
+      if (!changed && !sameMatrix(_m, worlds[i])) changed = true;
+      worlds[i].copy(_m);
+    }
+    // stopped equipment (idle pumpjacks, becalmed rotors) costs no upload
+    if (!changed) return;
     // keep the (detached) scene nodes' world matrices current for FX anchors
     for (let i = 0; i < nodes.length; i++) nodes[i].matrixWorld.copy(worlds[i]);
     this.writeParts(v);
@@ -283,6 +289,13 @@ export class InstanceBatcher {
     this.batches.clear();
     this.group.removeFromParent();
   }
+}
+
+function sameMatrix(a: THREE.Matrix4, b: THREE.Matrix4): boolean {
+  const x = a.elements;
+  const y = b.elements;
+  for (let i = 0; i < 16; i++) if (Math.abs(x[i] - y[i]) > 1e-6) return false;
+  return true;
 }
 
 function updateLocal(o: THREE.Object3D): THREE.Matrix4 {

@@ -130,3 +130,12 @@ export function dust(ps: ParticleSystem, x: number, y: number, z: number, r: num
   for (let i = 0; i < n; i++)
     ps.emit(PK.DUST, x + sr(r), y + rnd() * 0.3, z + sr(r), sr(0.6), 0.2 + rnd() * 0.5, sr(0.6), 2.5 + rnd() * 2, 0.5, 2.4, col, 0.3, 0, 0.8, 1, sr(0.5));
 }
+
+/** Cold gas vent: thin, translucent grey-white wisps rising and drifting downwind. `rate` 0..1. */
+export function vent(ps: ParticleSystem, x: number, y: number, z: number, rate: number, dt: number, q: number, scale = 1): void {
+  const n = count((5 + 12 * rate) * Math.max(0.5, q), dt);
+  for (let i = 0; i < n; i++) {
+    const s = (0.1 + rnd() * 0.08) * scale;
+    ps.emit(PK.STEAM, x + sr(0.05), y, z + sr(0.05), sr(0.25), (2.4 + rnd() * 1.6) * scale, sr(0.25), 1.1 + rnd() * 0.7, s, s * 7, COL.GAS, 0.16 + rate * 0.08, 0.6, 1.4, 0.9, sr(0.6));
+  }
+}
