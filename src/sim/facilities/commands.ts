@@ -19,18 +19,19 @@ export interface CommandDeps {
 }
 
 /**
- * The building type of a 'build/place' command. The contract's payload field `type` collides with the command
- * discriminator, so callers pass it as `building` (or `buildingType`); a bare building id in `type` is accepted too.
+ * The building type of a 'build/place' command: `buildingType` (contract), with `building` or a bare building id
+ * in `type` accepted as fallbacks for older callers.
  */
 export function placeType(cmd: Command<'build/place'>): string | undefined {
-  const c = cmd as unknown as { type?: unknown; building?: unknown; buildingType?: unknown };
-  for (const v of [c.building, c.buildingType, c.type]) if (typeof v === 'string' && BUILDINGS[v]) return v;
+  if (typeof cmd.buildingType === 'string' && BUILDINGS[cmd.buildingType]) return cmd.buildingType;
+  const c = cmd as unknown as { type?: unknown; building?: unknown };
+  for (const v of [c.building, c.type]) if (typeof v === 'string' && BUILDINGS[v]) return v;
   return undefined;
 }
 
-/** Build a well-formed 'build/place' command (see placeType). */
-export function buildPlaceCommand(building: string, x: number, z: number, rotation: Rotation): Command<'build/place'> {
-  return { type: 'build/place', x, z, rotation, building, buildingType: building } as unknown as Command<'build/place'>;
+/** Build a well-formed 'build/place' command. */
+export function buildPlaceCommand(buildingType: string, x: number, z: number, rotation: Rotation): Command<'build/place'> {
+  return { type: 'build/place', buildingType, x, z, rotation };
 }
 
 export function registerFacilityCommands(ctx: GameContext, deps: CommandDeps): void {

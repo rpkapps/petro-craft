@@ -361,7 +361,11 @@ export class TensionDrone {
     this.oscs.forEach((o, i) => o.frequency.setTargetAtTime(mtof(rootMidi + ivs[i]), t, 1.5));
   }
 
+  private level = -1;
+
   setLevel(level: number, t: number) {
+    if (Math.abs(level - this.level) < 0.004) return;
+    this.level = level;
     this.gain.gain.setTargetAtTime(level, t, 1.2);
     this.filter.Q.setTargetAtTime(1.5 + level * 6, t, 1.5);
   }

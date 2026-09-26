@@ -82,7 +82,16 @@ export async function renderMusic(bank: SoundBank, kind: PerformerKind, mood: Mo
   const p = new Performer(off, kind, { dry, wet }, (n) => bank.get(n), seed, 0, kind === 'menu' ? MENU_LEVEL : GAME_LEVEL);
   p.setMood(mood, tension);
   p.fade(1, 0.05, 0);
-  p.schedule(seconds);
+  // Mimic the realtime scheduler: suspend every 0.5 s and schedule 1.4 s ahead, so automation
+  // timelines stay short exactly like in the live engine (and render time ≈ realtime CPU cost).
+  for (let s = 0.5; s < seconds; s += 0.5) {
+    const at = s;
+    void off.suspend(at).then(() => {
+      p.schedule(at + 1.4);
+      void off.resume();
+    });
+  }
+  p.schedule(1.4);
   const buffer = await off.startRendering();
   let peak = 0, rms = 0, bad: string | null = null;
   for (let c = 0; c < 2; c++) {
@@ -175,4 +184,38 @@ export function drawSpectrum(g: CanvasRenderingContext2D, buf: AudioBuffer, x: n
     else g.lineTo(x + px, Math.max(y, Math.min(y + h, yy)));
   }
   g.stroke();
+}
+
+/** Log-frequency spectrogram (40 Hz – 16 kHz) with a perceptual colour map. */
+export function drawSpectrogram(g: CanvasRenderingContext2D, buf: AudioBuffer, x: number, y: number, w: number, h: number) {
+  const N = 1024;
+  const d = buf.getChannelData(0);
+  const img = g.createImageData(w, h);
+  const hop = Math.max(1, Math.floor((d.length - N) / w));
+  const re = new Float32Array(N), im = new Float32Array(N);
+  const fmin = 40, fmax = Math.min(16000, buf.sampleRate / 2);
+  const binOf = new Int32Array(h);
+  for (let py = 0; py < h; py++) {
+    const f = fmin * Math.pow(fmax / fmin, 1 - py / (h - 1));
+    binOf[py] = Math.min(N / 2 - 1, Math.max(1, Math.round((f / buf.sampleRate) * N)));
+  }
+  for (let px = 0; px < w; px++) {
+    const s = px * hop;
+    for (let i = 0; i < N; i++) {
+      re[i] = (d[s + i] ?? 0) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+      im[i] = 0;
+    }
+    fft(re, im);
+    for (let py = 0; py < h; py++) {
+      const b = binOf[py];
+      const db = 20 * Math.log10(Math.hypot(re[b], im[b]) + 1e-9);
+      const v = Math.max(0, Math.min(1, (db + 50) / 70));
+      const o = (py * w + px) * 4;
+      img.data[o] = 255 * Math.min(1, v * 1.8);
+      img.data[o + 1] = 255 * Math.max(0, Math.min(1, (v - 0.35) * 1.8));
+      img.data[o + 2] = 255 * Math.max(0, Math.min(1, v < 0.4 ? v * 1.5 : (v - 0.75) * 4));
+      img.data[o + 3] = 255;
+    }
+  }
+  g.putImageData(img, x, y);
 }

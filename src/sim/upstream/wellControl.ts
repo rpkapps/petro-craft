@@ -41,10 +41,13 @@ export function startKick(ctx: GameContext, w: WellState, porePpg: number, props
   w.kickVolume = Math.round(10 + 25 * under);
   setWellStatus(ctx, w, 'kick');
   ctx.bus.emit('well:kick', { id: w.id });
+  // Emergencies drop the game to normal speed so the player can react (6 game hours ≈ 2.5 real minutes at 1×).
+  const slowed = ctx.state.time.speed > 1;
+  if (slowed) ctx.state.time.speed = 1;
   ctx.notify(
     'danger',
     `KICK on ${w.name}!`,
-    `${e.kickFluid === 'gas' ? 'Gas' : e.kickFluid === 'oil' ? 'Oil' : 'Formation water'} influx of ${w.kickVolume} bbl — pore pressure ~${e.kickPpg.toFixed(1)} ppg vs ${w.mudWeight.toFixed(1)} ppg mud. The BOP is closed. Kill the well within ~${KICK_UNATTENDED_HOURS} h (Well panel): Driller's method (fast, can fail on big kicks), Wait & Weight (slower, safest, uses barite) or Bullheading (quick but risky).`,
+    `${e.kickFluid === 'gas' ? 'Gas' : e.kickFluid === 'oil' ? 'Oil' : 'Formation water'} influx of ${w.kickVolume} bbl — pore pressure ~${e.kickPpg.toFixed(1)} ppg vs ${w.mudWeight.toFixed(1)} ppg mud. The BOP is closed. Kill the well within ~${KICK_UNATTENDED_HOURS} h (Well panel): Driller's method (fast, can fail on big kicks), Wait & Weight (slower, safest, uses barite) or Bullheading (quick but risky).${slowed ? ' Game speed set to 1×.' : ''}`,
     wellPos(w),
   );
 }
@@ -90,7 +93,7 @@ export function finishKill(ctx: GameContext, rt: UpstreamRuntime, w: WellState, 
   const crew = rig ? Math.min(1, crewFactor(ctx.state, rig)) : 0.5;
   let p: number;
   if (method === 'drillers') p = clamp(0.95 - w.kickVolume / 250, 0.25, 0.95) * (0.8 + 0.2 * crew);
-  else if (method === 'wait_weight') p = clamp(0.99 - w.kickVolume / 800, 0.7, 0.99);
+  else if (method === 'wait_weight') p = clamp(0.99 - w.kickVolume / 2500, 0.9, 0.99);
   else p = e.kickFluid === 'gas' ? 0.55 : 0.65;
   if (!hazardsEnabled(ctx) || ctx.rng() < p) {
     w.mudWeight = Math.round(clamp(Math.max(w.mudWeight, e.kickPpg + m.margin), 8.4, MUD_MAX_PPG) * 10) / 10;
@@ -108,6 +111,8 @@ export function finishKill(ctx: GameContext, rt: UpstreamRuntime, w: WellState, 
       return;
     }
   }
+  // Even a failed circulation leaves heavier mud in the hole.
+  if (method === 'wait_weight') w.mudWeight = Math.round(clamp((w.mudWeight + e.kickPpg + m.margin) / 2, 8.4, MUD_MAX_PPG) * 10) / 10;
   w.kickVolume = Math.min(500, w.kickVolume * 1.5 + 20);
   e.kickHours = Math.max(0, e.kickHours - 2);
   if (w.kickVolume > 300 && ctx.rng() < 0.4 * ctx.modifier('blowout_risk') * hazardRate(ctx)) {

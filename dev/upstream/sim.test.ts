@@ -35,7 +35,7 @@ section('1. Init: reservoirs, services, commands');
   const h = newHarness();
   const rs = h.ctx.state.reservoirs;
   check('3 reservoir states created', Object.keys(rs).length === 3);
-  check('initial pressure & undiscovered', rs.r_eagle.pressure === 2750 && !rs.r_eagle.discovered && rs.r_eagle.knowledge === 0);
+  check('initial pressure & undiscovered', rs.r_eagle.pressure === 2200 && !rs.r_eagle.discovered && rs.r_eagle.knowledge === 0);
   const q = h.ctx.services.seismic.quote('2d', 10, 64, 130, 64);
   check('seismic quote installed', q.cost > 0 && q.days > 0, `2D 120 blocks: ${money(q.cost)}, ${q.days} d`);
   const q3 = h.ctx.services.seismic.quote('3d', 40, 40, 100, 100);
@@ -294,6 +294,9 @@ section('7. Shale: horizontal well + 30-stage frac, 200 days');
 {
   const h = newHarness({ techs: ['directional_drilling', 'pdc_bits', 'horizontal_drilling', 'hydraulic_fracturing', 'pumpjacks', 'well_logging'], money: 20_000_000 });
   const cx = 100, cz = 150;
+  // Shoot a 2D line over the location first: it calibrates the (overpressured) shale pore pressure.
+  cmd(h, { type: 'survey/start', kind: '2d', x0: 60, z0: 150, x1: 150, z1: 150 });
+  runDays(h, 3, () => Object.values(h.ctx.state.surveys).every((s) => s.status === 'complete'));
   const plan = h.ctx.services.wells.suggestPlan(cx, cz, 22, 'horizontal');
   plan.lateralLength = 24;
   plan.azimuth = 0;
@@ -326,7 +329,7 @@ section('7. Shale: horizontal well + 30-stage frac, 200 days');
   for (let d = 1; d <= 200; d++) {
     runDays(h, 1);
     q[d] = w.history[w.history.length - 1]?.[1] ?? 0;
-    if (!liftSet && w.rates.oil < 5 && !wellExt(w).op) { liftSet = cmd(h, { type: 'well/setLift', wellId: w.id, lift: 'pumpjack' }).ok; console.log(`    day ${d}: loaded up → pumpjack ${liftSet}`); }
+    if (!liftSet && w.rates.oil < 5 && w.status === 'producing' && !wellExt(w).op) { liftSet = true; console.log(`    day ${d}: loaded up → pumpjack ${cmd(h, { type: 'well/setLift', wellId: w.id, lift: 'pumpjack' }).ok}`); }
     if (payback < 0 && (h.wellRevenue[w.id] ?? 0) - rev0 >= w.cost) payback = d;
     if ([1, 7, 14, 30, 60, 100, 200].includes(d)) rows.push(`    day ${String(d).padStart(3)}: oil ${f0(w.rates.oil).padStart(5)} bbl/d  gas ${f0(w.rates.gas).padStart(5)} mcf/d  wc ${(w.waterCut * 100).toFixed(0)}%  pL ${f0(wellExt(w).res.r_osage?.pL ?? 0)}  P ${f0(h.ctx.state.reservoirs.r_osage.pressure)}  cum ${f0(w.cumulative.oil)}`);
   }

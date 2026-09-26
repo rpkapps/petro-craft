@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PetroCraft · render harness</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #07090c; }
+      #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+      #stats { position: fixed; left: 8px; bottom: 6px; font: 12px/1.3 ui-monospace, monospace; color: #cfe; text-shadow: 0 1px 2px #000; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="stats">loading…</div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

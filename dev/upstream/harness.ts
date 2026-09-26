@@ -135,6 +135,7 @@ export const STEPS_PER_HOUR = 10; // at 25×: 6 game minutes per 100 ms step
 export function runHours(h: Harness, hours: number, until?: () => boolean): number {
   const n = Math.round(hours * STEPS_PER_HOUR);
   for (let i = 0; i < n; i++) {
+    h.ctx.state.time.speed = 25; // kicks drop the speed to 1×; the test keeps its fixed time base
     h.session.step();
     emulateFacilities(h);
     if (until?.()) return (i + 1) / STEPS_PER_HOUR;

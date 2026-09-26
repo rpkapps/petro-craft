@@ -4,7 +4,7 @@
 import { SEA_LEVEL } from '../core/constants';
 import type { Fault } from '../core/types';
 import { clamp, makeRng } from '../core/rng';
-import { randRange, randSym, shuffled, subSeed } from './noise';
+import { randSym, shuffled, subSeed } from './noise';
 import { MAX_FAULTS, MAX_SEALING, SHAPE, BODY, type AquiferModel, type TrapModel } from './model';
 import { DOME_NAMES, OFFSHORE_NAMES, REEF_NAMES, U, WEDGE_NAMES } from './strata';
 import {
@@ -62,6 +62,7 @@ function clipLine(px: number, pz: number, dx: number, dz: number, size: number):
 
 export function planFaults(seed: number, terrain: Terrain): FaultModel[] {
   const rng = makeRng(subSeed(seed, 200));
+  const rr = (lo: number, hi: number) => lo + (hi - lo) * rng();
   const size = terrain.size;
   const cfg = sizeCfg(size);
   const count = Math.min(MAX_FAULTS, cfg.faults);
@@ -89,13 +90,13 @@ export function planFaults(seed: number, terrain: Terrain): FaultModel[] {
     const len = Math.hypot(x1 - x0, z1 - z0) || 1;
     const nx = -(z1 - z0) / len;
     const nz = (x1 - x0) / len;
-    const dip = randRange(52, 70);
+    const dip = rr(52, 70);
     // growth faults dip toward the basin (ocean); cross faults either way
     const toward = nx * od.x + nz * od.z;
     const dipSign: 1 | -1 = cross ? (rng() < 0.5 ? 1 : -1) : toward >= 0 ? 1 : -1;
     // throw grows basinward
     const basinward = clamp(0.5 + (((px - size / 2) * od.x + (pz - size / 2) * od.z) / size) * 1.2, 0, 1);
-    const thr = Math.round(randRange(2, 3.5) + basinward * 2.5);
+    const thr = Math.round(rr(2, 3.5) + basinward * 2.5);
     let sealing = rng() < 0.6;
     if (i === 0 && count >= 2) sealing = true;
     if (sealing && sealingCount >= MAX_SEALING) sealing = false;
@@ -117,14 +118,15 @@ export function planFaults(seed: number, terrain: Terrain): FaultModel[] {
 
 export function planDikes(seed: number, size: number): Dike[] {
   const rng = makeRng(subSeed(seed, 210));
+  const rr = (lo: number, hi: number) => lo + (hi - lo) * rng();
   const n = sizeCfg(size).dikes;
   const out: Dike[] = [];
   for (let i = 0; i < n; i++) {
     const x = rng() * size;
     const z = rng() * size;
     const a = rng() * Math.PI;
-    const L = randRange(60, 200);
-    out.push({ x0: x - Math.cos(a) * L / 2, z0: z - Math.sin(a) * L / 2, x1: x + Math.cos(a) * L / 2, z1: z + Math.sin(a) * L / 2, w: randRange(0.7, 1.6) });
+    const L = rr(60, 200);
+    out.push({ x0: x - Math.cos(a) * L / 2, z0: z - Math.sin(a) * L / 2, x1: x + Math.cos(a) * L / 2, z1: z + Math.sin(a) * L / 2, w: rr(0.7, 1.6) });
   }
   return out;
 }
@@ -158,6 +160,7 @@ function newTrap(p: Partial<TrapModel> & Pick<TrapModel, 'kind' | 'unit' | 'shap
 
 export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, salt: SaltBasin, faults: FaultModel[], unitNames: string[]): FeaturePlan {
   const rng = makeRng(subSeed(seed, 400));
+  const rr = (lo: number, hi: number) => lo + (hi - lo) * rng();
   const size = terrain.size;
   const cfg = sizeCfg(size);
   const scale = Math.sqrt(size / 512);
@@ -210,16 +213,16 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
     const landAng = Math.atan2(-od.z, -od.x);
     for (let a = 0; a < 80; a++) {
       const ang = landAng + randSym(rng) * 1.3;
-      const dist = randRange(26, 46) * scale;
+      const dist = rr(26, 46) * scale;
       const x = size / 2 + Math.cos(ang) * dist;
       const z = size / 2 + Math.sin(ang) * dist;
-      const ra = randRange(13, 17);
-      const rb = ra * randRange(0.62, 0.82);
+      const ra = rr(13, 17);
+      const rb = ra * rr(0.62, 0.82);
       if (!inside(x, z, ra) || wetAt(x, z)) continue;
       const g = gmin(x, z, ra);
       const gc = terrain.ground[idx(x, z)];
       if (gc > 92 || g < 63) continue;
-      const amp = randRange(6, 7.5);
+      const amp = rr(6, 7.5);
       const units = rng() < 0.5 ? [U.MID_SAND, U.UPPER_SAND] : [U.UPPER_SAND, U.MID_SAND];
       const u = units.find((k) => hostOk(k, x, z, amp, g, 16));
       if (u === undefined) continue;
@@ -228,7 +231,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       occ.push({ x, z, r: ra * 1.3 });
       plan.traps.push(newTrap({
         kind: 'anticline', unit: u, shape: SHAPE.ELLIPSE, cx: x, cz: z, ra: ra * 1.08, rb: rb * 1.08, cos: Math.cos(ang2), sin: Math.sin(ang2),
-        name: unitLetterName(u), charged: true, desiredColumn: randRange(5, 6.5), fluidHint: 'oil', quality: 0.6, starter: true,
+        name: unitLetterName(u), charged: true, desiredColumn: rr(5, 6.5), fluidHint: 'oil', quality: 0.6, starter: true,
       }));
       break;
     }
@@ -241,19 +244,19 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
     for (const f of sealing) {
       if (made >= cfg.faultTraps) break;
       for (let a = 0; a < 30; a++) {
-        const t = randRange(0.15, 0.85);
+        const t = rr(0.15, 0.85);
         const P = { x: f.pub.p0.x + (f.pub.p1.x - f.pub.p0.x) * t, z: f.pub.p0.z + (f.pub.p1.z - f.pub.p0.z) * t };
         const off = isOcean(P.x, P.z);
         if (waterDepth(P.x, P.z) > 26) continue;
-        const ra = randRange(14, 19) * (off ? 1.25 : 1);
-        const rb = randRange(9, 12.5) * (off ? 1.2 : 1);
-        const amp = randRange(5.5, 8) * (off ? 1.15 : 1);
+        const ra = rr(14, 19) * (off ? 1.25 : 1);
+        const rb = rr(9, 12.5) * (off ? 1.2 : 1);
+        const amp = rr(5.5, 8) * (off ? 1.15 : 1);
         const g = gmin(P.x, P.z, ra);
         const u = shuffled(rng, [U.MID_SAND, U.DEEP_SAND, U.DEEP_SAND, U.UPPER_SAND, U.BASAL_SAND]).find((k) => hostOk(k, P.x, P.z, amp, g));
         if (u === undefined) continue;
         const hU = hzAt(u, P.x, P.z) + amp * 0.7;
         const Q = faultPlanePoint(f, P.x, P.z, hU);
-        const shift = randRange(1.5, 4);
+        const shift = rr(1.5, 4);
         const cx = Q.x - f.nx * f.dipSign * shift;
         const cz = Q.z - f.nz * f.dipSign * shift;
         if (!inside(cx, cz, ra) || !free(cx, cz, ra * 1.3)) continue;
@@ -263,7 +266,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
         const name = off ? uniqueName(`${offNames[offNameIdx++ % offNames.length]} ${offQualifier(u)}`) : unitLetterName(u);
         plan.traps.push(newTrap({
           kind: 'fault', unit: u, shape: SHAPE.ELLIPSE, cx, cz, ra: ra * 1.1, rb: rb * 1.1, cos: Math.cos(ang), sin: Math.sin(ang), name,
-          desiredColumn: randRange(4, 8) * (off ? 1.3 : 1), offshore: off, charged: true, quality: off ? 0.3 : 0,
+          desiredColumn: rr(4, 8) * (off ? 1.3 : 1), offshore: off, charged: true, quality: off ? 0.3 : 0,
         }));
         made++;
         break;
@@ -275,22 +278,22 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
   {
     const domeNames = shuffled(rng, DOME_NAMES);
     for (let a = 0, made = 0; a < 500 && made < cfg.diapirs; a++) {
-      const x = randRange(30, size - 30);
-      const z = randRange(30, size - 30);
+      const x = rr(30, size - 30);
+      const z = rr(30, size - 30);
       if (salt.at(x, z) < 0.8 || waterDepth(x, z) > 30) continue;
-      const r0 = randRange(4.5, 6.5);
-      const dragW = randRange(4.5, 6);
+      const r0 = rr(4.5, 6.5);
+      const dragW = rr(4.5, 6);
       const reach = r0 + 5.2 * dragW;
       if (!free(x, z, reach)) continue;
       const saltTop = hzAt(U.SALT, x, z);
       const saltBase = hzAt(U.SALT - 1, x, z);
       if (saltTop - saltBase < 1.5) continue;
       const g = gmin(x, z, 18);
-      const topY = Math.floor(Math.min(g - randRange(12, 17), 64));
+      const topY = Math.floor(Math.min(g - rr(12, 17), 64));
       if (topY < saltTop + 14) continue;
       const d: Diapir = {
-        name: domeNames[made % domeNames.length], cx: x, cz: z, r0, rTop: r0 * randRange(1.3, 1.6), topY, bulbH: randRange(4, 6.5), cap: rng() < 0.5 ? 1 : 2,
-        dragA: randRange(5, 7.5), dragW, archA: randRange(2.5, 4), phase: rng() * Math.PI * 2, influence: 0,
+        name: domeNames[made % domeNames.length], cx: x, cz: z, r0, rTop: r0 * rr(1.3, 1.6), topY, bulbH: rr(4, 6.5), cap: rng() < 0.5 ? 1 : 2,
+        dragA: rr(5, 7.5), dragW, archA: rr(2.5, 4), phase: rng() * Math.PI * 2, influence: 0,
       };
       d.influence = Math.max(d.rTop * 2.3 * 1.9, r0 + 6.5 * dragW);
       const di = plan.diapirs.push(d) - 1;
@@ -310,7 +313,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
         const dirName = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'][Math.round(deg / 45) % 8];
         plan.traps.push(newTrap({
           kind: 'salt_dome', unit: u, shape: SHAPE.SECTOR, cx: x, cz: z, ra: r0 + 4.2 * dragW, wl: 1.2, secMid: Math.atan2(Math.sin(mid), Math.cos(mid)),
-          secHalf: randRange(0.95, 1.35), bodyIdx: di, name: uniqueName(`${d.name} ${dirName} Flank`), desiredColumn: randRange(4, 8),
+          secHalf: rr(0.95, 1.35), bodyIdx: di, name: uniqueName(`${d.name} ${dirName} Flank`), desiredColumn: rr(4, 8),
           offshore: isOcean(x, z), quality: 0.2, charged: rng() < 0.92,
         }));
       }
@@ -321,12 +324,12 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
   {
     const names = shuffled(rng, REEF_NAMES);
     for (let a = 0, made = 0; a < 400 && made < cfg.reefs; a++) {
-      const x = randRange(24, size - 24);
-      const z = randRange(24, size - 24);
+      const x = rr(24, size - 24);
+      const z = rr(24, size - 24);
       if (waterDepth(x, z) > 20) continue;
       const off = isOcean(x, z);
-      const r = randRange(9, 14) * (off ? 1.2 : 1);
-      const h = randRange(4.2, 6.5);
+      const r = rr(9, 14) * (off ? 1.2 : 1);
+      const h = rr(4.2, 6.5);
       if (!free(x, z, r * 1.4)) continue;
       const g = gmin(x, z, r);
       const crest = hzAt(U.PLATFORM, x, z) + h;
@@ -337,7 +340,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       made++;
       plan.traps.push(newTrap({
         kind: 'reef', unit: U.LOWER_SHALE, body: BODY.REEF, bodyIdx: ri, shape: SHAPE.CIRCLE, cx: x, cz: z, ra: r * 1.22, brine: false, wl: 1,
-        name: uniqueName(rf.name), desiredColumn: randRange(3.5, h + 0.5), offshore: off, fluidHint: 'oil', quality: 0.3, charged: rng() < 0.9,
+        name: uniqueName(rf.name), desiredColumn: rr(3.5, h + 0.5), offshore: off, fluidHint: 'oil', quality: 0.3, charged: rng() < 0.9,
       }));
     }
   }
@@ -346,12 +349,12 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
   {
     const names = shuffled(rng, WEDGE_NAMES);
     for (let a = 0, made = 0; a < 400 && made < cfg.wedges; a++) {
-      const x = randRange(40, size - 40);
-      const z = randRange(40, size - 40);
+      const x = rr(40, size - 40);
+      const z = rr(40, size - 40);
       if (waterDepth(x, z) > 14) continue;
-      const L = randRange(26, 40);
-      const W = randRange(11, 17);
-      const T = randRange(2.3, 3.4);
+      const L = rr(26, 40);
+      const W = rr(11, 17);
+      const T = rr(2.3, 3.4);
       if (!free(x, z, L / 2 + 4)) continue;
       const ang = Math.atan2(-od.z, -od.x) + randSym(rng) * 0.6;
       const dx = Math.cos(ang);
@@ -368,7 +371,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       made++;
       plan.traps.push(newTrap({
         kind: 'stratigraphic', unit, body: BODY.WEDGE, bodyIdx: wi, shape: SHAPE.WEDGE, cx: x, cz: z, ra: Math.max(L, W) / 2 + 2, wl: 1,
-        name: uniqueName(w.name), desiredColumn: randRange(3, 5.5), offshore: isOcean(x, z), quality: 0.1, charged: rng() < 0.9,
+        name: uniqueName(w.name), desiredColumn: rr(3, 5.5), offshore: isOcean(x, z), quality: 0.1, charged: rng() < 0.9,
       }));
     }
   }
@@ -380,17 +383,17 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
     let on = 0;
     let offC = 0;
     for (let a = 0; a < 1500 && on + offC < target; a++) {
-      const x = randRange(20, size - 20);
-      const z = randRange(20, size - 20);
+      const x = rr(20, size - 20);
+      const z = rr(20, size - 20);
       const off = isOcean(x, z);
       if (off ? offC >= offQuota : on >= target - offQuota) continue;
       const wd = waterDepth(x, z);
       if (wd > 42) continue;
       const big = off ? 1.35 : 1;
-      const ra = randRange(12, 19) * big * (size >= 768 ? 1.08 : 1);
-      const rb = ra * randRange(0.5, 0.85);
+      const ra = rr(12, 19) * big * (size >= 768 ? 1.08 : 1);
+      const rb = ra * rr(0.5, 0.85);
       if (!inside(x, z, ra * 0.9) || !free(x, z, ra * 1.3)) continue;
-      const amp = randRange(5, 8.5) * (off ? 1.2 : 1);
+      const amp = rr(5, 8.5) * (off ? 1.2 : 1);
       const g = gmin(x, z, ra);
       const order = shuffled(rng, [U.UPPER_SAND, U.MID_SAND, U.MID_SAND, U.DEEP_SAND, U.DEEP_SAND, U.BASAL_SAND, U.PLATFORM]);
       const u = order.find((k) => hostOk(k, x, z, amp, g, off ? 9 : 11));
@@ -405,7 +408,7 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
         newTrap({
           kind: 'anticline', unit, shape: SHAPE.ELLIPSE, cx: x, cz: z, ra: ra * 1.08, rb: rb * 1.08, cos: Math.cos(ang), sin: Math.sin(ang),
           brine: unit !== U.PLATFORM, name: off ? uniqueName(`${fieldName} ${offQualifier(unit)}`) : unitLetterName(unit),
-          desiredColumn: randRange(3, 8) * (off ? 1.45 : 1), offshore: off, charged, quality: off ? 0.35 : randSym(rng) * 0.4,
+          desiredColumn: rr(3, 8) * (off ? 1.45 : 1), offshore: off, charged, quality: off ? 0.35 : randSym(rng) * 0.4,
         });
       plan.traps.push(mk(u, rng() < 0.84));
       // stacked pay: a deeper reservoir in the same structure
@@ -425,18 +428,18 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
     for (let k = 0; k < fluids.length; k++) {
       const fluid = fluids[k];
       for (let a = 0; a < 300; a++) {
-        const x = randRange(size * 0.15, size * 0.85);
-        const z = randRange(size * 0.15, size * 0.85);
+        const x = rr(size * 0.15, size * 0.85);
+        const z = rr(size * 0.15, size * 0.85);
         if (!land(x, z)) continue;
         terrain.coast(x, z, cs);
         const inland = -cs.o;
         // gas window: deeper, nearer the basin; oil window: up-dip / inland
         if (fluid === 'gas' ? inland < 20 || inland > size * 0.35 : inland < size * 0.25) continue;
-        const ra = size * randRange(0.1, 0.15);
-        const rb = ra * randRange(0.55, 0.8);
+        const ra = size * rr(0.1, 0.15);
+        const rb = ra * rr(0.55, 0.8);
         if (plan.plays.some((p) => Math.hypot(p.cx - x, p.cz - z) < (p.ra + ra) * 0.85)) continue;
         const ang = rng() * Math.PI;
-        const p: Play = { cx: x, cz: z, ra, rb, cos: Math.cos(ang), sin: Math.sin(ang), fluid, op: randRange(0.55, 0.85) };
+        const p: Play = { cx: x, cz: z, ra, rb, cos: Math.cos(ang), sin: Math.sin(ang), fluid, op: rr(0.55, 0.85) };
         plan.plays.push(p);
         plan.traps.push(newTrap({
           kind: 'shale_play', unit: U.SOURCE, shape: SHAPE.ELLIPSE, cx: x, cz: z, ra, rb, cos: p.cos, sin: p.sin, wl: 1, brine: false,
@@ -449,12 +452,12 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
 
   // ---------------- overpressure cells (onshore) ----------------
   for (let a = 0, made = 0; a < 200 && made < cfg.opZones; a++) {
-    const x = randRange(30, size - 30);
-    const z = randRange(30, size - 30);
+    const x = rr(30, size - 30);
+    const z = rr(30, size - 30);
     if (isOcean(x, z)) continue;
-    const ra = randRange(40, 75) * scale;
+    const ra = rr(40, 75) * scale;
     const ang = rng() * Math.PI;
-    plan.opZones.push({ cx: x, cz: z, ra, rb: ra * randRange(0.55, 0.9), cos: Math.cos(ang), sin: Math.sin(ang), strength: randRange(0.6, 0.95) });
+    plan.opZones.push({ cx: x, cz: z, ra, rb: ra * rr(0.55, 0.9), cos: Math.cos(ang), sin: Math.sin(ang), strength: rr(0.6, 0.95) });
     made++;
   }
 
@@ -465,31 +468,31 @@ export function planFeatures(seed: number, terrain: Terrain, grid: HorizonGrid, 
       plan.aquifers.some((q) => q.unit === unit && Math.hypot(q.cx - x, q.cz - z) < (q.ra + ra) * 0.9);
     const mkAq = (unit: number, x: number, z: number, ra: number, fresh: boolean) => {
       const ang = rng() * Math.PI;
-      const salinity = fresh ? Math.round(randRange(250, 1800)) : Math.round(randRange(35000, 90000) + (U.UPPER_SAND - unit) * randRange(8000, 20000));
+      const salinity = fresh ? Math.round(rr(250, 1800)) : Math.round(rr(35000, 90000) + (U.UPPER_SAND - unit) * rr(8000, 20000));
       plan.aquifers.push({
         pub: { id: `AQ${++n}`, center: { x, y: 0, z }, radiusX: ra, radiusZ: ra, topY: 0, bottomY: 0, salinity, fresh },
-        unit, cx: x, cz: z, ra, rb: ra * randRange(0.55, 0.9), cos: Math.cos(ang), sin: Math.sin(ang), live: false,
+        unit, cx: x, cz: z, ra, rb: ra * rr(0.55, 0.9), cos: Math.cos(ang), sin: Math.sin(ang), live: false,
       });
     };
     for (let a = 0, made = 0; a < 300 && made < cfg.fresh; a++) {
-      const x = randRange(30, size - 30);
-      const z = randRange(30, size - 30);
+      const x = rr(30, size - 30);
+      const z = rr(30, size - 30);
       if (isOcean(x, z)) continue;
       const g = terrain.ground[idx(x, z)];
       const top = hzAt(U.UPPER_SAND, x, z);
       if (g - top < 5 || g - top > 26 || g <= SEA_LEVEL) continue;
-      const ra = randRange(28, 50) * scale;
+      const ra = rr(28, 50) * scale;
       if (overlaps(U.UPPER_SAND, x, z, ra)) continue;
       mkAq(U.UPPER_SAND, x, z, ra, true);
       made++;
     }
     const units = [U.MID_SAND, U.DEEP_SAND, U.BASAL_SAND];
     for (let a = 0, made = 0; a < 300 && made < cfg.brine; a++) {
-      const x = randRange(30, size - 30);
-      const z = randRange(30, size - 30);
+      const x = rr(30, size - 30);
+      const z = rr(30, size - 30);
       if (waterDepth(x, z) > 40) continue;
       const unit = units[made % units.length];
-      const ra = randRange(40, 75) * scale;
+      const ra = rr(40, 75) * scale;
       if (overlaps(unit, x, z, ra)) continue;
       mkAq(unit, x, z, ra, false);
       made++;

@@ -85,7 +85,7 @@ section('2. Placement validation');
   check('placement outside hill ok', !!t2);
   const office = placeCmd(h, 'weather_station', 32, 40); // 1:1 slope: surfaces 72,73 → cut & fill to one level
   check('levelled on hill: pad at y-1, volume clear', h.world.getBlock(32, office.y - 1, 40) === B.CONCRETE_PAD && h.world.getBlock(33, office.y, 41) === B.STRUCTURE, `y=${office.y}`);
-  const res = h.ctx.commands.dispatch({ type: 'build/place', x: 0, z: 0, rotation: 0 } as never);
+  const res = h.ctx.commands.dispatch({ type: 'build/place', buildingType: 'not_a_building', x: 0, z: 0, rotation: 0 });
   check('build/place without building type fails cleanly', !res.ok);
   h.ctx.state.company.money = 10;
   r = v('oil_tank_small', 120, 120);

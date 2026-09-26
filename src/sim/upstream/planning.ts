@@ -30,31 +30,43 @@ export function wellSurfaceY(ctx: GameContext, x: number, z: number): number {
   return ctx.geology.surfaceHeight(x, z);
 }
 
+/** Share of the true over/under-pressure the player's prediction captures with no local data (regional trends). */
+export const BASE_PRESSURE_KNOWLEDGE = 0.5;
+
 /**
- * How well the player knows the pressure regime at a column (0..1): offset wells within 40 blocks give full
- * confidence; completed 3D surveys covering the point give 0.85; a 2D line within 4 blocks gives 0.5.
+ * How much of the true pressure anomaly the player's prediction captures at a column (0..1), as a function of
+ * depth: an offset well within 40 blocks reveals everything down to its TD; a completed 3D survey covering the
+ * point or a 2D line within 3 blocks reveals all depths (0.85 within 12 blocks of a 2D line); otherwise regional
+ * trends only (BASE_PRESSURE_KNOWLEDGE). Returns a function of y.
  */
-export function pressureConfidence(ctx: GameContext, x: number, z: number): number {
-  let c = 0;
-  for (const w of Object.values(ctx.state.wells)) {
-    if (w.measuredDepth < 3) continue;
-    const d = Math.hypot(w.x - x, w.z - z);
-    if (d <= 40) return 1;
-  }
+export function pressureKnowledge(ctx: GameContext, x: number, z: number): (y: number) => number {
+  let survey = BASE_PRESSURE_KNOWLEDGE;
   for (const s of Object.values(ctx.state.surveys)) {
     if (s.status !== 'complete') continue;
     if (s.kind === '3d') {
-      if (x >= Math.min(s.x0, s.x1) && x <= Math.max(s.x0, s.x1) && z >= Math.min(s.z0, s.z1) && z <= Math.max(s.z0, s.z1)) c = Math.max(c, 0.85);
+      if (x >= Math.min(s.x0, s.x1) && x <= Math.max(s.x0, s.x1) && z >= Math.min(s.z0, s.z1) && z <= Math.max(s.z0, s.z1)) survey = 1;
     } else {
       const dx = s.x1 - s.x0;
       const dz = s.z1 - s.z0;
       const L2 = dx * dx + dz * dz || 1;
       const t = clamp(((x - s.x0) * dx + (z - s.z0) * dz) / L2, 0, 1);
       const d = Math.hypot(s.x0 + t * dx - x, s.z0 + t * dz - z);
-      if (d <= 4) c = Math.max(c, 0.5);
+      if (d <= 3) survey = 1;
+      else if (d <= 12) survey = Math.max(survey, 0.85);
     }
   }
-  return c;
+  let deepest = Infinity;
+  for (const w of Object.values(ctx.state.wells)) {
+    if (w.measuredDepth < 3 || Math.hypot(w.x - x, w.z - z) > 40) continue;
+    deepest = Math.min(deepest, w.currentY);
+  }
+  return (y: number) => (y >= deepest - 0.5 ? 1 : survey);
+}
+
+/** Pressure-prediction confidence at a column over the whole section (worst depth) — for UI badges. */
+export function pressureConfidence(ctx: GameContext, x: number, z: number, targetY = 2): number {
+  const k = pressureKnowledge(ctx, x, z);
+  return Math.min(k(targetY), k(ctx.geology.surfaceHeight(x, z) - 2));
 }
 
 /** Current pore pressure (psi) at a point: geology pore pressure scaled by reservoir depletion. */
@@ -70,7 +82,7 @@ export function currentPorePsi(ctx: GameContext, x: number, y: number, z: number
 /** Predicted pore & fracture pressure (ppg) from the rig floor down to y = 2 (one entry per block). */
 export function pressureProfile(ctx: GameContext, x: number, z: number): PressurePoint[] {
   const surfaceY = wellSurfaceY(ctx, x, z);
-  const conf = pressureConfidence(ctx, x, z);
+  const know = pressureKnowledge(ctx, x, z);
   const out: PressurePoint[] = [];
   for (let y = surfaceY - 1; y >= 2; y--) {
     const tvd = tvdFt(surfaceY, y);
@@ -79,7 +91,7 @@ export function pressureProfile(ctx: GameContext, x: number, z: number): Pressur
     const truePore = currentPorePsi(ctx, x, y, z, props.reservoirId);
     const hydro = HYDROSTATIC_PSI_FT * tvd;
     // Unknown areas are predicted as normally pressured; knowledge reveals over/under-pressure.
-    const pore = hydro + conf * (truePore - hydro);
+    const pore = hydro + know(y) * (truePore - hydro);
     const frac = ctx.geology.fracturePressure(x, y, z);
     out.push({ y, pore: psiToPpg(pore, tvd), frac: psiToPpg(frac, tvd) });
   }
@@ -254,6 +266,7 @@ export function quoteWell(ctx: GameContext, rt: UpstreamRuntime, x: number, z: n
       }
     }
   }
+  if (pressureConfidence(ctx, x, z, plan.targetY) < 0.99) warnings.push('Pore-pressure prediction is uncertain here (no seismic or offset wells) — add a safety margin to the mud weight or shoot seismic first.');
   for (const a of rt.freshAquifersAt(x, z)) {
     const covered = plan.casingPoints.some((cp) => cp <= a.bottomY);
     if (!covered && plan.targetY < a.bottomY) warnings.push(`Fresh-water aquifer at ${depthM(surfaceY, a.topY)}–${depthM(surfaceY, a.bottomY)} m: set surface casing below ${depthM(surfaceY, a.bottomY)} m.`);

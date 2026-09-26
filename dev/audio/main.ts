@@ -6,7 +6,8 @@ import type { BiomeId, WeatherKind, Vec3 } from '../../src/core/types';
 import type { GameEvents } from '../../src/core/EventBus';
 import { SEA_LEVEL } from '../../src/core/constants';
 import { createFakeGame } from './fakeGame';
-import { analyzeBank, drawSpectrum, drawWave, renderMusic } from './analysis';
+import { analyzeBank, drawSpectrogram, drawSpectrum, drawWave, renderMusic } from './analysis';
+import { SoundBank } from '../../src/audio/bank';
 import type { Mood } from '../../src/audio/music/composer';
 
 const engine = createAudioEngineImpl(null);
@@ -397,6 +398,27 @@ async function analyze(musicSeconds = 32) {
   return { count: stats.length, totalMs: Math.round(totalMs), bad, slow, music: musicStats, loud: stats.filter((s) => s.peakDb > -1).map((s) => s.name) };
 }
 
+/** Big waveform + spectrogram view of selected sounds (2 columns). */
+async function inspect(names: string[]) {
+  const bank = new SoundBank(44100);
+  const g = canvas.getContext('2d')!;
+  const cw = 626, chh = 176;
+  canvas.height = Math.ceil(names.length / 2) * chh;
+  g.fillStyle = '#0a0d10';
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.font = '11px monospace';
+  for (let i = 0; i < names.length; i++) {
+    const bufs = await bank.load(names[i]);
+    const x = (i % 2) * (cw + 8), y = Math.floor(i / 2) * chh;
+    if (!bufs) continue;
+    drawWave(g, bufs[0], x, y + 14, cw, 40);
+    drawSpectrogram(g, bufs[0], x, y + 56, cw, chh - 62);
+    g.fillStyle = '#fff';
+    g.fillText(`${names[i]}  ${bufs[0].duration.toFixed(2)}s`, x + 4, y + 11);
+  }
+  return names.length;
+}
+
 // ---- automated run (used by scripts/shot.mjs) ----------------------------------------------------------
 async function waitFor(fn: () => boolean, ms: number) {
   const t0 = performance.now();
@@ -473,7 +495,7 @@ async function runAll() {
   };
 }
 
-(window as unknown as Record<string, unknown>).audioHarness = { engine, fake, runAll, analyze, errors };
+(window as unknown as Record<string, unknown>).audioHarness = { engine, fake, runAll, analyze, inspect, errors };
 if (location.search.includes('analyze')) document.body.classList.add('analyze');
 
 // ---- loop ------------------------------------------------------------------------------------------------

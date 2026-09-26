@@ -298,6 +298,7 @@ export function column(b: Builder, x: number, z: number, y0: number, h: number, 
   });
   for (let y = y0 + platformEvery; y < y0 + h - 0.8; y += platformEvery) {
     b.ring(x, y, z, r + 0.35, 0.3, C.STEEL_DARK, 'metal', 16);
+    b.box(x + r + 0.5, y + 0.4, z + 0.2, 0.12, 0.12, 0.12, C.LAMP_WARM, 'lamp');
     b.detail(() => b.ring(x, y + 1, z, r + 0.62, 0.035, C.HAZARD, 'paint', 16));
   }
   ladder(b, x - r - 0.1, y0 + 0.9, z, h - 0.9, 0, true);
@@ -538,4 +539,92 @@ export function walkway(b: Builder, p0: V3, p1: V3, w: number): void {
   b.orient(p0, p1, (len) => {
     b.box(0, len / 2, 0, w, len, 0.12, C.STEEL_DARK, 'metal');
   });
+}
+
+/** Vertical pressure vessel on a skirt with elliptical heads. */
+export function vVessel(b: Builder, x: number, z: number, y0: number, r: number, h: number, color: number = C.WHITE, skirt = 0.5): void {
+  b.cyl(x, y0, z, r * 0.92, skirt, C.STEEL_DARK, 'paint', 12);
+  b.cyl(x, y0 + skirt, z, r, h - skirt - r * 0.4, color, 'paint', 14);
+  b.dome(x, y0 + h - r * 0.4, z, r, color, 'paint', 14, r * 0.4);
+  b.cyl(x, y0 + h - 0.05, z, 0.07, 0.3, C.STEEL, 'metal', 6);
+}
+
+/**
+ * Fired heater / furnace box from (x0,z0) to (x1,z1), firebox height h, with glowing peep windows
+ * ('hot' material), a convection section and `stacks` stacks (smoke anchors) of height stackH.
+ */
+export function furnace(b: Builder, x0: number, z0: number, x1: number, z1: number, h: number, stacks: number, stackH: number, color: number = C.STEEL_LIGHT): void {
+  const cx = (x0 + x1) / 2;
+  const cz = (z0 + z1) / 2;
+  const w = x1 - x0;
+  const d = z1 - z0;
+  // legs + firebox
+  for (const x of [x0 + 0.2, x1 - 0.2]) for (const z of [z0 + 0.2, z1 - 0.2]) b.box(x, 0.4, z, 0.25, 0.8, 0.25, C.STEEL_DARK, 'paint');
+  b.slab(x0, 0.8, z0, x1, 0.8 + h, z1, color, 'paint');
+  b.slab(x0 - 0.03, 0.8, z0 - 0.03, x1 + 0.03, 1.0, z1 + 0.03, C.STEEL_DARK, 'paint');
+  // peep windows glowing on the long sides
+  const alongX = w >= d;
+  const n = Math.max(2, Math.floor((alongX ? w : d) / 0.9));
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    for (const yy of [1.6, 2.6]) {
+      if (yy > 0.8 + h - 0.4) continue;
+      if (alongX) {
+        b.box(x0 + w * t, yy, z0 - 0.02, 0.22, 0.16, 0.04, C.HOT, 'hot');
+        b.box(x0 + w * t, yy, z1 + 0.02, 0.22, 0.16, 0.04, C.HOT, 'hot');
+      } else {
+        b.box(x0 - 0.02, yy, z0 + d * t, 0.04, 0.16, 0.22, C.HOT, 'hot');
+        b.box(x1 + 0.02, yy, z0 + d * t, 0.04, 0.16, 0.22, C.HOT, 'hot');
+      }
+    }
+  }
+  // burners glow underneath
+  b.slab(x0 + 0.3, 0.72, z0 + 0.3, x1 - 0.3, 0.8, z1 - 0.3, C.HOT, 'hot');
+  // convection section (narrower box on top)
+  const ch = Math.min(1.6, h * 0.35);
+  b.slab(cx - w * 0.35, 0.8 + h, cz - d * 0.3, cx + w * 0.35, 0.8 + h + ch, cz + d * 0.3, C.STEEL, 'paint');
+  // stacks
+  for (let i = 0; i < stacks; i++) {
+    const t = stacks === 1 ? 0.5 : i / (stacks - 1);
+    const sx = alongX ? cx - w * 0.25 + w * 0.5 * t : cx;
+    const sz = alongX ? cz : cz - d * 0.25 + d * 0.5 * t;
+    const r = Math.min(0.4, Math.min(w, d) * 0.16);
+    b.cyl(sx, 0.8 + h + ch, sz, r, stackH, C.STEEL_LIGHT, 'paint', 12, r * 0.9);
+    b.cyl(sx, 0.8 + h + ch + stackH - 0.5, sz, r * 0.92, 0.4, C.RED, 'paint', 12);
+    b.box(sx + r, 0.8 + h + ch + stackH - 0.2, sz, 0.1, 0.1, 0.1, C.LAMP_RED, 'blink');
+    b.anchor('smoke', sx, 0.8 + h + ch + stackH + 0.1, sz, { r: r * 1.2, rate: 0.8, dark: 0.15 });
+  }
+  b.anchor('light', cx, 1.4, z0 - 0.5, { intensity: 0.6, color: 0xff9a50, range: 7 });
+}
+
+/** Shell-and-tube exchanger along x with coloured channel head. */
+export function exchanger(b: Builder, x: number, y: number, z: number, r: number, len: number, head: number = C.BLUE): void {
+  b.cylX(x, y, z, r, len, C.STEEL_LIGHT, 'paint', 12);
+  b.cylX(x + len / 2 + r * 0.4, y, z, r * 1.08, r * 0.8, head, 'paint', 12);
+  b.sphere(x - len / 2, y, z, r, C.STEEL_LIGHT, 'paint', 10, r * 0.6);
+  for (const s of [-0.3, 0.3]) b.box(x + s * len, (y - r) / 2 + 0.05, z, 0.2, Math.max(0.1, y - r), r * 1.4, C.STEEL_DARK, 'paint');
+}
+
+/** Structural frame (steel "table") x0..x1, z0..z1 with decks at the given heights. */
+export function frame(b: Builder, x0: number, z0: number, x1: number, z1: number, decks: number[], color: number = C.STEEL_DARK, grate: number = C.STEEL_DARK): void {
+  const top = decks[decks.length - 1];
+  const nx = Math.max(1, Math.round((x1 - x0) / 2.2));
+  const nz = Math.max(1, Math.round((z1 - z0) / 2.2));
+  for (let i = 0; i <= nx; i++)
+    for (let k = 0; k <= nz; k++) {
+      if (i > 0 && i < nx && k > 0 && k < nz) continue;
+      b.box(x0 + ((x1 - x0) * i) / nx, top / 2, z0 + ((z1 - z0) * k) / nz, 0.16, top, 0.16, color, 'paint');
+    }
+  for (const y of decks) {
+    b.slab(x0, y - 0.1, z0, x1, y, z1, grate, 'metal');
+    railRect(b, x0, z0, x1, z1, y, C.HAZARD);
+  }
+  // diagonal bracing on the end faces
+  b.beam([x0, 0, z0], [x0, top, z1], 0.07, color, 'paint');
+  b.beam([x1, 0, z1], [x1, top, z0], 0.07, color, 'paint');
+}
+
+/** Control room / substation block. */
+export function controlRoom(b: Builder, x0: number, z0: number, x1: number, z1: number, h: number, seed: number, signFace: 'n' | 's' | 'e' | 'w' = 's'): void {
+  shed(b, { x0, z0, x1, z1, h, wall: C.CREAM, roof: C.STEEL, windows: signFace === 's' || signFace === 'n' ? 'ns' : 'ew', windowY: 1.0, windowH: 0.5, door: signFace, seed });
 }

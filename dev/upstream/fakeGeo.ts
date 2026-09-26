@@ -40,7 +40,7 @@ export class FakeGeology implements IGeology {
       {
         id: 'r_eagle', name: 'Eagle Sand', fluid: 'oil', trap: 'anticline', lithology: 'sandstone', center: { x: 64, y: 43, z: 64 }, radiusX: 30, radiusZ: 24,
         topY: 45, bottomY: 40, compartment: 0, offshore: false, porosity: 0.22, permeability: 150, netToGross: 0.75, waterSaturation: 0.25,
-        initialPressure: 2750, temperature: 70, bubblePoint: 2000, apiGravity: 36, gasOilRatio: 550, h2s: 0, co2: 0.01,
+        initialPressure: 2200, temperature: 70, bubblePoint: 1650, apiGravity: 36, gasOilRatio: 550, h2s: 0, co2: 0.01,
         oilInPlace: 8_000_000, gasInPlace: 4_400_000, waterDrive: 0.55, gasCap: false, owcY: 41,
       },
       {

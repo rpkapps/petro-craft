@@ -74,7 +74,7 @@ export function createFacilitySystems(): SimSystem[] {
     onNewDay(ctx: GameContext, day: number) {
       maintenance.chargeOpex();
       spills.onNewDay(day);
-      ctx.state.hazards.daysSinceIncident++;
+      // daysSinceIncident is derived daily by the economy's workforce system.
     },
     dispose() {
       rt.dispose();
