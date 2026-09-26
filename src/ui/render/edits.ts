@@ -73,6 +73,7 @@ export class EditRaster {
   private qHead = 0;
   private bulk = false;
   private acc = 0;
+  private sinceFlush = 0;
   private dx0 = Infinity;
   private dz0 = Infinity;
   private dx1 = -1;
@@ -144,7 +145,7 @@ export class EditRaster {
     this.version++;
   }
 
-  /** Process queued columns for up to `budgetMs`, flushing dirty pixels at most every ~150 ms (every frame while bulk-building). */
+  /** Process queued columns for up to `budgetMs`. Incremental changes are batched ~150 ms; bulk builds run every frame. */
   pump(dt: number, budgetMs: number) {
     this.acc += dt;
     if (!this.pending) return;
@@ -158,12 +159,14 @@ export class EditRaster {
       this.evaluate(c);
       if ((++n & 63) === 0 && performance.now() - t0 > budgetMs) break;
     }
+    this.sinceFlush += dt;
     if (this.qHead >= this.queue.length) {
       this.queue = [];
       this.qHead = 0;
       this.bulk = false;
     }
-    this.flush();
+    // While bulk-building, upload at most ~4×/s (the dirty rect can span the whole map).
+    if (!this.bulk || this.sinceFlush >= 0.25) this.flush();
   }
 
   dispose() {
@@ -284,6 +287,7 @@ export class EditRaster {
   }
 
   private flush() {
+    this.sinceFlush = 0;
     if (this.dx1 < 0) return;
     const x = this.dx0;
     const z = this.dz0;

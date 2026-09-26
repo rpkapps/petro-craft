@@ -18,6 +18,7 @@ export class NotificationsPanel extends Panel {
   private list!: KeyedList<Notification>;
   private empty!: HTMLElement;
   private markAll!: HTMLButtonElement;
+  private unreadEl!: HTMLElement;
   /** Messages that were unread when first shown in this viewing session (highlighted as "new"). */
   private fresh = new Set<string>();
   /** Ids that became visible and still need to be marked read. */
@@ -33,8 +34,8 @@ export class NotificationsPanel extends Panel {
     const st = this.ui.game.state;
     const seg = segmented<Filter>([{ value: 'all', label: 'All' }, { value: 'danger', label: 'Critical' }, { value: 'warning', label: 'Warnings' }, { value: 'success', label: 'Success' }, { value: 'info', label: 'Info' }], this.filter, (v) => { this.ui.sound('click'); this.filter = v; this.update(); });
     this.tabsEl.appendChild(seg.el);
-    this.markAll = button('Mark all read', { icon: 'check', size: 'sm', onClick: () => this.markAllRead() });
-    this.actionsEl.appendChild(this.markAll);
+    this.markAll = button('Mark all read', { icon: 'check', size: 'xs', variant: 'ghost', onClick: () => this.markAllRead() });
+    this.unreadEl = h('span.small.dim');
     if (typeof IntersectionObserver !== 'undefined') {
       this.observer = new IntersectionObserver((entries) => {
         for (const e of entries) {
@@ -58,7 +59,7 @@ export class NotificationsPanel extends Panel {
       return { node, update: (x) => toggleClass(node, 'new', this.fresh.has(x.id)) };
     });
     this.empty = emptyState('bell', 'No messages');
-    this.body.append(box, this.empty);
+    this.body.append(h('div.nt-toolbar', this.unreadEl, h('span.sp'), this.markAll), box, this.empty);
   }
 
   update() {
@@ -71,7 +72,9 @@ export class NotificationsPanel extends Panel {
     this.flushSeen();
     let unread = 0;
     for (const n of st.notifications) if (!n.read) unread++;
-    setText(this.subEl, unread ? `${st.notifications.length} messages · ${unread} unread` : `${st.notifications.length} messages`);
+    setText(this.subEl, `${st.notifications.length} messages`);
+    setText(this.unreadEl, unread ? `${unread} unread` : 'All caught up');
+    toggleClass(this.unreadEl, 'accent', unread > 0);
     setDisabled(this.markAll, unread === 0);
   }
 

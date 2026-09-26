@@ -305,7 +305,7 @@ class Controller implements UIController {
     this.unsubs = [];
     this.panels.clearAll();
     this.modals.closeAll();
-    this.hud?.el.remove();
+    this.hud?.destroy();
     this.hud = null;
     this.session = null;
     this.tooltip.hide();

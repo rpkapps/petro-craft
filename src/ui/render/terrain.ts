@@ -55,7 +55,6 @@ export class TerrainMap {
     if (this.done) return true;
     const t0 = performance.now();
     const res = this.res;
-    const coarse = this.pass === 0 ? 4 : 1;
     let minRow = res;
     let maxRow = -1;
     while (performance.now() - t0 < budgetMs) {
@@ -69,6 +68,7 @@ export class TerrainMap {
         break;
       }
       const z = this.row;
+      const coarse = this.pass === 0 ? 4 : 1; // per row: a step may cross from the coarse into the fine pass
       if (coarse > 1 && z % coarse !== 0) {
         this.row++;
         continue;

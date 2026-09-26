@@ -218,7 +218,7 @@
 .pc-root .pc-toasts {
   position: absolute;
   right: 1rem;
-  top: 19rem;
+  top: calc(19rem + var(--perf-h, 0px));
   width: 21rem;
   display: flex;
   flex-direction: column;

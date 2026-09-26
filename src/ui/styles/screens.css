@@ -543,6 +543,7 @@
 .pc-root .ach.on .ach-ic { background: radial-gradient(circle at 35% 30%, #ffe08a, #d99a00); color: #2a1a00; box-shadow: 0 0 1rem rgba(255, 194, 51, 0.5); }
 
 /* ---- notifications ------------------------------------------------------------------------- */
+.pc-root .nt-toolbar { position: sticky; top: -1rem; z-index: 1; display: flex; align-items: center; gap: 0.5rem; margin: -1rem -1rem 0.6rem; padding: 0.45rem 1rem; background: rgba(12, 16, 22, 0.92); border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
 .pc-root .nt-list { display: flex; flex-direction: column; gap: 0.35rem; }
 .pc-root .nt-row { --tc: var(--info); display: flex; align-items: flex-start; gap: 0.7rem; padding: 0.55rem 0.65rem; border-radius: var(--r-md); border: 1px solid var(--line); background: linear-gradient(90deg, color-mix(in srgb, var(--tc) 9%, transparent), transparent 55%); box-shadow: inset 3px 0 0 var(--tc); }
 .pc-root .nt-row.lv-success { --tc: var(--ok); }

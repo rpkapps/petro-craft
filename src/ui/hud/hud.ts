@@ -54,7 +54,7 @@ export class Hud {
     this.modes = new ModeStrip(ui, ctx);
     this.scan = new ScanCard();
     this.alert = new AlertBanner(ui, ctx);
-    this.perf = new PerfOverlay(ui.app);
+    this.perf = new PerfOverlay(ui.app, ui.root);
     this.unread = h('span.dk-badge.mono');
     const dock = h('div.pc-dock.glass.flat');
     for (const d of DOCK) {
@@ -119,6 +119,11 @@ export class Hud {
     let n = 0;
     for (const x of this.ctx.state.notifications) if (!x.read) n++;
     return n;
+  }
+
+  destroy() {
+    this.perf.destroy();
+    this.el.remove();
   }
 
   toggleHidden() {
