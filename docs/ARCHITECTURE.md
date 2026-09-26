@@ -97,6 +97,27 @@ src/
 * Visual quality bar: this should look and feel like a premium, polished game — cohesive art direction
   (warm industrial palette with orange accent `#ff8a1f`), smooth animations, no placeholder art.
 
+## Conventions
+* **Rotation:** building rotation `r` turns clockwise seen from above; models use `rotation.y = -r·π/2`.
+* **Player view:** `yaw = 0` looks along −Z (three.js 'YXZ' order), forward = (−sin yaw, 0, −cos yaw); `pitch > 0` looks up.
+  Compass north is −Z. The player position is the feet.
+* **Per-module extra state** lives in plain-JSON escape hatches: `well.up` / `reservoirState.up` (upstream),
+  `state.economy` (economy), `building.data` (any system; documented keys in each module).
+* `build/place` carries the building id in `buildingType` (not `type`, which is the command discriminator).
+
+## Testing
+| What | Command |
+| --- | --- |
+| Typecheck + production build | `pnpm build` |
+| Upstream sim (97 checks) | `node --experimental-transform-types --no-warnings --import ./dev/upstream/register.mjs dev/upstream/sim.test.ts` |
+| Facilities sim (139 checks) | `node --experimental-transform-types --no-warnings --import ./dev/facilities/register.mjs dev/facilities/sim.test.ts` |
+| Economy sim (365-day run / edge cases) | `node --experimental-transform-types --no-warnings --import ./dev/economy/register.mjs dev/economy/sim.ts` (or `edge.ts`) |
+| World generation | `node --experimental-strip-types --import ./dev/world/register.mjs dev/world/test.ts [seed] [size]` |
+| Player logic (unit) | `node --experimental-strip-types --no-warnings --import ./dev/player/register.mjs --test dev/player/unit.test.mjs` |
+| End-to-end gameplay (real game in headless Chromium) | `pnpm dev --port 5190` then `node scripts/scenario.mjs` (`SOAK=60` for a long run), `node scripts/interact.mjs`, `node scripts/play.mjs` |
+
+Each module also has a visual dev harness under `dev/<module>/` (open `http://localhost:5173/dev/<module>/` with `pnpm dev`).
+
 ## Multiplayer readiness
 All mutations are serializable commands tagged with `playerId`; state is JSON; RNG is in-state. `net/Transport.ts` defines
 the host/client message protocol. Buildings/wells carry `owner`.
