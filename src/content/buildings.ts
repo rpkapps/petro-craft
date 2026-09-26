@@ -109,7 +109,7 @@ b({ id: 'pump_station', name: 'Pump Station', category: 'midstream', size: [3, 3
   description: 'Boosts liquid pipeline throughput on its networks.' });
 b({ id: 'compressor_station', name: 'Compressor Station', category: 'midstream', size: [5, 4, 4], cost: 420_000, buildHours: 16, power: 2.5, crew: { operator: 1 }, opex: 700, requiresTech: 'compression', placement: 'land', ports: ['gas'], emissions: 6, mtbf: 120, flammability: 0.4, order: 2,
   description: 'Reciprocating compressors restore pressure on gas pipelines. Required for long gas lines.' });
-b({ id: 'gas_sales_meter', name: 'Gas Sales Meter', category: 'logistics', size: [3, 2, 2], cost: 80_000, buildHours: 6, power: 0.05, crew: {}, opex: 100, placement: 'land', ports: ['gas'], mtbf: 500, flammability: 0.2, order: 1,
+b({ id: 'gas_sales_meter', name: 'Gas Sales Meter', category: 'logistics', size: [3, 2, 2], cost: 80_000, buildHours: 6, power: 0.05, crew: {}, opex: 100, placement: 'land', ports: ['gas'], storage: { gas: 8000 }, mtbf: 500, flammability: 0.2, order: 1,
   description: 'Custody-transfer meter into the regional grid. Sells dry gas at market price; raw gas at a 30% discount.' });
 b({ id: 'truck_terminal', name: 'Truck Loading Rack', category: 'logistics', size: [6, 4, 4], cost: 220_000, buildHours: 12, power: 0.2, crew: { trucker: 4 }, opex: 800, placement: 'land', ports: ['oil', 'product'], storage: { oil: 1500, product: 1500 }, mtbf: 300, flammability: 0.4, order: 2,
   description: 'Tanker trucks haul liquids to market: up to 3,000 bbl/day. Fulfils contracts.' });

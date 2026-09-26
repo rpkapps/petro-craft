@@ -62,6 +62,13 @@ export interface GameEvents {
   'player:land': { speed: number };
   'player:damage': { amount: number };
   'player:toolUse': { tool: string; x: number; y: number; z: number };
+  /** Geo-scanner / gas-detector readout for the HUD. */
+  'player:scan': { tool: string; at: Vec3; lines: string[]; level?: 'info' | 'warning' | 'danger' };
+  /** What the crosshair (or drone cursor) is pointing at — for HUD tooltips. Emitted on change. */
+  'player:target': { kind: 'none' | 'block' | 'building' | 'well'; id?: string; pos?: Vec3; block?: number };
+  /** Player died / respawned. */
+  'player:death': { cause: string };
+  'player:respawn': {};
   // ui (client-side)
   'ui:open': { panel: UiPanelId; args?: Record<string, unknown> };
   'ui:close': { panel?: UiPanelId };

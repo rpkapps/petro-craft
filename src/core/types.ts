@@ -172,6 +172,8 @@ export interface IWorld {
   getChunkData(cx: number, cz: number): Uint8Array | undefined;
   readonly chunksX: number;
   readonly chunksZ: number;
+  /** Iterate every block that differs from generated terrain (player/system edits). Used to rebuild pipe networks on load. */
+  forEachEdit(fn: (x: number, y: number, z: number, id: number) => void): void;
   /** Serialize edits (compressed per-chunk deltas) / restore them. */
   serializeEdits(): WorldEditsSave;
   loadEdits(save: WorldEditsSave): void;
