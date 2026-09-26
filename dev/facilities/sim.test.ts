@@ -40,7 +40,7 @@ section('2. Placement validation');
   const v = (t: string, x: number, z: number, r: 0 | 1 = 0) => h.ctx.services.construction.validate(t, x, z, r);
   let r = v('oil_tank_small', 60, 60);
   check('flat land ok', r.ok && r.y === 70 && r.cost === 90_000, JSON.stringify(r));
-  r = v('field_office', 32, 32);
+  r = v('worker_camp', 32, 32); // 6×4 on the 1:1 hill → 5-block spread > 4 allowed
   check('steep hill rejected', !r.ok && /steep/.test(r.reason ?? ''), r.reason);
   r = v('oil_tank_small', 36, 60);
   check('hill edge outside slope ok', r.ok, r.reason);

@@ -1,0 +1,37 @@
+// Real-input interaction test: drone mode, build menu → placement, x-ray, panels.
+import { chromium } from 'playwright-core';
+import { existsSync } from 'node:fs';
+const [base = 'http://localhost:5190/'] = process.argv.slice(2);
+const exe = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(existsSync);
+const browser = await chromium.launch({ executablePath: exe, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+page.on('pageerror', (e) => console.log('[pageerror]', e.message, e.stack?.split('\n').slice(0, 3).join(' | ')));
+page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('ERR_CERT')) console.log('[error]', m.text().slice(0, 300)); });
+await page.goto(base);
+await page.waitForTimeout(1500);
+await page.evaluate(() => window.petrocraft.newGame({ saveName: 'I', companyName: 'Interact Co', seed: 4242, worldSize: 'small', difficulty: 'normal', tutorial: true, hazards: true, creative: false }));
+await page.waitForTimeout(2000);
+const st = () => page.evaluate(() => { const s = window.petrocraft.ctx.state; return { mode: s.players.p1.mode, buildings: Object.values(s.buildings).map(b => b.type + ':' + b.status), capturing: window.petrocraft.uiCapturing, overlay: window.petrocraft.host.overlay }; });
+await page.mouse.click(640, 360); await page.waitForTimeout(800);
+await page.keyboard.press('KeyV'); await page.waitForTimeout(3000);
+console.log('after V', JSON.stringify(await st()));
+await page.screenshot({ path: 'dev-screens/int-1-drone.png' });
+await page.keyboard.press('KeyB'); await page.waitForTimeout(2500);
+console.log('after B', JSON.stringify(await st()));
+await page.screenshot({ path: 'dev-screens/int-2-build.png' });
+// click the storage tank card by text
+const card = page.getByText('Land Drilling Rig', { exact: true }).first();
+if (await card.count()) { await card.click(); await page.waitForTimeout(2000); } else console.log('no tank card');
+await page.mouse.move(640, 420); await page.waitForTimeout(2500);
+await page.screenshot({ path: 'dev-screens/int-3-ghost.png' });
+await page.mouse.click(640, 420); await page.waitForTimeout(2500);
+console.log('after place', JSON.stringify(await st()));
+await page.keyboard.press('KeyX'); await page.waitForTimeout(4000);
+console.log('after X', JSON.stringify(await st()));
+await page.screenshot({ path: 'dev-screens/int-4-xray.png' });
+await page.keyboard.press('KeyX'); await page.waitForTimeout(500);
+await page.keyboard.press('KeyN'); await page.waitForTimeout(3000);
+await page.screenshot({ path: 'dev-screens/int-5-map.png' });
+await page.keyboard.press('Escape'); await page.waitForTimeout(1500);
+console.log('after esc', JSON.stringify(await st()));
+await browser.close();

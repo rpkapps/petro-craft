@@ -13,6 +13,10 @@ import { money, oilRate, gasRate, pct, keyLabel, itemQty } from '../format';
 import { rotatedSize } from '../../core/buildingUtil';
 
 // ---- crosshair & target --------------------------------------------------------------------------
+/** Last known mouse position (the target card follows the cursor in drone mode). */
+const mouse = { x: -1, y: -1 };
+if (typeof window !== 'undefined') window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; }, { passive: true });
+
 export class TargetInfo {
   readonly el: HTMLElement;
   private card: HTMLElement;
@@ -44,6 +48,16 @@ export class TargetInfo {
   update() {
     const t = this.target;
     const st = this.ctx.state;
+    // Drone camera: free cursor — hide the crosshair and anchor the card at the mouse pointer.
+    const drone = st.players[this.ctx.localPlayerId]?.mode === 'drone';
+    toggleClass(this.el, 'drone', drone);
+    if (drone && mouse.x >= 0) {
+      this.el.style.left = `${mouse.x}px`;
+      this.el.style.top = `${mouse.y}px`;
+    } else if (this.el.style.left) {
+      this.el.style.left = '';
+      this.el.style.top = '';
+    }
     let show = false;
     if (t.kind === 'building' && t.id && st.buildings[t.id]) {
       const b = st.buildings[t.id];

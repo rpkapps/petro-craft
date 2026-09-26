@@ -21,6 +21,8 @@ export interface ValidateOpts {
 }
 
 export const MAX_SLOPE = 3;
+/** Allowed height spread grows with footprint size (bigger pads are cut & filled more). */
+export const maxSlopeFor = (w: number, d: number) => Math.min(6, MAX_SLOPE + Math.floor(Math.max(w, d) / 5));
 /** Coastal buildings may cut the shore down this many blocks above the deck. */
 const MAX_COAST_CUT = 6;
 const FRAC_WELLHEAD_RANGE = 8;
@@ -34,15 +36,26 @@ export function buildCost(ctx: GameContext, type: string): number {
   return Math.round(d.cost * ctx.modifier('construction_cost'));
 }
 
+/** Trees & plants: ignored when measuring ground height, cleared when levelling. */
+const VEGETATION = new Set<number>([
+  B.LOG_OAK, B.LEAVES_OAK, B.LOG_PINE, B.LEAVES_PINE, B.TALL_GRASS, B.FLOWER_RED, B.FLOWER_YELLOW, B.CACTUS,
+  B.DEAD_BUSH, B.REEDS, B.LEAVES_AUTUMN, B.BIRCH_LOG, B.BIRCH_LEAVES, B.SNOW,
+]);
+
 interface Column {
+  /** Ground height (first free y above ground, ignoring vegetation). */
   surf: number;
+  /** First free y above everything in the column (incl. tree canopy). */
+  top: number;
   water: number; // water depth in blocks (0 = dry)
   spill: boolean;
 }
 
 function scanColumn(ctx: GameContext, x: number, z: number): Column {
   const w = ctx.world;
-  const surf = w.getSurfaceY(x, z);
+  const colTop = w.getSurfaceY(x, z);
+  let surf = colTop;
+  while (surf > 1 && VEGETATION.has(w.getBlock(x, surf - 1, z))) surf--;
   const top = w.getBlock(x, surf, z);
   let water = 0;
   if (top === B.WATER) {
@@ -52,7 +65,7 @@ function scanColumn(ctx: GameContext, x: number, z: number): Column {
       y++;
     }
   }
-  return { surf, water, spill: top === B.OIL_POOL };
+  return { surf, top: colTop, water, spill: top === B.OIL_POOL };
 }
 
 export function validatePlacement(rt: FacilityRuntime, type: string, x: number, z: number, rotation: Rotation, opts: ValidateOpts = {}): PlacementResult {
@@ -91,7 +104,7 @@ export function validatePlacement(rt: FacilityRuntime, type: string, x: number, 
     y = landSurfs.length ? landSurfs[landSurfs.length >> 1] : SEA_LEVEL + 1;
     const spread = landSurfs.length ? landSurfs[landSurfs.length - 1] - landSurfs[0] : 0;
     if (waterCols > 0) terrainError = 'Must be built on dry land';
-    else if (spread > MAX_SLOPE) terrainError = `Ground is too steep (${spread}-block slope, max ${MAX_SLOPE})`;
+    else if (spread > maxSlopeFor(w, dp)) terrainError = `Ground is too steep (${spread}-block slope, max ${maxSlopeFor(w, dp)})`;
   } else if (d.placement === 'water') {
     y = SEA_LEVEL + 1;
     if (waterCols < cols.length) terrainError = 'Must be placed over open water';
@@ -172,7 +185,7 @@ export function levelSite(rt: FacilityRuntime, type: string, x: number, y: numbe
     for (let xx = x; xx < x + w; xx++) {
       const col = scanColumn(ctx, xx, zz);
       if (d.placement === 'water' || col.water > 0) continue;
-      const upper = Math.max(y + h - 1, col.surf);
+      const upper = Math.max(y + h - 1, col.top);
       for (let yy = y; yy <= upper && yy < world.height; yy++) {
         const id = world.getBlock(xx, yy, zz);
         if (id !== B.AIR && id !== B.STRUCTURE && PIPE_CAT[id] < 0 && id !== B.CASING) world.setBlock(xx, yy, zz, B.AIR, 'system');
