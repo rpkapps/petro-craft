@@ -208,6 +208,8 @@ vec3 overlayTint(vec3 col, vec3 albedo, vec3 N, vec4 props) {
   float w = fwidth(ed);
   float line = 1.0 - smoothstep(w * 0.5, w * 1.5 + 0.1, ed);
   vec2 luv = (floor(cell) + 0.5) / uLeaseInfo.yz;
+  // beyond the map border (synthesised coast / open sea): no parcels, just the dimmed world
+  if (luv.x < 0.0 || luv.y < 0.0 || luv.x > 1.0 || luv.y > 1.0) return col * 0.6;
   vec4 lease = texture2D(uLeaseMap, luv);
   float up = step(0.5, N.y);
   float l = dot(col, vec3(0.299, 0.587, 0.114));

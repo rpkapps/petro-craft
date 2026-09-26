@@ -28,6 +28,11 @@ export interface MeshJob {
   emitters: Int16Array;
   /** Distance LOD: skip plant (cross) geometry entirely (far chunks). */
   skipPlants: boolean;
+  /**
+   * Sides beyond the streamed domain (bit 1<<face: 0 +X, 1 -X, 4 +Z, 5 -Z): no faces are emitted
+   * towards them (they could only be seen from outside, and double-sided water would show them).
+   */
+  outside: number;
 }
 
 export interface PassData {

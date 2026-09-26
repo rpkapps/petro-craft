@@ -29,7 +29,7 @@ function job(cx: number, cz: number, id: number): MeshJob {
     const tx = wx % CS, tz = wz % CS;
     for (let y = 0; y < H; y++) blocks[lx + lz * LW + y * LW * LW] = data[tx + tz * CS + y * CS * CS];
   }
-  return { type: 'mesh', id, cx, cz, height: H, blocks, emitters: new Int16Array(0), skipPlants: false };
+  return { type: 'mesh', id, cx, cz, height: H, blocks, emitters: new Int16Array(0), skipPlants: false, outside: 0 };
 }
 
 const jobs: MeshJob[] = [];

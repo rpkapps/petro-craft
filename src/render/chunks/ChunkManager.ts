@@ -11,10 +11,14 @@ import { MesherPool } from '../meshing/MesherPool';
 import { LPAD, LW, EMIT_RANGE, SECTION, type MeshJob, type MeshResult } from '../meshing/protocol';
 import { EMIT, SKY_BLOCKER, LIGHT_CLASS } from '../meshing/blockTables';
 import { ChunkMeshes, type TerrainMode } from './ChunkMeshes';
+import { VirtualTerrain, MARGIN_CHUNKS } from './VirtualTerrain';
 import type { TerrainMaterialSet } from '../materials/TerrainMaterials';
 
 const CS = CHUNK_SIZE;
-const key = (cx: number, cz: number) => cx * 65536 + cz;
+/** Map key for a chunk (also valid for the negative coordinates of the ring beyond the border). */
+const key = (cx: number, cz: number) => (cx + 4096) * 8192 + (cz + 4096);
+const keyCx = (k: number) => Math.floor(k / 8192) - 4096;
+const keyCz = (k: number) => (k % 8192) - 4096;
 const VIS_ALL = (1 << 15) - 1;
 /** Face-pair bit (same encoding as the mesher): faces 0 +X, 1 -X, 2 +Y, 3 -Y, 4 +Z, 5 -Z. */
 const PAIR: number[][] = (() => {
@@ -118,12 +122,14 @@ export class ChunkManager {
   private cullVis = new Int32Array(0);
   private cullEnabled = true;
   private emitScratch: number[] = [];
+  private virtual: VirtualTerrain;
 
   constructor(private world: IWorld, bus: EventBus, private mats: TerrainMaterialSet) {
     this.group.name = 'terrain';
     this.group.matrixAutoUpdate = false;
     this.height = world.height;
     this.sectionCount = Math.ceil(world.height / SECTION);
+    this.virtual = new VirtualTerrain(world);
     const hc = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
     const size = Math.max(1, Math.min(4, hc - 1));
     this.pool = new MesherPool(size, (r) => this.results.push(r), (id, msg) => this.onJobError(id, msg));
@@ -236,6 +242,21 @@ export class ChunkManager {
 
   // ---- streaming ---------------------------------------------------------------------------------
 
+  /** Chunks that are streamed & meshed: the world plus the synthesised ring beyond its border. */
+  private inDomain(cx: number, cz: number) {
+    const m = MARGIN_CHUNKS;
+    return cx >= -m && cz >= -m && cx < this.world.chunksX + m && cz < this.world.chunksZ + m;
+  }
+
+  /**
+   * Voxel data of a chunk: real (if generated) inside the world, synthesised outside it — also just beyond
+   * the streamed ring, so light and water at the ring's outer edge see the open sea continuing.
+   */
+  private dataOf(cx: number, cz: number): Uint8Array | undefined {
+    if (this.inWorld(cx, cz)) return this.world.getChunkData(cx, cz);
+    return this.virtual.data(cx, cz);
+  }
+
   private inWorld(cx: number, cz: number) {
     return cx >= 0 && cz >= 0 && cx < this.world.chunksX && cz < this.world.chunksZ;
   }
@@ -257,7 +278,7 @@ export class ChunkManager {
         if (dx * dx + dz * dz > r2) continue;
         const cx = this.center.cx + dx;
         const cz = this.center.cz + dz;
-        if (!this.inWorld(cx, cz)) continue;
+        if (!this.inDomain(cx, cz)) continue;
         const k = key(cx, cz);
         let e = this.entries.get(k);
         if (!e) {
@@ -294,12 +315,13 @@ export class ChunkManager {
     // column caches (heights/emitters) are cheap to keep around, but not forever
     const far = (rd + 6) * (rd + 6);
     for (const k of this.columns.keys()) {
-      const cx = Math.floor(k / 65536);
-      const cz = k - cx * 65536;
+      const cx = keyCx(k);
+      const cz = keyCz(k);
       const dx = cx - this.center.cx;
       const dz = cz - this.center.cz;
       if (dx * dx + dz * dz > far) this.columns.delete(k);
     }
+    this.virtual.prune(this.center.cx, this.center.cz, rd + 6);
   }
 
   private needsMesh(e: Entry) {
@@ -384,7 +406,7 @@ export class ChunkManager {
       const e = job.entry;
       if (e.inflight !== r.id || this.entries.get(key(e.cx, e.cz)) !== e) continue;
       e.inflight = 0;
-      if (!e.meshes) e.meshes = new ChunkMeshes(e.cx, e.cz, this.group, this.mats, this.sectionCount, this.mode);
+      if (!e.meshes) e.meshes = new ChunkMeshes(e.cx, e.cz, this.group, this.mats, this.sectionCount, this.mode, !this.inWorld(e.cx, e.cz));
       bytes += e.meshes.apply(r);
       if (r.translucent) this.sortPending = true; // fresh translucent geometry needs its first sort
       e.meshedVersion = job.version;
@@ -459,7 +481,7 @@ export class ChunkManager {
     const ccx = Math.floor(cam.x / CS);
     const ccz = Math.floor(cam.z / CS);
     const csy = Math.floor(cam.y / SECTION);
-    const inside = cam.y >= 0 && cam.y < this.height && this.inWorld(ccx, ccz);
+    const inside = cam.y >= 0 && cam.y < this.height && this.inDomain(ccx, ccz);
     const active = this.cullEnabled && this.mode === 'normal' && inside;
     const camMoved = ccx !== this.cullCam.cx || ccz !== this.cullCam.cz || csy !== this.cullCam.sy;
     if (this.cullCooldown > 0) this.cullCooldown--;
@@ -502,6 +524,7 @@ export class ChunkManager {
       if (lx < 0 || lz < 0 || lx >= G || lz >= G || !e.meshes) continue;
       for (let s = 0; s < NS; s++) visArr[lx + lz * G + s * G * G] = e.meshes.vis[s];
     }
+    const camInWorld = this.inWorld(ccx, ccz);
     let qh = 0;
     let qt = 0;
     const start = R + R * G + Math.min(NS - 1, Math.max(0, csy)) * G * G;
@@ -525,7 +548,12 @@ export class ChunkManager {
         const ny = sy + STEP_Y[d];
         const nz = lz + STEP_Z[d];
         if (nx < 0 || nz < 0 || nx >= G || nz >= G || ny < 0 || ny >= NS) continue;
-        if (!this.inWorld(nx - R + ccx, nz - R + ccz)) continue;
+        const ncx = nx - R + ccx;
+        const ncz = nz - R + ccz;
+        if (!this.inDomain(ncx, ncz)) continue;
+        // with the camera inside the map, the world is reached directly — never via the synthetic ring
+        // (its open sea would otherwise lead into every cave that touches the world edge)
+        if (camInWorld && this.inWorld(ncx, ncz) && !this.inWorld(lx - R + ccx, lz - R + ccz)) continue;
         const ni = nx + nz * G + ny * G * G;
         if (visited[ni]) continue;
         visited[ni] = 1;
@@ -618,7 +646,7 @@ export class ChunkManager {
       for (let dx = -1; dx <= 1; dx++) {
         const cx = e.cx + dx;
         const cz = e.cz + dz;
-        chunks.push(this.inWorld(cx, cz) ? this.world.getChunkData(cx, cz) : undefined);
+        chunks.push(this.dataOf(cx, cz));
       }
     if (!chunks[4]) return null;
     const LL = LW * LW;
@@ -670,7 +698,13 @@ export class ChunkManager {
         }
       }
     const skipPlants = e.dist > this.plantFar + 24;
-    return { type: 'mesh', id: this.nextJobId++, cx: e.cx, cz: e.cz, height: H, blocks, emitters: new Int16Array(list), skipPlants };
+    // sides whose neighbour chunk lies beyond the streamed domain: no faces are emitted towards them
+    let outside = 0;
+    if (!this.inDomain(e.cx + 1, e.cz)) outside |= 1;
+    if (!this.inDomain(e.cx - 1, e.cz)) outside |= 2;
+    if (!this.inDomain(e.cx, e.cz + 1)) outside |= 16;
+    if (!this.inDomain(e.cx, e.cz - 1)) outside |= 32;
+    return { type: 'mesh', id: this.nextJobId++, cx: e.cx, cz: e.cz, height: H, blocks, emitters: new Int16Array(list), skipPlants, outside };
   }
 
   // ---- edits ---------------------------------------------------------------------------------------

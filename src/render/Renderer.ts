@@ -13,6 +13,7 @@ import { createBlockAtlas, type BlockAtlas } from './textures/atlas';
 import { createSharedUniforms, type SharedUniforms } from './materials/uniforms';
 import { createTerrainMaterials, type TerrainMaterialSet } from './materials/TerrainMaterials';
 import { ChunkManager } from './chunks/ChunkManager';
+import { WorldBorder } from './chunks/WorldBorder';
 import { Sky } from './sky/Sky';
 import { Clouds } from './sky/Clouds';
 import { Lightning } from './sky/Lightning';
@@ -71,6 +72,7 @@ export class RenderEngine implements Renderer {
   private uniforms: SharedUniforms;
   private materials: TerrainMaterialSet;
   private chunks: ChunkManager;
+  private border: WorldBorder;
   private sky: Sky;
   private clouds: Clouds;
   private lightning: Lightning;
@@ -147,6 +149,8 @@ export class RenderEngine implements Renderer {
 
     this.chunks = new ChunkManager(ctx.world, ctx.bus, this.materials);
     this.scene.add(this.chunks.group);
+    this.border = new WorldBorder(ctx.world, this.materials);
+    this.scene.add(this.border.group);
 
     this.overlays = new Overlays(ctx, this.uniforms);
     this.scene.add(this.overlays.group);
@@ -291,6 +295,7 @@ export class RenderEngine implements Renderer {
     // overlays & helpers
     const mode = this.overlays.update(dt, this.camera, this.overlay, s.units);
     this.chunks.setMode(mode);
+    this.border.setMode(mode);
     this.selection.update(dt);
     this.shakeFx.update(dt);
 
@@ -364,6 +369,7 @@ export class RenderEngine implements Renderer {
     this.frameCallbacks.clear();
     this.canvas.removeEventListener('webglcontextlost', this.onContextLost, false);
     this.chunks.dispose();
+    this.border.dispose();
     this.overlays.dispose();
     this.sky.dispose();
     this.clouds.dispose();

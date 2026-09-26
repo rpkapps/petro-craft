@@ -118,6 +118,7 @@ export class Mesher {
   private minY = 1e9;
   private maxY = -1e9;
   private skipPlants = false;
+  private outside = 0;
   /** The job's LW-padded block volume (wider context than `ext`). */
   private lw: Uint8Array = new Uint8Array(0);
   private height = 0;
@@ -139,6 +140,7 @@ export class Mesher {
     const t0 = performance.now();
     const H = job.height;
     this.skipPlants = job.skipPlants;
+    this.outside = job.outside;
     this.lw = job.blocks;
     this.height = H;
     const n = PL * (H + 2);
@@ -267,6 +269,13 @@ export class Mesher {
     };
   }
 
+  /** Whether face `d` of the cell at chunk-local (x, z) faces a side beyond the streamed domain. */
+  private beyond(d: number, x: number, z: number): boolean {
+    const o = this.outside;
+    if (!o) return false;
+    return (d === 0 && x === CS - 1 && (o & 1) !== 0) || (d === 1 && x === 0 && (o & 2) !== 0) || (d === 4 && z === CS - 1 && (o & 16) !== 0) || (d === 5 && z === 0 && (o & 32) !== 0);
+  }
+
   private bufFor(id: number): MeshBuffer {
     const p = PASS[id];
     return p === PASS_TRANSLUCENT ? this.translucent : p === PASS_CUTOUT ? this.cutout : this.opaque;
@@ -343,6 +352,7 @@ export class Mesher {
     const mergeable = pass === PASS_OPAQUE && hy === 1 && !isLeaves;
     let emitted = false;
     for (let d = 0; d < 6; d++) {
+      if (this.beyond(d, x, z)) continue;
       const ni = i + NOFF[d];
       const nb = ext[ni];
       if (OPAQUE[nb]) {
@@ -485,6 +495,7 @@ export class Mesher {
     const buf = this.translucent;
     let emitted = false;
     for (let d = 0; d < 6; d++) {
+      if (this.beyond(d, x, z)) continue;
       const ni = i + NOFF[d];
       const nb = ext[ni];
       if (nb === id || (id === B.WATER && WATERLOGGED[nb] === 1)) continue;

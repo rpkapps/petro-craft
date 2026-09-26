@@ -67,7 +67,11 @@ export class ChunkMeshes {
    */
   private pivot = new THREE.Vector3();
 
-  constructor(readonly cx: number, readonly cz: number, private parent: THREE.Object3D, private mats: TerrainMaterialSet, readonly sectionCount: number, private mode: TerrainMode) {
+  /**
+   * `virtual`: synthesised terrain beyond the world border (see VirtualTerrain) — hidden in the x-ray view,
+   * which only shows the real subsurface.
+   */
+  constructor(readonly cx: number, readonly cz: number, private parent: THREE.Object3D, private mats: TerrainMaterialSet, readonly sectionCount: number, private mode: TerrainMode, readonly virtual = false) {
     this.origin = new THREE.Vector3(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
     this.vis = new Uint16Array(sectionCount).fill((1 << 15) - 1);
   }
@@ -226,7 +230,7 @@ export class ChunkMeshes {
     const mats = this.mats;
     if (this.mode === 'xray') {
       m.material = pass === 'translucent' ? mats.ghostWater : mats.ghost;
-      m.visible = pass !== 'cutout' && !m.userData.empty;
+      m.visible = pass !== 'cutout' && !m.userData.empty && !this.virtual;
       m.renderOrder = 5;
     } else {
       m.material = pass === 'opaque' ? mats.opaque : pass === 'cutout' ? mats.cutout : mats.translucent;
