@@ -132,6 +132,12 @@ export class PlayerControllerImpl implements PlayerController, PlayerRuntime {
         if (e.block !== null) this.build.set(null);
         this.pipe.set(e.block);
       }),
+      // "Locate" from notifications / panels: swoop the drone camera to the location.
+      bus.on('ui:focus', (e) => {
+        if (this.dead || !e.at) return;
+        if (this.mode !== 'drone') this.enterDrone();
+        this.drone.flyTo(e.at.x, e.at.z);
+      }),
     );
     const onLockChange = () => {
       if (!this.app.pointerLocked && this.mode !== 'drone') this.input.releaseAll();

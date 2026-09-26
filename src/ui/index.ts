@@ -129,16 +129,18 @@ class Controller implements UIController {
     if (inGameOnly && !this.session) return;
     const wasOpen = this.panels.depth > 0;
     const p = this.panels.open(id, args, !!opts.stack);
-    if (p && !wasOpen) this.sound('open');
     this.tooltip.hide();
-    if (p) this.announce(id, args);
+    if (!p) return;
+    // In-game opens are announced on the bus (the audio module plays the 'open' cue for those).
+    const announced = this.announce(id, args);
+    if (!wasOpen && !announced) this.sound('open');
   }
 
   /** Re-broadcast panel opens on the game bus (tutorial steps listen for them). Self-events are ignored. */
-  private announce(id: PanelId, args: PanelArgs) {
+  private announce(id: PanelId, args: PanelArgs): boolean {
     const bus = this.session?.bus;
     const panel = PANEL_EVENT_IDS[id];
-    if (!bus || !panel) return;
+    if (!bus || !panel) return false;
     this.echo = true;
     try {
       bus.emit('ui:open', { panel, args });
@@ -146,6 +148,7 @@ class Controller implements UIController {
     } finally {
       this.echo = false;
     }
+    return true;
   }
 
   /** Called by panels when a notable in-panel view is shown (e.g. the map's lease layer). */

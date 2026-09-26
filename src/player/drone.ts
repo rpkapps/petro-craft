@@ -42,6 +42,12 @@ export class DroneCamera {
     this.focus.y = this.targetFocus.y = this.groundY;
   }
 
+  /** Smoothly move the focus to a world point (used by 'ui:focus'). */
+  flyTo(x: number, z: number, height = 48): void {
+    this.targetFocus.set(x, this.sampleGround(x, z), z);
+    this.targetHeight = Math.max(this.targetHeight, height);
+  }
+
   /** Whether the current right/middle drag is orbiting (so a release is not a click). */
   get isOrbiting(): boolean {
     return this.orbiting;
