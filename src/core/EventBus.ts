@@ -47,6 +47,7 @@ export interface GameEvents {
   'research:started': { techId: string };
   'lease:acquired': { key: string };
   'objective:completed': { id: string };
+  'achievement:unlocked': { id: string; title: string };
   // hazards & weather
   'hazard:fireStarted': { id: string; x: number; y: number; z: number };
   'hazard:fireOut': { id: string };

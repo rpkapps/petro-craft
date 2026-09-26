@@ -215,6 +215,8 @@ export interface GameState {
   notifications: Notification[];
   stats: StatsState;
   nextId: number;
+  /** Economy module bookkeeping (plain JSON, owned by sim/economy). */
+  economy?: unknown;
 }
 
 export interface GameMeta {
@@ -516,7 +518,7 @@ export interface MarketState {
   /** Futures hedges. */
   hedges: Hedge[];
 }
-export interface MarketEvent { id: string; title: string; description: string; startDay: number; endDay: number; effects: Record<string, number> /* commodity → price multiplier */; severity: 'minor' | 'major' | 'crisis' }
+export interface MarketEvent { defId?: string; icon?: string; id: string; title: string; description: string; startDay: number; endDay: number; effects: Record<string, number> /* commodity → price multiplier */; severity: 'minor' | 'major' | 'crisis' }
 export interface Hedge { id: string; commodity: string; volume: number; price: number; expiryDay: number; remaining: number }
 
 export interface Contract {
@@ -534,6 +536,10 @@ export interface Contract {
   status: 'offered' | 'active' | 'completed' | 'failed' | 'expired';
   /** Minimum reputation required to accept. */
   minReputation: number;
+  description?: string;
+  clientKind?: string;
+  premium?: boolean;
+  acceptedDay?: number;
 }
 export interface ContractsState { offers: Contract[]; active: Contract[]; completed: Contract[] }
 
@@ -551,6 +557,9 @@ export interface Worker {
   hiredDay: number;
   injured?: number; // day until recovered
   portraitSeed: number;
+  /** Manually assigned (auto-assign won't move them). */
+  pinned?: boolean;
+  daysWorked?: number;
 }
 export interface WorkforceState { workers: Worker[]; candidates: Worker[]; lastRefreshDay: number; autoAssign: boolean; housing: number }
 

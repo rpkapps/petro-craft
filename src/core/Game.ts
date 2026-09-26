@@ -100,7 +100,10 @@ export class GameSession {
         c.money += amount;
         c.ledger.push({ day: s.time.day, minute: Math.floor(s.time.minuteOfDay), amount, category, note });
         if (c.ledger.length > MAX_LEDGER) c.ledger.splice(0, c.ledger.length - MAX_LEDGER);
-        if (c.today.day !== s.time.day) c.today = emptyDaily(s.time.day);
+        if (c.today.day !== s.time.day) {
+          if (c.today.day < s.time.day) c.history.push(c.today);
+          c.today = emptyDaily(s.time.day);
+        }
         if (amount >= 0) c.today.revenue += amount;
         else c.today.expenses -= amount;
         c.today.byCategory[category] = (c.today.byCategory[category] ?? 0) + amount;
@@ -158,6 +161,15 @@ export class GameSession {
       newDay = true;
     }
     const step = { minutes, days: minutes / MINUTES_PER_DAY };
+    if (newDay) {
+      // Close the previous day's books BEFORE ticking, so transactions on this step land in the new day.
+      const c = st.company;
+      if (c.today.day !== t.day) {
+        c.history.push(c.today);
+        if (c.history.length > 400) c.history.shift();
+      }
+      c.today = emptyDaily(t.day);
+    }
     for (const s of this.systems) {
       try {
         s.tick(this.ctx, step);
@@ -168,10 +180,6 @@ export class GameSession {
     const hour = Math.floor(t.minuteOfDay / 60);
     if (hour !== prevHour) this.bus.emit('time:newHour', { day: t.day, hour });
     if (newDay) {
-      const c = st.company;
-      c.history.push(c.today);
-      if (c.history.length > 400) c.history.shift();
-      c.today = emptyDaily(t.day);
       for (const s of this.systems) {
         try {
           s.onNewDay?.(this.ctx, t.day);
