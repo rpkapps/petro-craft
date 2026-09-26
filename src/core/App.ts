@@ -223,13 +223,14 @@ export class App implements AppShell {
 
   private frame = (now: number) => {
     requestAnimationFrame(this.frame);
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const rawDt = Math.min(0.5, Math.max(0, (now - this.last) / 1000));
+    const dt = Math.min(0.1, rawDt); // visuals/physics clamp; the sim clock gets the real elapsed time
     this.last = now;
     this.uiCapturing = this.ui.capturing;
     const s = this.session;
     if (s && this.renderer && !this.loading.active) {
-      s.state.meta.playTimeSec += dt;
-      s.update(dt);
+      s.state.meta.playTimeSec += rawDt;
+      s.update(rawDt);
       this.player?.update(dt);
       this.renderer.update(dt);
       this.entities?.update(dt);

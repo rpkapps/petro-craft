@@ -98,7 +98,7 @@ export function liftParams(ctx: GameContext, w: WellState, tvd: number, wc: numb
   }
   const grad = clamp((0.36 * (1 - wc) + 0.45 * wc) / (1 + ((1 - wc) * gor) / 1200), 0.12, 0.45);
   switch (w.lift) {
-    case 'pumpjack': return { pwf: 80 + 0.02 * tvd, cap: clamp(400 * Math.pow(5000 / tvd, 0.8), 50, 400) * eff * power };
+    case 'pumpjack': return { pwf: 80 + 0.02 * tvd, cap: clamp(650 * Math.pow(5000 / tvd, 0.8), 80, 700) * eff * power };
     case 'esp': return { pwf: 250 + 0.03 * tvd, cap: clamp(5000 * Math.pow(4000 / tvd, 0.7), 500, 5000) * eff * power };
     case 'gaslift': return { pwf: WELLHEAD_PRESSURE_OIL + grad * 0.45 * tvd, cap: 4000 * eff };
     default: return { pwf: WELLHEAD_PRESSURE_OIL + grad * tvd, cap: TUBING_CAP_OIL };

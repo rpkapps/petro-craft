@@ -25,14 +25,16 @@ await page.evaluate(() => window.petrocraft.ctx.commands.dispatch({ type: 'time/
 await page.waitForTimeout(4000);
 const panels = ['build', 'inventory', 'research', 'market', 'contracts', 'workforce', 'finance', 'map', 'wells', 'environment', 'objectives', 'notifications', 'settings', 'help', 'pause'];
 for (const p of panels) {
-  await page.evaluate((id) => window.petrocraft.ctx.bus.emit('ui:open', { panel: id, args: {} }), p === 'pause' ? 'pause' : p);
+  const alive = await page.evaluate(() => !!window.petrocraft?.ctx);
+  if (!alive) { errors.push(`[harness] page reloaded before ${p} (dev-server HMR from concurrent edits?)`); break; }
+  await page.evaluate((id) => window.petrocraft.ctx.bus.emit('ui:open', { panel: id, args: {} }), p);
   await page.waitForTimeout(900);
   await page.screenshot({ path: `${out}/${p}.png` });
   await page.evaluate(() => window.petrocraft.ctx?.bus.emit('ui:close', {}));
   await page.waitForTimeout(200);
 }
 // inspector on the field office
-await page.evaluate(() => { const c = window.petrocraft.ctx; const b = Object.values(c.state.buildings)[0]; c.bus.emit('ui:select', { kind: 'building', id: b.id }); });
+await page.evaluate(() => { const c = window.petrocraft?.ctx; const b = c && Object.values(c.state.buildings)[0]; if (b) c.bus.emit('ui:select', { kind: 'building', id: b.id }); });
 await page.waitForTimeout(900);
 await page.screenshot({ path: `${out}/inspector.png` });
 console.log(errors.length ? errors.slice(0, 30).join('\n') : 'no page errors');

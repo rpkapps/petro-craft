@@ -55,7 +55,7 @@ t({ id: 'managed_pressure', name: 'Managed Pressure Drilling', branch: 'drilling
 t({ id: 'extended_reach', name: 'Extended Reach Drilling', branch: 'drilling', tier: 5, cost: 1500, requires: ['managed_pressure', 'heavy_rigs'], description: 'Laterals twice as long. Reach reservoirs kilometres away.', modifiers: { max_lateral: 2.0, max_depth: 1.2 } });
 
 // Production
-t({ id: 'pumpjacks', name: 'Beam Pumps', branch: 'production', tier: 1, cost: 60, requires: [], description: 'Pumpjacks lift oil once natural pressure fades.', features: ['lift_pumpjack'] });
+t({ id: 'pumpjacks', name: 'Beam Pumps', branch: 'production', tier: 1, cost: 0, requires: [], description: 'Pumpjacks lift oil once natural pressure fades.', features: ['lift_pumpjack'] });
 t({ id: 'hydraulic_fracturing', name: 'Hydraulic Fracturing', branch: 'production', tier: 2, cost: 350, requires: ['pumpjacks', 'directional_drilling'], description: 'Frac tight rock to unlock shale oil & gas.', unlocks: ['frac_spread'], features: ['fracking'] });
 t({ id: 'waterflood', name: 'Waterflooding', branch: 'production', tier: 2, cost: 260, requires: ['pumpjacks'], description: 'Convert wells to water injectors to maintain reservoir pressure.', features: ['injector_water'], modifiers: { recovery_factor: 1.1 } });
 t({ id: 'esp_pumps', name: 'Electric Submersible Pumps', branch: 'production', tier: 3, cost: 500, requires: ['pumpjacks'], description: 'High-rate downhole pumps for big wells.', features: ['lift_esp'], modifiers: { lift_efficiency: 1.25 } });

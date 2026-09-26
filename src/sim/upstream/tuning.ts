@@ -98,7 +98,7 @@ export const SKID_RIGUP_PROGRESS = 0.7;
 
 // ---- Reservoir & deliverability ------------------------------------------------------------------
 /** Oil productivity constant: J [bbl/d/psi] = K_J · k·h[mD·ft] · productivity / (μ·Bo). */
-export const K_J = 1 / 8000;
+export const K_J = 1 / 4000;
 /** Gas deliverability constant: q [mcf/d] = K_G · k·h · productivity · (Pr² − Pwf²)^n. */
 export const K_G = 1.5e-6;
 export const GAS_N = 0.85;
