@@ -104,6 +104,13 @@ const result = await page.evaluate(async () => {
   L('objectives', s.objectives.list.map((o) => `${o.title} ${o.progress}/${o.target}${o.done ? ' ✓' : ''}`));
   L('notifications', s.notifications.slice(-12).map((n) => n.title));
   L('power', s.power, 'env', { score: s.environment.score, flared: s.environment.flaredToday });
+  // drop & pickup round trip
+  const inv0 = JSON.stringify(s.players[ctx.localPlayerId].inventory[8]);
+  const dr = d({ type: 'player/dropItem', slot: 8, count: 5 });
+  for (let i = 0; i < 30; i++) session.step();
+  const drop = (s.drops ?? []).find((x) => x.id === dr.data?.dropId);
+  const pk = drop ? d({ type: 'player/pickup', dropId: drop.id }) : { ok: false };
+  L('drop/pickup', dr.ok, drop && { item: drop.item, count: drop.count, y: +drop.y.toFixed(2) }, 'pickup', pk.ok, 'slot before', inv0, 'after', JSON.stringify(s.players[ctx.localPlayerId].inventory[8]));
   const soak = Number(new URLSearchParams(location.search).get('soak') ?? 0);
   if (soak > 0) {
     const t0 = performance.now();

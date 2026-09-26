@@ -44,8 +44,14 @@ function run(q: AutoQuality, seconds: number, intervalMs: number, costMs: number
     levels += c.length;
   }
   check('mid frame times (12..20 ms) never change quality', q.level === 0 && levels === 0);
-  run(q, 3, 400, 400);
-  check('isolated hitches (> 250 ms) are ignored', q.level === 0);
+  for (let i = 0; i < 20; i++) {
+    run(q, 1, 1000 / 60, 8);
+    q.sample(400, 400, true, false); // one 400 ms hitch per second
+  }
+  check('isolated hitches do not degrade quality', q.level === 0);
+  const slowOnes = run(q, 30, 2500, 2400);
+  check('sustained extreme slowness (2.5 s frames) still steps down', q.level >= 3, `levels ${slowOnes.join(',')}`);
+  run(q, 200, 16.7, 6);
   run(q, 10, 40, 38, true, true);
   check('ignored frames (loading / hidden tab) are ignored', q.level === 0);
 }

@@ -9,6 +9,7 @@ page.on('pageerror', (e) => console.log('[pageerror]', e.message, e.stack?.split
 page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('ERR_CERT')) console.log('[error]', m.text().slice(0, 300)); });
 await page.goto(base);
 await page.waitForTimeout(1500);
+await page.evaluate(() => window.petrocraft.applySettings({ autoQuality: false, showFps: true }));
 await page.evaluate(() => window.petrocraft.newGame({ saveName: 'I', companyName: 'Interact Co', seed: 4242, worldSize: 'small', difficulty: 'normal', tutorial: true, hazards: true, creative: false }));
 await page.waitForTimeout(2000);
 const st = () => page.evaluate(() => { const s = window.petrocraft.ctx.state; return { mode: s.players.p1.mode, buildings: Object.values(s.buildings).map(b => b.type + ':' + b.status), capturing: window.petrocraft.uiCapturing, overlay: window.petrocraft.host.overlay }; });

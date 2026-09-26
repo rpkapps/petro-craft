@@ -38,7 +38,9 @@ src/
 
 ## Scale & units
 * World: square `WORLD_SIZES[size]` blocks (256/512/768), height 160, sea level 62. Chunks are 16×16 full-height columns.
-  Chunk data index = `x + z*16 + y*256` (local coords).
+  Chunk data index = `x + z*16 + y*256` (local coords). The renderer meshes each column as one mesh per pass but
+  tracks 32-high vertical sections for culling (hidden sections narrow the draw range), and lights chunks with an
+  8-block margin of neighbour data (sky light flood-fill; STRUCTURE and leaves filter light).
 * Engineering scale: **1 block = 40 m** (depths, lateral lengths, pipeline lengths). Display depth = (surfaceY − y) × 40 m.
 * Oil/water in **bbl**, gas in **mcf**, chemicals in **t**. Rates are per game day. Money in USD.
 
@@ -118,6 +120,14 @@ src/
 | End-to-end gameplay (real game in headless Chromium) | `pnpm dev --port 5190` then `node scripts/scenario.mjs` (`SOAK=60` for a long run), `node scripts/interact.mjs`, `node scripts/play.mjs` |
 
 Each module also has a visual dev harness under `dev/<module>/` (open `http://localhost:5173/dev/<module>/` with `pnpm dev`).
+
+## Performance features
+* Renderer: greedy meshing, distance-faded plants, cave culling, per-frame streaming budgets, adaptive quality
+  (`settings.autoQuality` steps render scale → SSAO → shadows → bloom → render distance with hysteresis), live
+  `renderScale` / `antialias` / `brightness`. `host.stats` = `{frameMs, gpuMs, drawCalls, triangles, chunks,
+  renderDistance, autoQualityStep}` feeds the UI performance overlay (Settings → Performance overlay).
+* Entity layer: distant buildings are drawn via `InstancedMesh` batches per (model, look, 64×64 cell); only visible,
+  moving parts animate. Vehicles use lazily-built A* nav grids (land 2×2, water 4×4) with per-frame search budgets.
 
 ## Multiplayer readiness
 All mutations are serializable commands tagged with `playerId`; state is JSON; RNG is in-state. `net/Transport.ts` defines

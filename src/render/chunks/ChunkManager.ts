@@ -37,6 +37,8 @@ const SKY_REACH = LPAD;
 interface ColumnCache {
   heights: Uint8Array | null;
   emitters: Int16Array | null;
+  /** Highest non-air layer + 1 (-1 = unknown); everything above is air and not copied into jobs. */
+  top: number;
 }
 
 interface Entry {
@@ -105,6 +107,8 @@ export class ChunkManager {
   private plantFar = 80;
   // cave culling
   private cullDirty = true;
+  /** Frames until a data-driven (not camera-driven) culling update may run again. */
+  private cullCooldown = 0;
   private cullCam = { cx: 1e9, sy: -1, cz: 1e9 };
   private cullR = -1;
   private cullVisited = new Uint8Array(0);
@@ -132,6 +136,7 @@ export class ChunkManager {
     if (mode === this.mode) return;
     this.mode = mode;
     this.cullDirty = true;
+    this.cullCooldown = 0;
     for (const e of this.entries.values()) e.meshes?.setMode(mode);
   }
 
@@ -140,6 +145,7 @@ export class ChunkManager {
     if (on === this.cullEnabled) return;
     this.cullEnabled = on;
     this.cullDirty = true;
+    this.cullCooldown = 0;
   }
 
   /** Plants fade out towards `far` (blocks, shader) and are not meshed well beyond it. */
@@ -380,6 +386,7 @@ export class ChunkManager {
       e.inflight = 0;
       if (!e.meshes) e.meshes = new ChunkMeshes(e.cx, e.cz, this.group, this.mats, this.sectionCount, this.mode);
       bytes += e.meshes.apply(r);
+      if (r.translucent) this.sortPending = true; // fresh translucent geometry needs its first sort
       e.meshedVersion = job.version;
       e.plantsSkipped = r.skipPlants;
       this.stats.lastMeshMs = r.ms;
@@ -454,8 +461,13 @@ export class ChunkManager {
     const csy = Math.floor(cam.y / SECTION);
     const inside = cam.y >= 0 && cam.y < this.height && this.inWorld(ccx, ccz);
     const active = this.cullEnabled && this.mode === 'normal' && inside;
-    if (!this.cullDirty && ccx === this.cullCam.cx && ccz === this.cullCam.cz && csy === this.cullCam.sy) return;
+    const camMoved = ccx !== this.cullCam.cx || ccz !== this.cullCam.cz || csy !== this.cullCam.sy;
+    if (this.cullCooldown > 0) this.cullCooldown--;
+    // camera section changes apply at once; new mesh data is folded in at most ~6 times per second
+    // (fresh chunks start unculled, so waiting never hides anything wrongly)
+    if (!camMoved && (!this.cullDirty || this.cullCooldown > 0)) return;
     this.cullDirty = false;
+    this.cullCooldown = 10;
     this.cullCam.cx = ccx;
     this.cullCam.cz = ccz;
     this.cullCam.sy = csy;
@@ -541,7 +553,7 @@ export class ChunkManager {
     const k = key(cx, cz);
     let c = this.columns.get(k);
     if (!c) {
-      c = { heights: null, emitters: null };
+      c = { heights: null, emitters: null, top: -1 };
       this.columns.set(k, c);
     }
     return c;
@@ -561,6 +573,23 @@ export class ChunkManager {
   private scanColumn(data: Uint8Array, x: number, z: number) {
     for (let y = this.height - 1; y >= 0; y--) if (SKY_BLOCKER[data[x + z * CS + y * CS * CS]]) return y + 1;
     return 0;
+  }
+
+  private topOf(cx: number, cz: number, data: Uint8Array): number {
+    const c = this.column(cx, cz);
+    if (c.top >= 0) return c.top;
+    const plane = CS * CS;
+    let top = 0;
+    for (let y = this.height - 1; y >= 0 && !top; y--) {
+      const base = y * plane;
+      for (let i = 0; i < plane; i++)
+        if (data[base + i]) {
+          top = y + 1;
+          break;
+        }
+    }
+    c.top = top;
+    return top;
   }
 
   private emittersOf(cx: number, cz: number): Int16Array {
@@ -594,6 +623,13 @@ export class ChunkManager {
     if (!chunks[4]) return null;
     const LL = LW * LW;
     const blocks = new Uint8Array(LL * H);
+    // above the highest non-air layer of the neighbourhood everything is air (the array starts zeroed)
+    let yTop = 0;
+    for (let dz = -1; dz <= 1; dz++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const data = chunks[(dz + 1) * 3 + dx + 1];
+        if (data) yTop = Math.max(yTop, this.topOf(e.cx + dx, e.cz + dz, data));
+      }
     // copy x-runs: within one source chunk a run of cells along x is contiguous in both layouts
     for (let lz = 0; lz < LW; lz++) {
       const wz = lz - LPAD;
@@ -609,7 +645,7 @@ export class ChunkManager {
         if (src) {
           let si = tx + tz * CS;
           let di = lx + lz * LW;
-          for (let y = 0; y < H; y++) {
+          for (let y = 0; y < yTop; y++) {
             for (let k = 0; k < run; k++) blocks[di + k] = src[si + k];
             si += CS * CS;
             di += LL;
@@ -646,12 +682,13 @@ export class ChunkManager {
     if (urgent) e.urgent = true;
   }
 
-  private onBlockChanged(x: number, _y: number, z: number, prev: number, id: number, source: string) {
+  private onBlockChanged(x: number, y: number, z: number, prev: number, id: number, source: string) {
     const cx = Math.floor(x / CS);
     const cz = Math.floor(z / CS);
     const lx = x - cx * CS;
     const lz = z - cz * CS;
     const c = this.columns.get(key(cx, cz));
+    if (c && c.top >= 0 && id !== 0 && y + 1 > c.top) c.top = y + 1;
     if (c?.heights) {
       const data = this.world.getChunkData(cx, cz);
       if (data) c.heights[lx + lz * CS] = this.scanColumn(data, lx, lz);

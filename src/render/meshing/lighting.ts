@@ -28,17 +28,21 @@ for (let i = 0; i <= SKY_MAX; i++) TO_BYTE[i] = Math.round((i / SKY_MAX) * 255);
 let level = new Uint8Array(0);
 let inQueue = new Uint8Array(0);
 let queue = new Int32Array(0);
+let skyOut = new Uint8Array(0);
+let blockOut = new Uint8Array(0);
 
 function ensureScratch(n: number) {
   if (level.length >= n) return;
   level = new Uint8Array(n);
   inQueue = new Uint8Array(n);
   queue = new Int32Array(n);
+  skyOut = new Uint8Array(n);
+  blockOut = new Uint8Array(n);
 }
 
 /**
  * Sky light (0..255) for every cell of the LW×LW×height volume, index = lx + lz*LW + y*LW*LW.
- * Opaque cells are 0.
+ * Opaque cells are 0. The returned array is a per-worker scratch buffer, valid until the next call.
  */
 export function computeSkyLight(blocks: Uint8Array, height: number): Uint8Array {
   const plane = LW * LW;
@@ -139,7 +143,7 @@ export function computeSkyLight(blocks: Uint8Array, height: number): Uint8Array 
     }
   }
 
-  const out = new Uint8Array(n);
+  const out = skyOut.length === n ? skyOut : skyOut.subarray(0, n);
   for (let i = 0; i < n; i++) out[i] = TO_BYTE[lv[i]];
   return out;
 }
@@ -147,7 +151,7 @@ export function computeSkyLight(blocks: Uint8Array, height: number): Uint8Array 
 /**
  * Block light 0..255 for the LW×LW×height volume, or null when no emitter is in range. The flood runs on
  * a wider grid (EMIT_RANGE margin) so emitters in neighbouring chunks reach in; outside the shipped
- * LW volume the space is unknown and treated as open.
+ * LW volume the space is unknown and treated as open. Returns a per-worker scratch buffer.
  */
 export function computeBlockLight(blocks: Uint8Array, emitters: Int16Array, height: number): Uint8Array | null {
   if (emitters.length === 0) return null;
@@ -205,7 +209,9 @@ export function computeBlockLight(blocks: Uint8Array, emitters: Int16Array, heig
       q[qt++] = nk;
     }
   }
-  const out = new Uint8Array(lplane * height);
+  ensureScratch(lplane * height);
+  const out = blockOut.length === lplane * height ? blockOut : blockOut.subarray(0, lplane * height);
+  out.fill(0);
   let any = false;
   for (let y = y0; y <= y1; y++)
     for (let lz = 0; lz < LW; lz++)

@@ -30,8 +30,13 @@ const DOWN_COOLDOWN_S = 2.5;
 const UP_COOLDOWN_S = 8;
 /** Samples are ignored this long after a (re)configuration or quality change (s). */
 const GRACE_S = 1.5;
-/** A single frame longer than this is a hitch (loading, GC, tab switch) and is ignored (ms). */
-const HITCH_MS = 250;
+/**
+ * Frame intervals are clamped to this in the window averages (ms): a single hitch (GC, shader compile,
+ * streaming burst) barely moves a window of normal frames, while sustained slow frames still count.
+ */
+const CLAMP_MS = 100;
+/** Real time accounted per frame at most (s) — e.g. the first frame after a background tab. */
+const MAX_DT_S = 1;
 /** Stepping up and falling back down within this time blocks that step for BLOCK_BASE_S, doubling each time. */
 const BOUNCE_S = 20;
 const BLOCK_BASE_S = 60;
@@ -106,7 +111,7 @@ export class AutoQuality {
    * Returns true when the effective quality changed.
    */
   sample(intervalMs: number, costMs: number, gpuKnown: boolean, ignore: boolean): boolean {
-    const dt = Math.min(intervalMs, HITCH_MS) / 1000;
+    const dt = Math.min(intervalMs / 1000, MAX_DT_S);
     this.time += dt;
     if (!this.enabled) {
       if (this.level !== 0) {
@@ -115,14 +120,16 @@ export class AutoQuality {
       }
       return false;
     }
-    if (ignore || intervalMs > HITCH_MS || intervalMs <= 0 || this.time < this.graceUntil) return false;
-    this.intervalMs += (intervalMs - this.intervalMs) * 0.1;
-    this.costMs += (costMs - this.costMs) * 0.1;
+    if (ignore || intervalMs <= 0 || this.time < this.graceUntil) return false;
+    const iv = Math.min(intervalMs, CLAMP_MS);
+    const cost = Math.min(costMs, CLAMP_MS);
+    this.intervalMs += (iv - this.intervalMs) * 0.1;
+    this.costMs += (cost - this.costMs) * 0.1;
     if (this.intervalMs < this.vsyncMs) this.vsyncMs = Math.max(4, this.intervalMs);
     this.wT += dt;
     this.wN++;
-    this.wInterval += intervalMs;
-    this.wCost += costMs;
+    this.wInterval += iv;
+    this.wCost += cost;
     if (this.wT < WINDOW_S) return false;
     const avgInterval = this.wInterval / this.wN;
     const avgCost = this.wCost / this.wN;
